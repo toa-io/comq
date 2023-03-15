@@ -19,7 +19,7 @@ declare namespace comq {
   interface IO {
     reply(queue: string, produce: producer): Promise<void>
 
-    request(queue: string, payload: any, encoding?: _encoding.encoding): Promise<any>
+    request(queue: string, payload: any, encoding?: _encoding.encoding, replyTo?: string): Promise<any>
 
     consume(exchange: string, group: string, consumer: consumer): Promise<void>
 
