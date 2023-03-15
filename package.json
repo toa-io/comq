@@ -52,5 +52,8 @@
     "env": [
       "jest"
     ]
-  }
+  },
+  "workspaces": [
+    "."
+  ]
 }
