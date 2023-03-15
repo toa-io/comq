@@ -2,7 +2,6 @@
   "name": "comq",
   "version": "0.3.1-dev.1",
   "description": "ComQ",
-  "homepage": "https://toa.io",
   "author": {
     "name": "Artem Gurtovoi",
     "url": "https://github.com/temich"
@@ -10,10 +9,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/toa-io/toa.git"
+    "url": "git+https://github.com/toa-io/comq.git"
   },
   "bugs": {
-    "url": "https://github.com/toa-io/toa/issues"
+    "url": "https://github.com/toa-io/comq/issues"
   },
   "engines": {
     "node": ">= 12.0.0"
