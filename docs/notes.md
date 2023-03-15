@@ -35,3 +35,13 @@ next Request is consumed from the Request queue*.
 A lightweight Producer (one that produces responses quickly) can result in being "overloaded"
 from the Consumer's perspective (that is, does not consume messages with an expected rate), even
 though the Producer being idle while waiting for response publication confirmations.
+
+## `replyTo` property prefix `direct:///`
+
+`IO.request` accepts `replyTo` property modifier function `(replyTo): string` as fourth argument. It
+is the temporary solution to provide an option for compatibility with
+official [RabbitMQ client for .NET](https://github.com/rabbitmq/rabbitmq-dotnet-client/blob/feceedccd6b81d4b461795390432dc3330fdf596/projects/Unit/TestPublicationAddress.cs).
+
+It is yet to be clarified and implemented correctly. [#6](https://github.com/toa-io/comq/issues/6)
+
+See [Direct Reply-to](https://www.rabbitmq.com/direct-reply-to.html).
