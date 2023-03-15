@@ -1,0 +1,7 @@
+### Overview
+GET http://localhost:15673/api/overview
+Authorization: Basic ZGV2ZWxvcGVyOnNlY3JldA==
+
+### Connections
+GET http://localhost:15673/api/connections
+Authorization: Basic ZGV2ZWxvcGVyOnNlY3JldA==
