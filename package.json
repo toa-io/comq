@@ -29,6 +29,7 @@
     "@toa.io/mock": "0.3.0",
     "@toa.io/tomato": "0.4.0-dev.0",
     "@toa.io/yaml": "0.3.0",
+    "@types/amqplib": "0.10.1",
     "@types/jest": "29.4.2",
     "jest": "29.5.0",
     "randomstring": "1.2.3"
