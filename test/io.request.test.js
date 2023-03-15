@@ -83,21 +83,22 @@ describe('send', () => {
     expect(typeof properties.correlationId).toStrictEqual('string')
   })
 
-  it('should set default replyTo', async () => {
+  it('should set replyTo', async () => {
     const properties = call[2]
     const rx = new RegExp(`^${queue}..[a-z0-9]+`)
 
     expect(properties.replyTo).toMatch(rx)
   })
 
-  it('should set specified replyTo', async () => {
+  it('should set replyTo using specified formatter', async () => {
     jest.clearAllMocks()
 
     /** @type {comq.encoding} */
+    const prefix = generate()
     const encoding = 'application/json'
-    const replyTo = generate()
+    const formatter = (replyTo) => prefix + replyTo
 
-    promise = io.request(queue, payload, encoding, replyTo)
+    promise = io.request(queue, payload, encoding, formatter)
 
     await immediate()
 
@@ -105,7 +106,7 @@ describe('send', () => {
 
     const properties = requests.send.mock.calls[0][2]
 
-    expect(properties.replyTo).toStrictEqual(replyTo)
+    expect(properties.replyTo).toMatch(new RegExp(`${prefix}${queue}..[a-z0-9]+`))
   })
 
   it('should consume replyTo', async () => {

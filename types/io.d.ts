@@ -16,10 +16,17 @@ declare namespace comq {
     clear(): void
   }
 
+  type ReplyToPropertyFormatter = (queue: string) => string
+
   interface IO {
     reply(queue: string, produce: producer): Promise<void>
 
-    request(queue: string, payload: any, encoding?: _encoding.encoding, replyTo?: string): Promise<any>
+    request(
+      queue: string,
+      payload: any,
+      encoding?: _encoding.encoding,
+      replyToFormatter?: ReplyToPropertyFormatter)
+      : Promise<any>
 
     consume(exchange: string, group: string, consumer: consumer): Promise<void>
 

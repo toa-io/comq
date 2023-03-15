@@ -61,16 +61,14 @@ class IO {
        * @param {string} queue
        * @param {any} payload
        * @param {comq.encoding} [encoding]
-       * @param {string} replyTo
+       * @param {comq.ReplyToPropertyFormatter} replyToFormatter
        * @returns {Promise<void>}
        */
-      async (queue, payload, encoding, replyTo) => {
+      async (queue, payload, encoding, replyToFormatter) => {
         const [buffer, contentType] = this.#encode(payload, encoding)
         const correlationId = randomBytes(8).toString('hex')
         const emitter = this.#emitters[queue]
-
-        replyTo ??= emitter.queue
-
+        const replyTo = replyToFormatter?.(emitter.queue) ?? emitter.queue
         const properties = { contentType, correlationId, replyTo }
         const reply = this.#createReply()
 
