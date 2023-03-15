@@ -24,6 +24,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Run tests
+        run: npm i && npm test
+
       - name: Bump version
         run: |
           git config user.name "toabot"
