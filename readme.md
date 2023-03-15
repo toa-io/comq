@@ -94,15 +94,12 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 ## Request
 
-`async IO.request(queue: string, payload: any, [encoding: string, replyTo: string])`
+`async IO.request(queue: string, payload: any, [encoding: string])`
 
 Send encoded Request message with `replyTo` and `correlationId` properties set and
 return decoded Reply content.
 
 On the initial call, queues for Requests and Replies are asserted.
-
-> When using the `replyTo` argument, it is important to exercise caution as the queues associated with
-> this parameter are exclusive, meaning that they must have unique names.
 
 ### Example
 
