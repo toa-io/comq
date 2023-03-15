@@ -101,6 +101,9 @@ return decoded Reply content.
 
 On the initial call, queues for Requests and Replies are asserted.
 
+> When using the `replyTo` argument, it is important to exercise caution as the queues associated with
+> this parameter are exclusive, meaning that they must have unique names.
+
 ### Example
 
 ```javascript
