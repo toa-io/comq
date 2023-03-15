@@ -51,7 +51,8 @@ await io.close()
 
 The following documentation refers to a few terms:
 
-**Request** is an AMQP message that has the `replyTo` and `correlationId` properties set.
+**Request** is an AMQP message that is sent to a queue and has the `replyTo` and `correlationId`
+properties set.
 
 **Reply** is an AMQP message sent in response to a Request and sent to the queue specified in
 the `replyTo` property of the Request. The `correlationId` property of the Reply is set to the same
@@ -93,7 +94,7 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 ## Request
 
-`async IO.request(queue: string, payload: any, [encoding: string])`
+`async IO.request(queue: string, payload: any, [encoding: string, replyTo: string])`
 
 Send encoded Request message with `replyTo` and `correlationId` properties set and
 return decoded Reply content.
