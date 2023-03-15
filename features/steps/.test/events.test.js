@@ -52,7 +52,7 @@ describe('Given (that ){token} is consuming events from the {token} exchange', (
 })
 
 describe('Given {token} consuming events from the {token} exchange is expected', () => {
-  const step = tomato.steps.Gi('{token} consuming events from the {token} exchange is expected')
+  tomato.steps.Gi('{token} consuming events from the {token} exchange is expected')
 
   it('should be', async () => undefined)
 })

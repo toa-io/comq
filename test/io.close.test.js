@@ -1,11 +1,11 @@
 'use strict'
 
+const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
 const { promex, immediate } = require('@toa.io/generic')
 
 const mock = require('./connection.mock')
 const { IO } = require('../source/io')
-const { randomBytes } = require('crypto')
 
 /** @type {comq.IO} */
 let io

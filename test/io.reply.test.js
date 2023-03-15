@@ -29,7 +29,7 @@ const produce = jest.fn(async () => generate())
 
 // endregion
 
-describe('channels', (type) => {
+describe('channels', () => {
   it('should create request-reply channels', async () => {
     await io.reply(queue, produce)
 

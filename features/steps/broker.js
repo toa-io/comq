@@ -15,7 +15,7 @@ Given('the broker is/has {status}',
   })
 
 const actions = {
-  up: async (context) => {
+  up: async () => {
     await execute('docker start comq-rmq')
     await healthy()
   },

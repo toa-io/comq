@@ -21,7 +21,7 @@ The current message is acknowledged once the Producer function is completed, whi
 considered to be published when a confirmation is received from the broker.
 
 In summary, the next "cause" message will be consumed from the queue only after the "effect" message
-publication has been confirmed. Due to the ["at least once" effect](#-at-least-once-), *there is a
+publication has been confirmed. Due to the "at least once" effect, *there is a
 delay between the moment when a Reply **is delivered** to the Consumer and the moment when the
 next Request is consumed from the Request queue*.
 
