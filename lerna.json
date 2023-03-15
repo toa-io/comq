@@ -1,0 +1,5 @@
+{
+  "useWorkspaces": true,
+  "version": "0.3.0",
+  "conventionalCommits": true
+}

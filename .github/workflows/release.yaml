@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - dev
+
+jobs:
+  publish:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Bump version
+        run: |
+          git config user.name "toabot"
+          git config user.email "127577558+toabot@users.noreply.github.com"
+          
+          if [ ${{ github.base_ref }} = main ]; then
+            npx lerna@6.5.1 version --conventional-graduate --no-commit-hooks --no-changelog --yes --message "chore(release): %s"
+            git fetch
+            git checkout dev
+            git merge main
+            git push --all origin --no-verify
+          else
+            npx lerna@6.5.1 version --conventional-prerelease --preid dev --no-commit-hooks --no-changelog --yes --message "chore(prerelease): %s"
+          fi
+
+      - name: Publish packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ ${{ github.base_ref }} = main ]; then
+            npm publish
+          else
+            npm publish --tag dev
+          fi
