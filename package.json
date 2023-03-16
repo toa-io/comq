@@ -1,8 +1,7 @@
 {
   "name": "comq",
-  "version": "0.3.1",
+  "version": "0.4.0-dev.7",
   "description": "ComQ",
-  "homepage": "https://toa.io",
   "author": {
     "name": "Artem Gurtovoi",
     "url": "https://github.com/temich"
@@ -10,10 +9,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/toa-io/toa.git"
+    "url": "git+https://github.com/toa-io/comq.git"
   },
   "bugs": {
-    "url": "https://github.com/toa-io/toa/issues"
+    "url": "https://github.com/toa-io/comq/issues"
   },
   "engines": {
     "node": ">= 12.0.0"
@@ -38,7 +37,7 @@
     "standard": "17.0.0"
   },
   "dependencies": {
-    "@toa.io/generic": "0.3.0",
+    "@toa.io/generic": "0.4.0-dev.3",
     "amqplib": "0.10.3",
     "msgpackr": "1.8.5"
   },

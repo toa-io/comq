@@ -1,5 +1,7 @@
 'use strict'
 
+// region setup
+
 const { generate } = require('randomstring')
 const { encode } = require('../source/encode')
 
@@ -21,6 +23,8 @@ beforeEach(async () => {
   io = new IO(connection)
 })
 
+// endregion
+
 it('should be', async () => {
   expect(io.consume).toBeDefined()
 })
@@ -32,36 +36,54 @@ const consumer = jest.fn(() => undefined)
 /** @type {jest.MockedObject<comq.Channel>} */
 let events
 
-beforeEach(async () => {
+beforeEach(() => {
   jest.clearAllMocks()
-
-  await io.consume(exchange, group, consumer)
-
-  events = await findChannel('event')
 })
 
-it('should create events channel', async () => {
-  expect(connection.createChannel).toHaveBeenCalledWith('event')
+describe('group consumption', () => {
+  beforeEach(async () => {
+    await io.consume(exchange, group, consumer)
+
+    events = await findChannel('event')
+  })
+
+  it('should create events channel', async () => {
+    expect(connection.createChannel).toHaveBeenCalledWith('event')
+  })
+
+  it('should subscribe', async () => {
+    expect(events).toBeDefined()
+
+    const queue = exchange + '..' + group
+
+    expect(events.subscribe).toHaveBeenCalledWith(exchange, queue, expect.any(Function))
+  })
+
+  it.each(encodings)('should pass decoded event (%s)', async (contentType) => {
+    const payload = generate()
+    const content = encode(payload, contentType)
+    const properties = { contentType }
+    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const callback = events.subscribe.mock.calls[0][2]
+
+    await callback(message)
+
+    expect(consumer).toHaveBeenCalledWith(payload)
+  })
 })
 
-it('should subscribe', async () => {
-  expect(events).toBeDefined()
+describe.each(['omitted', 'undefined'])('exclusive consumption (group is %s)', (option) => {
+  beforeEach(async () => {
+    if (option === 'omitted') await io.consume(exchange, consumer)
+    else await io.consume(exchange, undefined, consumer)
 
-  const queue = exchange + '..' + group
+    events = await findChannel('event')
+  })
 
-  expect(events.subscribe).toHaveBeenCalledWith(exchange, queue, expect.any(Function))
-})
-
-it.each(encodings)('should pass decoded event (%s)', async (contentType) => {
-  const payload = generate()
-  const content = encode(payload, contentType)
-  const properties = { contentType }
-  const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
-  const callback = events.subscribe.mock.calls[0][2]
-
-  await callback(message)
-
-  expect(consumer).toHaveBeenCalledWith(payload)
+  it('should subscribe', async () => {
+    expect(events).toBeDefined()
+    expect(events.subscribe).toHaveBeenCalledWith(exchange, undefined, expect.any(Function))
+  })
 })
 
 /**

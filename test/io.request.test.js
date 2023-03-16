@@ -43,6 +43,8 @@ let promise
 const REPLY = new RegExp(`^${queue}..[0-9a-f]+$`)
 
 beforeEach(async () => {
+  jest.clearAllMocks()
+
   promise = io.request(queue, payload)
 
   // allows initializers to run
@@ -82,10 +84,36 @@ describe('send', () => {
   })
 
   it('should set replyTo', async () => {
-    const request = call[2]
+    const properties = call[2]
+    const rx = new RegExp(`^${queue}..[a-z0-9]+`)
+
+    expect(properties.replyTo).toMatch(rx)
+  })
+
+  it('should set replyTo using specified formatter', async () => {
+    jest.clearAllMocks()
+
+    /** @type {comq.encoding} */
+    const prefix = generate()
+    const encoding = 'application/json'
+    const formatter = (replyTo) => prefix + replyTo
+
+    promise = io.request(queue, payload, encoding, formatter)
+
+    await immediate()
+
+    call = requests.send.mock.calls[0]
+
+    const properties = requests.send.mock.calls[0][2]
+
+    expect(properties.replyTo).toMatch(new RegExp(`${prefix}${queue}..[a-z0-9]+`))
+  })
+
+  it('should consume replyTo', async () => {
+    const properties = call[2]
     const queue = replies.consume.mock.calls[0][0]
 
-    expect(request.replyTo).toStrictEqual(queue)
+    expect(properties.replyTo).toStrictEqual(queue)
   })
 
   it('should encode message with msgpack by default', async () => {

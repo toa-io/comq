@@ -57,8 +57,14 @@ describe('Given {token} consuming events from the {token} exchange is expected',
   it('should be', async () => undefined)
 })
 
-describe('When I emit an event to the {token} exchange', () => {
-  const step = tomato.steps.Wh('I emit an event to the {token} exchange')
+describe('Given that events are exclusively consumed from the {token} exchange', () => {
+  tomato.steps.Gi('that events are exclusively consumed from the {token} exchange')
+
+  it('should be', async () => undefined)
+})
+
+describe('When an event is emitted to the {token} exchange', () => {
+  const step = tomato.steps.Wh('an event is emitted to the {token} exchange')
 
   it('should be', async () => undefined)
 
@@ -102,6 +108,31 @@ describe('Then {token} receives the event', () => {
 
   const payload = generate()
   const group = generate()
+
+  beforeEach(() => {
+    context.consumed = { [group]: payload }
+  })
+
+  it('should be', async () => undefined)
+
+  it('should throw if not consumed', async () => {
+    context.published = generate()
+
+    await expect(step.call(context, group)).rejects.toThrow(AssertionError)
+  })
+
+  it('should pass if consumed', async () => {
+    context.published = payload
+
+    await expect(step.call(context, group)).resolves.not.toThrow()
+  })
+})
+
+describe('Then the event is received', () => {
+  const step = tomato.steps.Th('the event is received')
+
+  const payload = generate()
+  const group = undefined
 
   beforeEach(() => {
     context.consumed = { [group]: payload }

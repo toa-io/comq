@@ -61,13 +61,14 @@ class IO {
        * @param {string} queue
        * @param {any} payload
        * @param {comq.encoding} [encoding]
+       * @param {comq.ReplyToPropertyFormatter} replyToFormatter
        * @returns {Promise<void>}
        */
-      async (queue, payload, encoding) => {
+      async (queue, payload, encoding, replyToFormatter) => {
         const [buffer, contentType] = this.#encode(payload, encoding)
         const correlationId = randomBytes(8).toString('hex')
         const emitter = this.#emitters[queue]
-        const replyTo = emitter.queue
+        const replyTo = replyToFormatter?.(emitter.queue) ?? emitter.queue
         const properties = { contentType, correlationId, replyTo }
         const reply = this.#createReply()
 
@@ -80,7 +81,8 @@ class IO {
 
   consume = lazy(this, this.#createEventChannel,
     async (exchange, group, callback) => {
-      const queue = io.concat(exchange, group)
+      const exclusive = group === undefined || callback === undefined // 2 arguments passed
+      const queue = exclusive ? undefined : io.concat(exchange, group)
       const consumer = this.#getEventConsumer(callback)
 
       await this.#events.subscribe(exchange, queue, consumer)

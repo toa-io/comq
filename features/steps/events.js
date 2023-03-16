@@ -12,7 +12,7 @@ Given('(that ){token} is consuming events from the {token} exchange',
    * @this {comq.features.Context}
    */
   async function (group, exchange) {
-    await consume(this, group, exchange)
+    await consume.call(this, group, exchange)
   })
 
 Given('{token} consuming events from the {token} exchange is expected',
@@ -24,10 +24,19 @@ Given('{token} consuming events from the {token} exchange is expected',
   async function (group, exchange) {
     await timeout(500) // let it crash
 
-    this.expected = consume(this, group, exchange)
+    this.expected = consume.call(this, group, exchange)
   })
 
-When('I emit an event to the {token} exchange',
+Given('that events are exclusively consumed from the {token} exchange',
+  /**
+   * @param {string} exchange
+   * @this {comq.features.Context}
+   */
+  async function (exchange) {
+    this.expected = consume.call(this, undefined, exchange)
+  })
+
+When('an event is emitted to the {token} exchange',
   /**
    * @param {string} exchange
    * @this {comq.features.Context}
@@ -48,22 +57,38 @@ Then('{token} receives the event',
    * @this {comq.features.Context}
    */
   async function (group) {
-    await timeout(100)
+    await consumed.call(this, group)
+  })
 
-    assert.notEqual(this.published, undefined, 'No event has been published')
-    assert.equal(this.published, this.consumed[group], `'${group}' haven't consumed event`)
+Then('the event is received',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    await consumed.call(this)
   })
 
 /**
- * @param {comq.features.Context} context
+ * @this {comq.features.Context} context
  * @param {string} group
  * @param {string} exchange
  * @return {Promise<void>}
  */
-const consume = async (context, group, exchange) => {
-  context.consumed ??= {}
+async function consume (group, exchange) {
+  this.consumed ??= {}
 
-  return context.io.consume(exchange, group, async (payload) => {
-    context.consumed[group] = payload
+  return this.io.consume(exchange, group, async (payload) => {
+    this.consumed[group] = payload
   })
+}
+
+/**
+ * @param {string} group
+ * @return {Promise<void>}
+ */
+async function consumed (group) {
+  await timeout(100) // let it consume
+
+  assert.notEqual(this.published, undefined, 'No event has been published')
+  assert.equal(this.published, this.consumed[group], 'Event hasn\'t been exclusively consumed')
 }
