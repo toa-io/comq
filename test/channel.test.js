@@ -157,6 +157,28 @@ describe('acknowledgments', () => {
 
     expect(chan.nack).toHaveBeenCalledWith(message, false, requeue)
   })
+
+  it('should ignore Channel ended exception', async () => {
+    topology.acknowledgments = true
+
+    channel = await create(connection, topology)
+    chan = await getCreatedChannel()
+
+    const consumer = /** @type {Function} */ jest.fn(async () => generate())
+
+    await channel.consume(queue, consumer)
+
+    const callback = chan.consume.mock.calls[0][1]
+    const content = randomBytes(8)
+    const properties = {}
+    const fields = {}
+    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties, fields }
+
+    chan.ack.mockImplementation(() => { throw new Error('Channel closed') })
+    chan.nack.mockImplementation(() => { throw new Error('Channel closed') })
+
+    await expect(callback(message)).resolves.not.toThrow()
+  })
 })
 
 describe('send', () => {
