@@ -51,7 +51,7 @@ Then('the connection is not established',
    * @this {comq.features.Context}
    */
   async function () {
-    assert.equal(this.io, undefined, 'connection is established contrary to expectations')
+    assert.equal(this.connected, false, 'connection is established contrary to expectations')
   })
 
 Then('the connection is established',
@@ -59,9 +59,9 @@ Then('the connection is established',
    * @this {comq.features.Context}
    */
   async function () {
-    if (this.connecting) await this.connecting
+    if (this.connecting !== undefined) await this.connecting
 
-    assert.notEqual(this.io, undefined, 'connection is not established')
+    assert.equal(this.connected, true, 'connection is not established')
   })
 
 Then('no exceptions are thrown',

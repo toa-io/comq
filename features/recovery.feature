@@ -87,14 +87,14 @@ Feature: Request-Reply Topology Recovery
     Given the broker is down
     And `logger` consuming events from the `numbers_added` exchange is expected
     When the broker is up
-    And I emit an event to the `numbers_added` exchange
+    And an event is emitted to the `numbers_added` exchange
     Then `logger` receives the event
 
   Scenario: Defining emitter while broker crashed
     Given `someone` consuming events from the `numbers_added` exchange is expected
     And the broker has crashed
     When the broker is up
-    Then I emit an event to the `numbers_added` exchange
+    Then an event is emitted to the `numbers_added` exchange
     And `someone` receives the event
 
   Scenario: Start consuming events while broker is down
@@ -105,5 +105,5 @@ Feature: Request-Reply Topology Recovery
     And `second` consuming events from the `numbers_added` exchange is expected
     When the broker has crashed
     And the broker is up
-    Then I emit an event to the `numbers_added` exchange
+    Then an event is emitted to the `numbers_added` exchange
     And `second` receives the event

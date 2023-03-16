@@ -4,16 +4,17 @@ import * as _io from '../../../types/io'
 declare namespace comq.features {
 
   interface Context {
-    url?: string
     io?: _io.IO
+    connected?: boolean
     reply?: Promise<any>
     consumed?: Record<string, any>
     published?: any
     events?: { [K in _diagnostics.event]?: boolean }
     exception?: Error
-    expected: Promise<any>
+    expected?: Promise<any>
 
     connect(user?: string, password?: string): Promise<void>
+    disconnect(): Promise<void>
   }
 
 }
