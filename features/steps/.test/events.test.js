@@ -57,8 +57,8 @@ describe('Given {token} consuming events from the {token} exchange is expected',
   it('should be', async () => undefined)
 })
 
-describe('When I emit an event to the {token} exchange', () => {
-  const step = tomato.steps.Wh('I emit an event to the {token} exchange')
+describe('When an event is emitted to the {token} exchange', () => {
+  const step = tomato.steps.Wh('an event is emitted to the {token} exchange')
 
   it('should be', async () => undefined)
 

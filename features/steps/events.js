@@ -27,7 +27,7 @@ Given('{token} consuming events from the {token} exchange is expected',
     this.expected = consume(this, group, exchange)
   })
 
-When('I emit an event to the {token} exchange',
+When('an event is emitted to the {token} exchange',
   /**
    * @param {string} exchange
    * @this {comq.features.Context}
