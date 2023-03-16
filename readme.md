@@ -10,7 +10,7 @@ Node.js.
 3. Events (pub/sub)
 4. Content encoding
 5. Flow control and back pressure handling
-6. Consumer acknowledgements and publisher confirms
+6. Consumer acknowledgments and publisher confirms
 7. Poison message handling
 8. Connection tolerance
 9. Broker restart resilience
@@ -225,7 +225,7 @@ requests and are expecting replies.
   *persistent* ([delivery mode 2](https://www.rabbitmq.com/publishers.html#message-properties)),
   while Requests and Replies are not (mode 1).
 - Events and Requests are consumed using
-  manual [acknowledgment mode](https://www.rabbitmq.com/confirms.html#acknowledgement-modes),
+  manual [acknowledgment mode](https://www.rabbitmq.com/confirms.html#acknowledgment-modes),
   and Replies are consumed using automatic mode.
 
 If incoming message causes an exception, then it is "negative acknowledged" and requeued. If it
@@ -237,13 +237,13 @@ causes an exception again, it will be discarded.
 
 See:
 
-- [Consumer Acknowledgements and Publisher Confirms](https://www.rabbitmq.com/confirms.html).
-- [Negative Acknowledgement and Requeuing of Deliveries](https://www.rabbitmq.com/confirms.html#consumer-nacks-requeue)
+- [Consumer Acknowledgments and Publisher Confirms](https://www.rabbitmq.com/confirms.html).
+- [Negative Acknowledgment and Requeuing of Deliveries](https://www.rabbitmq.com/confirms.html#consumer-nacks-requeue)
 - [Dead Letter Exchanges](https://www.rabbitmq.com/dlx.html)
 
 ### Cheatsheet
 
-| Message | Prefetch  | Confirms | Queue     | Acknowledgement | Persistent |
+| Message | Prefetch  | Confirms | Queue     | Acknowledgment | Persistent |
 |---------|-----------|----------|-----------|-----------------|------------|
 | Request | limited   | no       | durable   | manual          | no         |
 | Reply   | unlimited | no       | exclusive | automatic       | no         |

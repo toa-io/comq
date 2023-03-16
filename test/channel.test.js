@@ -92,7 +92,7 @@ describe('consume', () => {
   })
 })
 
-describe('acknowledgements', () => {
+describe('acknowledgments', () => {
   const consumer = /** @type {comq.channel.consumer} */ jest.fn(async () => undefined)
   const queue = generate()
 
@@ -100,7 +100,7 @@ describe('acknowledgements', () => {
     ['', true],
     ['not ', false]
   ])('should %sack incoming messages', async (_, ack) => {
-    topology.acknowledgements = ack
+    topology.acknowledgments = ack
     channel = await create(connection, topology)
     chan = await getCreatedChannel()
 
@@ -119,8 +119,8 @@ describe('acknowledgements', () => {
   it.each([
     ['manual', true],
     ['automatic', false]
-  ])('should create consumer with %s acknowledgements', async (_, ack) => {
-    topology.acknowledgements = ack
+  ])('should create consumer with %s acknowledgments', async (_, ack) => {
+    topology.acknowledgments = ack
     channel = await create(connection, topology)
     chan = await getCreatedChannel()
 
@@ -136,7 +136,7 @@ describe('acknowledgements', () => {
     ['nack', true],
     ['discard', false]
   ])('should %s the message caused an exception', async (_, requeue) => {
-    topology.acknowledgements = true
+    topology.acknowledgments = true
 
     channel = await create(connection, topology)
     chan = await getCreatedChannel()
@@ -352,10 +352,10 @@ describe.each(['group', 'exclusive'])('%s subscribe', (option) => {
   })
 
   it.each([
-    ['with acknowledgements', true],
-    ['without acknowledgements', false]
+    ['with acknowledgments', true],
+    ['without acknowledgments', false]
   ])('should start consuming %s', async (_, ack) => {
-    topology.acknowledgements = ack
+    topology.acknowledgments = ack
 
     jest.clearAllMocks()
 
@@ -764,7 +764,7 @@ describe('diagnostics', () => {
   ])('should%s emit `discard` event', async (_, redelivered) => {
     jest.clearAllMocks()
 
-    topology.acknowledgements = true
+    topology.acknowledgments = true
     channel = await create(connection, topology)
     chan = await getCreatedChannel()
 

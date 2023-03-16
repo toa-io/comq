@@ -211,7 +211,7 @@ class Channel {
     /** @type {import('amqplib').Options.Consume} */
     const options = {}
 
-    if (this.#topology.acknowledgements) consumer = this.#getAcknowledgingConsumer(consumer)
+    if (this.#topology.acknowledgments) consumer = this.#getAcknowledgingConsumer(consumer)
     else options.noAck = true
 
     const response = await this.#channel.consume(queue, consumer, options)
