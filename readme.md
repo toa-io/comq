@@ -109,18 +109,21 @@ const sum = await io.request('add_numbers', { a: 1, b: 2 })
 
 ## Consumption
 
-`async IO.consume(exchange: string, group: string, consumer)`
+`async IO.consume(exchange: string, [group: string], consumer)`
 
 `consumer` function's signature is `async? (payload: any): void`
 
 Start consuming decoded Events.
 
-Asserts fanout `exchange` (once per unique `exchange`) and queue for the Consumer `group` (once per
-unique `exchange` and `group` pair), and then binds the queue to the exchange. That is, one Event
-message is delivered to a single Consumer within *each group*.
+Asserts fanout `exchange` (once per unique `exchange`) and the queue for the Consumer `group` (once
+per unique `exchange` and `group` pair), and then binds the queue to the exchange. That is, one
+Event message is delivered to a single Consumer within *each group*.
 
 > Typically, the value of `group` refers to the name of a microservice running in multiple
 > instances.
+
+If the `group` is `undefined` or omitted, a unique value is generated and the queue is declared as
+exclusive.
 
 ### Example
 
