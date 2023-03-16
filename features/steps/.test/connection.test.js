@@ -125,23 +125,24 @@ describe('When I attempt to connect to the broker as {string} with password {str
   })
 })
 
-describe.each([['', true], [' not', false]])('Then the connection is%s established', (not, defined) => {
-  const step = tomato.steps.Th(`the connection is${not} established`)
+describe.each([['', true], [' not', false]])('Then the connection is%s established',
+  (not, connected) => {
+    const step = tomato.steps.Th(`the connection is${not} established`)
 
-  it('should be', async () => undefined)
+    it('should be', async () => undefined)
 
-  it(`should fail if io is${defined ? 'n\'t' : ''} defined`, async () => {
-    context.io = defined ? undefined : generate()
+    it(`should fail if is${connected ? 'n\'t' : ''} connected`, async () => {
+      context.connected = !connected
 
-    await expect(step.call(context)).rejects.toThrow(AssertionError)
+      await expect(step.call(context)).rejects.toThrow(AssertionError)
+    })
+
+    it(`should pass if is${connected ? '' : 'n\'t'} connected`, async () => {
+      context.connected = connected
+
+      await expect(step.call(context)).resolves.not.toThrow()
+    })
   })
-
-  it(`should pass if io is${defined ? '' : 'n\'t'} defined`, async () => {
-    context.io = defined ? generate() : undefined
-
-    await expect(step.call(context)).resolves.not.toThrow()
-  })
-})
 
 describe('Then no exceptions are thrown', () => {
   const step = tomato.steps.Th('no exceptions are thrown')

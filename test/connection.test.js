@@ -154,13 +154,26 @@ describe('create channel', () => {
   })
 })
 
-it('should close connection', async () => {
-  await connection.open()
-  await connection.close()
+describe('close', () => {
+  it('should close connection', async () => {
+    await connection.open()
+    await connection.close()
 
-  const amqp = await amqplib.connect.mock.results[0].value
+    const amqp = await amqplib.connect.mock.results[0].value
 
-  expect(amqp.close).toHaveBeenCalled()
+    expect(amqp.close).toHaveBeenCalled()
+  })
+
+  it('should ignore exceptions', async () => {
+    await connection.open()
+
+    /** @type {jest.MockedObject<import('amqplib').Connection>} */
+    const amqp = await amqplib.connect.mock.results[0].value
+
+    amqp.close.mockImplementation(async () => { throw new Error() })
+
+    await expect(connection.close()).resolves.not.toThrow()
+  })
 })
 
 describe('diagnostics', () => {

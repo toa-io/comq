@@ -230,6 +230,8 @@ class Channel {
 
         this.#channel.ack(message)
       } catch (exception) {
+        if (exception.message === 'Channel closed') return // message will be requeued by the broker
+
         if (message.fields.redelivered) this.#discard(message, exception)
         else this.#requeue(message)
       }
