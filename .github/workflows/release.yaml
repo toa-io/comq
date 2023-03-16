@@ -39,7 +39,7 @@ jobs:
             git merge main
             git push --all origin --no-verify
           else
-            npx lerna@6.5.1 version --conventional-prerelease --preid dev --no-commit-hooks --no-changelog --yes --message "chore(prerelease): %s"
+            npx lerna@6.5.1 version --conventional-prerelease --preid dev --no-commit-hooks --no-changelog --yes --message "chore(prerelease): %s" --git-tag-command ""
           fi
 
       - name: Publish packages
