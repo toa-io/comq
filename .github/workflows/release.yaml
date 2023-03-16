@@ -27,6 +27,10 @@ jobs:
       - name: Run tests
         run: npm i && npm test
 
+      - name: Run features
+        if: contains(github.ref, "main")
+        run: docker-compose up -d && npx cucumber-js --fail-fast --exit --format summary --publish-quiet
+
       - name: Bump version
         run: |
           git config user.name "toabot"
@@ -39,7 +43,7 @@ jobs:
             git merge main
             git push --all origin --no-verify
           else
-            npx lerna@6.5.1 version --conventional-prerelease --preid dev --no-commit-hooks --no-changelog --yes --message "chore(prerelease): %s"
+            npx lerna@6.5.1 version --conventional-prerelease --preid dev --no-commit-hooks --no-changelog --yes --message "chore(prerelease): %s" --git-tag-command "echo %s"
           fi
 
       - name: Publish packages
