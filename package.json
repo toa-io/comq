@@ -37,7 +37,7 @@
     "standard": "17.0.0"
   },
   "dependencies": {
-    "@toa.io/generic": "0.3.0",
+    "@toa.io/generic": "0.4.0-dev.3",
     "amqplib": "0.10.3",
     "msgpackr": "1.8.5"
   },
