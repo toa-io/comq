@@ -10,7 +10,7 @@ declare namespace comq {
     prefetch: number
     confirms: boolean
     durable: boolean
-    acknowledgements: boolean
+    acknowledgments: boolean
     persistent: boolean
   }
 

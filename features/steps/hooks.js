@@ -1,12 +1,11 @@
 'use strict'
 
-const { AfterAll } = require('@cucumber/cucumber')
-const { Context } = require('./context')
+const { After } = require('@cucumber/cucumber')
 
-AfterAll(
+After(
   /**
    * @this {comq.features.Context}
    */
   async function () {
-    await Context.disconnect()
+    await this.disconnect()
   })

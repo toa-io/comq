@@ -7,7 +7,7 @@ it('should define request preset', async () => {
     prefetch: 300,
     confirms: false,
     durable: true,
-    acknowledgements: true,
+    acknowledgments: true,
     persistent: false
   })
 })
@@ -17,7 +17,7 @@ it('should define reply preset', async () => {
     prefetch: 0,
     confirms: false,
     durable: false,
-    acknowledgements: false,
+    acknowledgments: false,
     persistent: false
   })
 })
@@ -27,7 +27,7 @@ it('should define event preset', async () => {
     prefetch: 300,
     confirms: true,
     durable: true,
-    acknowledgements: true,
+    acknowledgments: true,
     persistent: true
   })
 })

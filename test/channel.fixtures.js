@@ -6,7 +6,7 @@ const preset = () => ({
   prefetch: random(10),
   confirms: flip(),
   durable: flip(),
-  acknowledgements: flip(),
+  acknowledgments: flip(),
   persistent: flip()
 })
 

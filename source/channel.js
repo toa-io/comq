@@ -211,7 +211,7 @@ class Channel {
     /** @type {import('amqplib').Options.Consume} */
     const options = {}
 
-    if (this.#topology.acknowledgements) consumer = this.#getAcknowledgingConsumer(consumer)
+    if (this.#topology.acknowledgments) consumer = this.#getAcknowledgingConsumer(consumer)
     else options.noAck = true
 
     const response = await this.#channel.consume(queue, consumer, options)
@@ -230,6 +230,8 @@ class Channel {
 
         this.#channel.ack(message)
       } catch (exception) {
+        if (exception.message === 'Channel closed') return // message will be requeued by the broker
+
         if (message.fields.redelivered) this.#discard(message, exception)
         else this.#requeue(message)
       }

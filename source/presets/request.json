@@ -2,6 +2,6 @@
   "prefetch": 300,
   "confirms": false,
   "durable": true,
-  "acknowledgements": true,
+  "acknowledgments": true,
   "persistent": false
 }

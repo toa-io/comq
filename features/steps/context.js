@@ -7,11 +7,8 @@ const { connect } = require('../../')
  * @implements {comq.features.Context}
  */
 class Context extends World {
-  /** @type {comq.IO} */
-  static io
-  static url
-
   io
+  connected = false
   connecting
   reply
   consumed
@@ -23,26 +20,33 @@ class Context extends World {
   async connect (user, password) {
     const url = locator(user, password)
 
-    if (url !== Context.url) await this.#connect(url)
+    await this.#connect(url)
+  }
 
-    this.io = Context.io
+  async disconnect () {
+    if (this.io === undefined) return
+
+    await this.io.close()
+
+    this.io = undefined
+    this.connected = false
+    this.events = {}
+  }
+
+  /**
+   * @param {string} url
+   * @return {Promise<void>}
+   */
+  async #connect (url) {
+    if (this.io !== undefined) await this.disconnect()
+
+    this.io = await connect(url)
+    this.connected = true
 
     for (const event of EVENTS) this.io.diagnose(event, () => (this.events[event] = true))
-  }
 
-  async #connect (url) {
-    if (Context.url !== undefined) await Context.disconnect()
-
-    Context.url = url
-    Context.io = await connect(url)
-  }
-
-  static async disconnect () {
-    if (Context.io === undefined) return
-
-    await Context.io.close()
-
-    Context.io = undefined
+    this.io.diagnose('close', () => (this.connected = false))
+    this.io.diagnose('open', () => (this.connected = true))
   }
 }
 

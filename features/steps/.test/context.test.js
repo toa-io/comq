@@ -40,21 +40,12 @@ describe('connect', () => {
     expect(comq.connect).toHaveBeenCalledWith('amqp://developer:secret@localhost:5673')
   })
 
-  it('should not connect twice', async () => {
-    await context.connect()
-
-    expect(comq.connect).toHaveBeenCalledTimes(1)
-  })
-
-  it('should reconnect with credentials', async () => {
+  it('should connect with credentials', async () => {
     const user = generate()
     const password = generate()
 
     await context.connect(user, password)
 
-    expect(io.close).toHaveBeenCalled()
-
-    expect(comq.connect).toHaveBeenCalledTimes(2)
     expect(comq.connect).toHaveBeenCalledWith(`amqp://${user}:${password}@localhost:5673`)
   })
 

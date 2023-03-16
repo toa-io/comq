@@ -37,7 +37,11 @@ class Connection {
   }
 
   async close () {
-    await this.#connection.close()
+    try {
+      await this.#connection.close()
+    } catch (e) {
+      // connection already closed
+    }
   }
 
   createChannel = failsafe(this, this.#recover,
