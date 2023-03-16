@@ -28,7 +28,7 @@ jobs:
         run: npm i && npm test
 
       - name: Run features
-        if: contains(github.ref, "main")
+        if: github.ref == 'refs/heads/main'
         run: docker-compose up -d && npx cucumber-js --fail-fast --exit --format summary --publish-quiet
 
       - name: Bump version
