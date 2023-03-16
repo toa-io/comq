@@ -37,7 +37,7 @@ to [`amqplib.connect`](https://amqp-node.github.io/amqplib/channel_api.html#conn
 ### Example
 
 ```javascript
-const { connect } = require('comq')
+import { connect } from 'comq'
 
 const url = 'amqp://developer:secret@localhost'
 const io = await connect(url)

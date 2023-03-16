@@ -1,7 +1,7 @@
 'use strict'
 
-const { connect } = require('comq')
-const { url } = require('../const')
+import { connect } from 'comq'
+import { url } from '../const.js'
 
 let io
 let interval
@@ -34,4 +34,4 @@ async function exit () {
   console.log('\nDisconnected')
 }
 
-run().then()
+await run()
