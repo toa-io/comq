@@ -68,7 +68,7 @@ value as in the Request.
 
 ## Reply
 
-`async IO.reply(queue: string, producer)`
+`async IO.reply(queue: string, producer): void`
 
 `producer` function's signature is `async? (message: any): any`
 
@@ -96,7 +96,7 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 ## Request
 
-`async IO.request(queue: string, payload: any, [encoding: string])`
+`async IO.request(queue: string, payload: any, [encoding: string]): any`
 
 Send encoded Request message with `replyTo` and `correlationId` properties set and
 return decoded Reply content.
@@ -111,7 +111,7 @@ const sum = await io.request('add_numbers', { a: 1, b: 2 })
 
 ## Consumption
 
-`async IO.consume(exchange: string, [group: string], consumer)`
+`async IO.consume(exchange: string, [group: string], consumer): void`
 
 `consumer` function's signature is `async? (payload: any): void`
 
@@ -137,7 +137,7 @@ await io.consume('numbers_added', 'logger', ({ a, b }) => {
 
 ## Emission
 
-`async IO.emit(exchange: string, payload: any, [encoding: string])`
+`async IO.emit(exchange: string, payload: any, [encoding: string]): void`
 
 Publish encoded Event to the `exchange`.
 
@@ -246,23 +246,23 @@ See:
 ### Cheatsheet
 
 | Message | Prefetch  | Confirms | Queue     | Acknowledgment | Persistent |
-|---------|-----------|----------|-----------|-----------------|------------|
-| Request | limited   | no       | durable   | manual          | no         |
-| Reply   | unlimited | no       | exclusive | automatic       | no         |
-| Event   | limited   | yes      | durable   | manual          | yes        |
+|---------|-----------|----------|-----------|----------------|------------|
+| Request | limited   | no       | durable   | manual         | no         |
+| Reply   | unlimited | no       | exclusive | automatic      | no         |
+| Event   | limited   | yes      | durable   | manual         | yes        |
 
 ## Graceful Shutdown
 
 ### Sealing
 
-`async IO.seal()`
+`async IO.seal(): void`
 
 [Stop receiving](https://amqp-node.github.io/amqplib/channel_api.html#channel_cancel) new Events and
 Requests.
 
 ### Disconnection
 
-`async IO.close()`
+`async IO.close(): void`
 
 1. Call `IO.seal()`.
 2. Wait for any outstanding messages to be processed[^2] and acknowledged. Sending Requests,
