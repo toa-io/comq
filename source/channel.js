@@ -126,12 +126,15 @@ class Channel {
 
   /**
    * @param {string} name
-   * @returns {Promise<void>}
+   * @returns {Promise<string[]>}
    */
   async #assertQueue (name) {
-    const options = this.#topology.durable ? DURABLE : EXCLUSIVE
+    const passed = arguments.length === 2 ? arguments[1] : undefined
+    const options = passed ?? (this.#topology.durable ? DURABLE : EXCLUSIVE)
 
-    await this.#channel.assertQueue(name, options)
+    const { queue } = await this.#channel.assertQueue(name, options)
+
+    return [queue]
   }
 
   /**
@@ -149,11 +152,18 @@ class Channel {
    *
    * @param {string} exchange
    * @param {string} queue
-   * @returns {Promise<void>}
+   * @returns {Promise<string[]>}
    */
   async #assertBoundQueue (exchange, queue) {
-    await this.#assertQueue(queue)
+    /** @type {comq.amqp.options.Consume} */
+    let options
+
+    if (queue === undefined) options = { exclusive: true }
+
+    queue = (await this.#assertQueue(queue, options))[0]
     await this.#channel.bindQueue(queue, exchange, '')
+
+    return [exchange, queue]
   }
 
   // endregion

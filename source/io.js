@@ -81,7 +81,8 @@ class IO {
 
   consume = lazy(this, this.#createEventChannel,
     async (exchange, group, callback) => {
-      const queue = io.concat(exchange, group)
+      const exclusive = group === undefined || callback === undefined // 2 arguments passed
+      const queue = exclusive ? undefined : io.concat(exchange, group)
       const consumer = this.#getEventConsumer(callback)
 
       await this.#events.subscribe(exchange, queue, consumer)

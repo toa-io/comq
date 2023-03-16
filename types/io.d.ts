@@ -30,6 +30,8 @@ declare namespace comq {
 
     consume(exchange: string, group: string, consumer: consumer): Promise<void>
 
+    consume(exchange: string, consumer: consumer): Promise<void>
+
     emit(exchange: string, payload: any, encoding?: _encoding.encoding): Promise<void>
 
     seal(): Promise<void>

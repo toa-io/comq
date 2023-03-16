@@ -293,9 +293,10 @@ describe('throw', () => {
   })
 })
 
-describe('subscribe', () => {
+describe.each(['group', 'exclusive'])('%s subscribe', (option) => {
+  let queue = option === 'group' ? generate() : undefined
+
   const exchange = generate()
-  const queue = generate()
   const consumer = /** @type {comq.channel.consumer} */ jest.fn(() => undefined)
 
   beforeEach(async () => {
@@ -319,13 +320,33 @@ describe('subscribe', () => {
     else expect(options).toMatchObject({ durable: false })
   })
 
-  it('should assert queue', async () => {
-    const options = topology.durable ? { durable: true } : { exclusive: true }
+  if (option === 'group') {
+    it('should assert queue', async () => {
+      const options = topology.durable ? { durable: true } : { exclusive: true }
 
-    expect(chan.assertQueue).toHaveBeenCalledWith(queue, expect.objectContaining(options))
-  })
+      expect(chan.assertQueue).toHaveBeenCalledWith(queue, expect.objectContaining(options))
+    })
+  } else {
+    it.each([true, false])('should assert exclusive queue (topology.durable: %s)', async (durable) => {
+      jest.clearAllMocks()
+
+      topology.durable = durable
+
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+
+      await channel.subscribe(exchange, undefined, consumer)
+
+      expect(chan.assertQueue).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({ exclusive: true })
+      )
+    })
+  }
 
   it('should bind queue to exchange', async () => {
+    const { queue } = await chan.assertQueue.mock.results[0].value
+
     expect(chan.bindQueue).toHaveBeenCalledTimes(1)
     expect(chan.bindQueue).toHaveBeenCalledWith(queue, exchange, '')
   })
@@ -344,6 +365,8 @@ describe('subscribe', () => {
     await channel.subscribe(exchange, queue, consumer)
 
     const options = ack ? {} : { noAck: true }
+
+    queue = (await chan.assertQueue.mock.results[0].value).queue
 
     expect(chan.consume).toHaveBeenCalledTimes(1)
     expect(chan.consume).toHaveBeenCalledWith(queue, expect.any(Function), expect.objectContaining(options))
