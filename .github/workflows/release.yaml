@@ -28,7 +28,6 @@ jobs:
         run: npm i && npm test
 
       - name: Run features
-        if: contains(github.base_ref, 'staging')
         run: |
           if [ ${{ github.base_ref }} = main ]; then
             docker-compose up -d && npx cucumber-js --fail-fast --exit --format summary --publish-quiet
