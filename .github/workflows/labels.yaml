@@ -3,6 +3,7 @@ name: github
 on:
   push:
     branches:
+      - 'dev'
       - 'ghlabels'
     paths:
       - '.github/labels.yml'
