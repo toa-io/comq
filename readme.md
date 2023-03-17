@@ -16,7 +16,7 @@ Node.js.
 9. Broker restart resilience
 10. Graceful shutdown
 
-> TypeScript, ECMAScript and CommonJS compatible (types included).
+> CommonJS, ECMAScript and TypeScript compatible (types included).
 
 ## TL;DR
 
