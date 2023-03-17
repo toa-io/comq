@@ -176,9 +176,10 @@ The following encoding formats are supported:
 
 ## Flow Control
 
-When back pressure is applied or the underlying broker connection is lost, any current and future
-outgoing messages will be paused. Corresponding returned promises will remain in a `pending` state
-until the pressure is removed or the connection is restored.
+When [back pressure](https://www.rabbitmq.com/flow-control.html) is applied to a channel or the
+underlying broker connection is lost, any current and future outgoing messages will be paused.
+Corresponding returned promises will remain in a `pending` state until the pressure is removed or
+the connection is restored.
 
 Under these circumstances, an application that consumes requests and produces replies will hit the
 prefetch limit of incoming messages and become unresponsive until the issue is resolved.
