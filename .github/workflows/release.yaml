@@ -37,6 +37,7 @@ jobs:
           echo ok >> ok.md
           git add ok.md
           git commit -m "ok" --no-verify
+          git push --no-verify
         env:
           GITHUB_TOKEN: ${{ secrets.TOABOT_GITHUB_TOKEN }}
           GIT_AUTHOR_NAME: ${{ steps.gpg.outputs.name }}
