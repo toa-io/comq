@@ -61,7 +61,7 @@ class IO {
        * @param {string} queue
        * @param {any} payload
        * @param {comq.encoding} [encoding]
-       * @param {comq.ReplyToPropertyFormatter} replyToFormatter
+       * @param {comq.ReplyToPropertyFormatter} [replyToFormatter]
        * @returns {Promise<void>}
        */
       async (queue, payload, encoding, replyToFormatter) => {

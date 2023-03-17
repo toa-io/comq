@@ -313,6 +313,39 @@ describe('throw', () => {
 
     await expect(channel.throw(queue, buffer, options)).resolves.not.toThrow()
   })
+
+  it('should wait for unpause', async () => {
+    jest.clearAllMocks()
+
+    topology.confirms = false
+    channel = await create(connection, topology)
+
+    const exchange = generate()
+    const queue = generate()
+    const buffer = randomBytes(8)
+    const options = { contentType: 'application/octet-stream' }
+
+    // create channel
+    await channel.publish(exchange, buffer, options)
+
+    const chan = await getCreatedChannel()
+
+    chan.publish.mockImplementation(() => false)
+
+    await channel.publish(exchange, buffer, options) // now paused
+
+    expect(chan.publish).toHaveBeenCalledTimes(2)
+
+    setImmediate(async () => {
+      expect(chan.publish).toHaveBeenCalledTimes(2)
+
+      chan.emit('drain')
+    })
+
+    await channel.throw(queue, buffer, options)
+
+    expect(chan.publish).toHaveBeenCalledTimes(3)
+  })
 })
 
 describe.each(['group', 'exclusive'])('%s subscribe', (option) => {
