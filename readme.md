@@ -13,8 +13,9 @@ Node.js.
 6. Consumer acknowledgments and publisher confirms
 7. Poison message handling
 8. Connection tolerance
-9. Broker restart resilience
-10. Graceful shutdown
+9. Sharded connection
+10. Broker restart resilience
+11. Graceful shutdown
 
 > CommonJS, ECMAScript and TypeScript compatible (types included).
 
@@ -181,6 +182,44 @@ the topology will be recovered, and unanswered Requests and unconfirmed Events w
 
 If the broker rejects the connection (for example, due to access being denied), an exception will be
 thrown.
+
+## Sharded Connection
+
+*Send to one, consume from all.*
+
+A sharded connection is a mechanism that uses multiple connections simultaneously to achieve load
+balancing and mitigate failover scenarios, utilizing a set of broker instances that are **not**
+combined into a cluster.
+
+`async connect(...shards: string[]): IO`
+
+Returns an instance of `IO` once a successful connection to all shards is established.
+
+Outgoing messages are sent to one of the shards, having the least amount pending outgoing messages
+(e.g.: awaiting broker confirmations).
+
+Outgoing messages are sent to the shard with the least amount of pending outgoing messages (e.g.
+messages waiting for broker confirmations). If a shard's underlying connection is lost or
+back pressure is applied to one of its channels, it is removed from the shard pool. Any messages that
+meet these conditions while being sent will immediately be routed to the next available shard in the
+pool.
+
+Incoming messages are consumed from all shards.
+
+### Example
+
+```javascript
+
+const shard0 = 'amqp://developer:secret@localhost:5673'
+const shard1 = 'amqp://developer:secret@localhost:5674'
+
+const io = await connect(shard0, shard1)
+
+// ...
+
+await io.close()
+
+```
 
 ## Topology
 
