@@ -13,6 +13,9 @@ class Channel {
   /** @type {comq.amqp.Channel} */
   #channel
 
+  /** @type {boolean} */
+  #failfast
+
   /** @type {string[]} */
   #tags = []
 
@@ -29,15 +32,18 @@ class Channel {
 
   /**
    * @param {comq.Topology} topology
+   * @param {boolean} failfast
    */
-  constructor (topology) {
+  constructor (topology, failfast) {
     this.#topology = topology
+    this.#failfast = failfast
+
+    if (failfast) failsafe.disable(this)
   }
 
   async create (connection) {
-    const method = `create${this.#topology.confirms ? 'Confirm' : ''}Channel`
-
-    this.#channel = await connection[method]()
+    if (this.#topology.confirms) this.#channel = await connection.createConfirmChannel()
+    else this.#channel = await connection.createChannel()
   }
 
   consume = recall(this,
@@ -89,8 +95,9 @@ class Channel {
   async throw (queue, buffer, options) {
     try {
       await this.#publish(DEFAULT, queue, buffer, options)
-    } catch {
-      // whatever
+    } catch (e) {
+      if (this.#failfast) throw e
+      // ignore otherwise
     }
   }
 
@@ -110,9 +117,9 @@ class Channel {
     lazy.reset(this)
     await recall(this)
 
-    this.#unpause(REJECTION)
+    this.#unpause(INTERRUPTION)
 
-    for (const confirmation of this.#confirmations) confirmation.reject(REJECTION)
+    for (const confirmation of this.#confirmations) confirmation.reject(INTERRUPTION)
 
     // let unpause and confirmation rejections be handled
     await immediate()
@@ -230,7 +237,7 @@ class Channel {
 
         this.#channel.ack(message)
       } catch (exception) {
-        if (exception.message === 'Channel closed') return // message will be requeued by the broker
+        if (exception.message === 'Channel closed') return // the message will be requeued by the broker
 
         if (message.fields.redelivered) this.#discard(message, exception)
         else this.#requeue(message)
@@ -259,6 +266,8 @@ class Channel {
     this.#paused = promex()
     this.#channel.once('drain', this.#unpause)
     this.#diagnostics.emit('flow')
+
+    if (this.#failfast) throw INTERRUPTION
   }
 
   /**
@@ -275,19 +284,19 @@ class Channel {
   }
 
   async #recover (exception) {
-    if (permanent(exception)) return false
-
-    await this.#recovery
+    if (permanent(exception)) return false // TODO: if (this.transient || permanent(exception))
+    else await this.#recovery
   }
 }
 
 /**
  * @param {comq.amqp.Connection} connection
  * @param {comq.Topology} topology
+ * @param {boolean} [failfast]
  * @return {Promise<comq.Channel>}
  */
-const create = async (connection, topology) => {
-  const channel = new Channel(topology)
+const create = async (connection, topology, failfast = false) => {
+  const channel = new Channel(topology, failfast)
 
   await channel.create(connection)
 
@@ -300,10 +309,9 @@ const create = async (connection, topology) => {
 const permanent = (exception) => {
   const closed = exception.message === 'Channel closed'
   const ended = exception.message === 'Channel ended, no reply will be forthcoming'
-  const internal = exception === REJECTION
-  const unpause = exception.pause === 1
+  const internal = exception === INTERRUPTION
 
-  return !closed && !ended && !internal && !unpause
+  return !closed && !ended && !internal
 }
 
 const DEFAULT = ''
@@ -314,7 +322,7 @@ const DURABLE = { durable: true }
 /** @type {import('amqplib').Options.AssertQueue} */
 const EXCLUSIVE = { exclusive: true }
 
-const REJECTION = /** @type {Error} */ Symbol('rejection')
+const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 
 function noop () {}
 

@@ -308,7 +308,7 @@ describe('throw', () => {
     expect(call[3]).toMatchObject(options)
   })
 
-  it('should catch exceptions', async () => {
+  it('should ignore exceptions', async () => {
     chan.publish.mockImplementation(() => { throw new Error() })
 
     await expect(channel.throw(queue, buffer, options)).resolves.not.toThrow()
@@ -843,6 +843,35 @@ describe('diagnostics', () => {
 
     if (redelivered) expect(listener).toHaveBeenCalledWith(message, exception)
     else expect(listener).not.toHaveBeenCalled()
+  })
+})
+
+describe('transient', () => {
+  const exchange = generate()
+  const queue = generate()
+  const buffer = randomBytes(8)
+
+  beforeEach(async () => {
+    channel = await create(connection, topology, true)
+    chan = await getCreatedChannel()
+  })
+
+  it('should throw transient exceptions', async () => {
+    chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
+
+    await expect(channel.publish(exchange, buffer)).rejects.toThrow()
+  })
+
+  it('should throw on back pressure', async () => {
+    chan.publish.mockImplementationOnce(backpressure.publish)
+
+    await expect(channel.publish(exchange, buffer)).rejects.toBeDefined()
+  })
+
+  it('should not ignore exceptions on `throw()`', async () => {
+    chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
+
+    await expect(channel.throw(queue, buffer)).rejects.toThrow()
   })
 })
 
