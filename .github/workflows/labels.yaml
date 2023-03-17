@@ -3,8 +3,8 @@ name: Labels
 on:
   push:
     branches:
-      - dev'
-      - ghlabels
+      - 'dev'
+      - 'ghlabels'
     paths:
       - '.github/labels.yml'
       - '.github/workflows/labels.yml'
