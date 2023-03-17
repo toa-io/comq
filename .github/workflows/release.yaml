@@ -37,7 +37,7 @@ jobs:
       - name: Bump version
         run: |
           echo ok >> ok.md
-          git commit -am "ok!" --no-verify
+          git commit -m "ok!" --no-verify ok.md
         env:
           GITHUB_TOKEN: ${{ secrets.TOABOT_GITHUB_TOKEN }}
           GIT_AUTHOR_NAME: ${{ steps.gpg.outputs.name }}
