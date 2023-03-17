@@ -3,7 +3,7 @@ name: github
 on:
   push:
     branches:
-      - 'chore/github-labels'
+      - 'ghlabels'
     paths:
       - '.github/labels.yml'
       - '.github/workflows/labels.yml'
