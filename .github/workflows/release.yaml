@@ -8,6 +8,7 @@ on:
       - dev
     paths:
       - 'source/**'
+      - 'types/**'
       - 'package-lock.json'
 
 jobs:
