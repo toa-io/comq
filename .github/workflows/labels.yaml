@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - 'dev'
-      - 'ghlabels'
     paths:
       - '.github/labels.yml'
       - '.github/workflows/labels.yml'
