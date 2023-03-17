@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - dev
+    paths:
+      - source/**
 
 jobs:
   publish:
@@ -32,7 +34,7 @@ jobs:
           if [ ${{ github.base_ref }} = main ]; then
             docker-compose up -d && npx cucumber-js --fail-fast --exit --format summary --publish-quiet
           else
-            echo Skipping features run (${{ github.base_ref }}) 
+            echo "Skipping features run on ${{ github.base_ref }}" 
           fi
 
       - name: Bump version
