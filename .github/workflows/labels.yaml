@@ -6,6 +6,7 @@ on:
       - 'chore/github-labels'
     paths:
       - '.github/labels.yml'
+      - '.github/workflows/labels.yml'
 
 jobs:
   labeler:
@@ -16,10 +17,4 @@ jobs:
         uses: actions/checkout@v3
       -
         name: Run Labeler
-        if: success()
         uses: crazy-max/ghaction-github-labeler@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          yaml-file: .github/labels.yml
-          skip-delete: false
-          dry-run: false
