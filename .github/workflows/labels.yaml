@@ -3,9 +3,9 @@ name: github
 on:
   push:
     branches:
-      - chore/github-labels
+      - 'chore/github-labels'
     paths:
-      - .github/labels.yml
+      - '.github/labels.yml'
 
 jobs:
   labeler:
