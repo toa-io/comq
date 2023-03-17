@@ -212,7 +212,7 @@ combined into a cluster.
 
 `async connect(...shards: string[]): IO`
 
-Returns an instance of `IO` once a successful connection to all shards is established.
+Returns an instance of `IO` once a successful connection to one of the shards is established.
 
 Outgoing messages are sent to one of the shards, having the least amount pending outgoing messages
 (e.g.: awaiting broker confirmations).
@@ -355,7 +355,7 @@ calling `IO.close()`.
 
 Subscribe to one of the diagnostic events:
 
-- `open`: connection is restored[^3].
+- `open`: connection is opened[^3].
 - `close`: connection is closed.
   Optional [`error`](https://amqp-node.github.io/amqplib/channel_api.html#model_events) is passed
   as an argument.
@@ -367,6 +367,10 @@ Subscribe to one of the diagnostic events:
   exceptions. Channel type,
   raw [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_consume)
   and the exception are passed as arguments.
+
+In the case of a [sharded connection](#sharded-connection), an additional argument specifying the
+shard number will be passed to listeners. The shard number corresponds to the number of the argument
+used in the `connect` function call.
 
 [^3]: As [`connect`](#connect) function returns an instance of `IO` *after* the connection has been
 established, there is no way to capture the initial `open` event.
