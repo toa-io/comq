@@ -174,6 +174,25 @@ The following encoding formats are supported:
 - `application/octet-stream`
 - `text/plain`
 
+## Flow Control
+
+When back pressure is applied or the underlying broker connection is lost, any current and future
+outgoing messages will be paused. Corresponding returned promises will remain in a `pending` state
+until the pressure is removed or the connection is restored.
+
+Under these circumstances, an application that consumes requests and produces replies will hit the
+prefetch limit of incoming messages and become unresponsive until the issue is resolved.
+
+When an application becomes unresponsive, it can cause a chain reaction that makes all of its
+clients unresponsive, up to the system's *entry point* (which is typically the API Gateway).
+Therefore, the flow control of a distributed system is managed by its entry point, giving developers
+the choice to either stop accepting new requests (e.g., by replying with
+a [`429`](https://www.rfc-editor.org/rfc/rfc6585.html#section-4) HTTP status code for an API), or to
+continue sending new requests ignoring back pressure mechanism, risking a potential RabbitMQ crash
+due to running out of memory.
+
+> ComQ does not currently provide an option to ignore back pressure mechanism.
+
 ## Connection Tolerance
 
 When initially connecting to the broker or if the established connection is lost, connection
@@ -200,9 +219,9 @@ Outgoing messages are sent to one of the shards, having the least amount pending
 
 Outgoing messages are sent to the shard with the least amount of pending outgoing messages (e.g.
 messages waiting for broker confirmations). If a shard's underlying connection is lost or
-back pressure is applied to one of its channels, it is removed from the shard pool. Any messages that
-meet these conditions while being sent will immediately be routed to the next available shard in the
-pool.
+back pressure is applied to one of its channels, it is removed from the shard pool. Any messages
+that meet these conditions while being sent will immediately be routed to the next available shard
+in the pool.
 
 Incoming messages are consumed from all shards.
 
