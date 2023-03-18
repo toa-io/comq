@@ -1,6 +1,6 @@
 'use strict'
 
-const presets = require('../source/presets')
+const presets = require('../source/topology')
 
 it('should define request preset', async () => {
   expect(presets.request).toStrictEqual({

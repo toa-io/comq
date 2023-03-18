@@ -10,7 +10,7 @@ declare namespace comq {
   }
 
   interface Channel {
-    create(connection: Connection): Promise<void>
+    create(): Promise<void>
 
     consume(queue: string, consumer: channels.consumer): Promise<void>
 
@@ -18,9 +18,9 @@ declare namespace comq {
 
     send(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
-    throw(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
-
     publish(exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+
+    throw(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
     seal(): Promise<void>
 

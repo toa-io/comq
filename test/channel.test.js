@@ -856,10 +856,16 @@ describe('transient', () => {
     chan = await getCreatedChannel()
   })
 
-  it('should throw transient exceptions', async () => {
+  it('should throw transient exceptions on publish', async () => {
     chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
 
     await expect(channel.publish(exchange, buffer)).rejects.toThrow()
+  })
+
+  it('should throw transient exceptions on send', async () => {
+    chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
+
+    await expect(channel.send(queue, buffer)).rejects.toThrow()
   })
 
   it('should throw on back pressure', async () => {

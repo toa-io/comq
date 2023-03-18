@@ -4,7 +4,7 @@ const { EventEmitter } = require('node:events')
 const amqp = require('amqplib')
 const { retry, promex, failsafe } = require('@toa.io/generic')
 
-const presets = require('./presets')
+const presets = require('./topology')
 const channels = require('./channel')
 
 /**
@@ -39,15 +39,22 @@ class Connection {
   async close () {
     try {
       await this.#connection.close()
-    } catch (e) {
+    } catch {
       // connection already closed
     }
   }
 
   createChannel = failsafe(this, this.#recover,
-    async (type) => {
-      const preset = presets[type]
-      const channel = await channels.create(this.#connection, preset)
+    /**
+     * @param {comq.topology.type} type
+     * @param {boolean} [failfast]
+     * @return {Promise<comq.Channel>}
+     */
+    async (type, failfast = false) => {
+      if (this.#connection === undefined) await this.#recovery
+
+      const topology = presets[type]
+      const channel = await channels.create(this.#connection, topology, failfast)
 
       this.#channels.push(channel)
 
@@ -69,11 +76,10 @@ class Connection {
       else throw exception
     }
 
-    this.#connection.on('close', this.#close)
-
     // prevents process crash, 'close' will be emitted next
     // https://amqp-node.github.io/amqplib/channel_api.html#model_events
-    this.#connection.on('error', () => undefined)
+    this.#connection.on('error', noop)
+    this.#connection.on('close', this.#close)
     this.#diagnostics.emit('open')
 
     for (const channel of this.#channels) await channel.recover(this.#connection)
@@ -87,8 +93,8 @@ class Connection {
    */
   #close = async (error) => {
     this.#diagnostics.emit('close', error)
-
     this.#connection.removeAllListeners()
+    this.#connection = undefined
 
     if (error !== undefined) await this.open()
   }
@@ -113,5 +119,7 @@ const transient = (exception) => {
 
   return refused || handshake
 }
+
+function noop () {}
 
 exports.Connection = Connection

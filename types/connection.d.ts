@@ -10,12 +10,12 @@ declare namespace comq {
 
     close(): Promise<void>
 
-    createChannel(type: _topology.type): Promise<_channel.Channel>
+    createChannel(type: _topology.type, failfast?: boolean): Promise<_channel.Channel>
 
     diagnose(event: _diagnostics.event, listener: Function): void
   }
 
-  type connect = (url: string) => Promise<_io.IO>
+  type connect = (...urls: string[]) => Promise<_io.IO>
 
 }
 

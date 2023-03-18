@@ -7,6 +7,9 @@ const { lazy, recall, promex, failsafe, immediate } = require('@toa.io/generic')
  * @implements {comq.Channel}
  */
 class Channel {
+  /** @type {comq.amqp.Connection} */
+  #connection
+
   /** @type {comq.Topology} */
   #topology
 
@@ -31,19 +34,21 @@ class Channel {
   #diagnostics = new EventEmitter()
 
   /**
+   * @param {comq.amqp.Connection} connection
    * @param {comq.Topology} topology
    * @param {boolean} failfast
    */
-  constructor (topology, failfast) {
+  constructor (connection, topology, failfast) {
+    this.#connection = connection
     this.#topology = topology
     this.#failfast = failfast
 
-    if (failfast) failsafe.disable(this)
+    if (failfast) failsafe.disable(this.send, this.publish)
   }
 
-  async create (connection) {
-    if (this.#topology.confirms) this.#channel = await connection.createConfirmChannel()
-    else this.#channel = await connection.createChannel()
+  async create () {
+    if (this.#topology.confirms) this.#channel = await this.#connection.createConfirmChannel()
+    else this.#channel = await this.#connection.createChannel()
   }
 
   consume = recall(this,
@@ -95,8 +100,8 @@ class Channel {
   async throw (queue, buffer, options) {
     try {
       await this.#publish(DEFAULT, queue, buffer, options)
-    } catch (e) {
-      if (this.#failfast) throw e
+    } catch (exception) {
+      if (this.#failfast) throw exception
       // ignore otherwise
     }
   }
@@ -112,7 +117,9 @@ class Channel {
   }
 
   async recover (connection) {
-    await this.create(connection)
+    this.#connection = connection
+
+    await this.create()
 
     lazy.reset(this)
     await recall(this)
@@ -295,10 +302,10 @@ class Channel {
  * @param {boolean} [failfast]
  * @return {Promise<comq.Channel>}
  */
-const create = async (connection, topology, failfast = false) => {
-  const channel = new Channel(topology, failfast)
+async function create (connection, topology, failfast = false) {
+  const channel = new Channel(connection, topology, failfast)
 
-  await channel.create(connection)
+  await channel.create()
 
   return channel
 }
@@ -306,7 +313,7 @@ const create = async (connection, topology, failfast = false) => {
 /**
  * @return {boolean}
  */
-const permanent = (exception) => {
+function permanent (exception) {
   const closed = exception.message === 'Channel closed'
   const ended = exception.message === 'Channel ended, no reply will be forthcoming'
   const internal = exception === INTERRUPTION
