@@ -1,5 +1,8 @@
 'use strict'
 
+const { EventEmitter } = require('node:events')
+const events = require('../events')
+
 /**
  * @implements {comq.Channel}
  */
@@ -15,6 +18,8 @@ class Channel {
 
   /** @type {comq.topology.type} */
   #type
+
+  #diagnostics = new EventEmitter()
 
   /**
    * @param {comq.Connection[]} connections
@@ -39,11 +44,16 @@ class Channel {
     await this.#apply((channel) => channel.subscribe(queue, group, consumer))
   }
 
+  async diagnose (event, listener) {
+    this.#diagnostics.on(event, listener)
+  }
+
   /**
    * @param {comq.Connection} connection
+   * @param {number} index
    * @return {Promise<void>}
    */
-  #create = async (connection) => {
+  #create = async (connection, index) => {
     const pending = connection.createChannel(this.#type, true)
 
     this.#pending.add(pending)
@@ -52,6 +62,17 @@ class Channel {
 
     this.#pending.delete(pending)
     this.#channels.add(channel)
+    this.#pipe(channel, index)
+  }
+
+  /**
+   * @param {comq.Channel} channel
+   * @param {number} index
+   */
+  #pipe (channel, index) {
+    for (const event of events.channel) {
+      channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
+    }
   }
 
   /**

@@ -1,6 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('node:events')
+const events = require('../events')
 const channel = require('./channel')
 
 /**
@@ -40,13 +41,10 @@ class Connection {
    * @param {number} index
    */
   #pipe = (connection, index) => {
-    for (const event of CONNECTION_EVENTS) {
+    for (const event of events.connection) {
       connection.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
     }
   }
 }
-
-/** @type {comq.diagnostics.event[]} */
-const CONNECTION_EVENTS = ['open', 'close']
 
 exports.Connection = Connection

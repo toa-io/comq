@@ -6,6 +6,7 @@ const { lazy, track, failsafe, promex } = require('@toa.io/generic')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
+const events = require('./events')
 const io = require('./.io')
 
 /**
@@ -38,7 +39,7 @@ class IO {
   constructor (connection) {
     this.#connection = connection
 
-    for (const event of CONNECTION_EVENTS) {
+    for (const event of events.connection) {
       this.#connection.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args))
     }
   }
@@ -148,7 +149,7 @@ class IO {
   async #createChannel (type) {
     const channel = await this.#connection.createChannel(type)
 
-    for (const event of CHANNEL_EVENTS) {
+    for (const event of events.channel) {
       channel.diagnose(event, (...args) => this.#diagnostics.emit(event, type, ...args))
     }
 
@@ -245,12 +246,6 @@ const OCTETS = 'application/octet-stream'
 
 /** @type {comq.encoding} */
 const DEFAULT = 'application/msgpack'
-
-/** @type {comq.diagnostics.event[]} */
-const CONNECTION_EVENTS = ['open', 'close']
-
-/** @type {comq.diagnostics.event[]} */
-const CHANNEL_EVENTS = ['flow', 'drain', 'recover', 'discard']
 
 const REJECTION = /** @type {Error} */ Symbol('resend')
 

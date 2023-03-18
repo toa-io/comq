@@ -1,7 +1,7 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { promex, sample, immediate } = require('@toa.io/generic')
+const { promex, sample, immediate, random } = require('@toa.io/generic')
 
 const mock = require('../connection.mock')
 
@@ -61,10 +61,11 @@ it('should create failfast channels of given type', async () => {
 })
 
 describe.each(['consume', 'subscribe'])('%s', (method) => {
+  const exchange = generate()
   const queue = generate()
   const group = generate()
   const processor = jest.fn()
-  const args = method === 'consume' ? [queue, processor] : [queue, group, processor]
+  const args = method === 'consume' ? [queue, processor] : [exchange, group, processor]
 
   it(`should ${method} using all channels`, async () => {
     channel = await create(connections, type)
@@ -103,8 +104,33 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
   })
 })
 
+describe('diagnose', () => {
+  const events = /** @type {comq.diagnostics.event[]} */ ['flow', 'drain', 'recover', 'discard']
+
+  it.each(events)('should re-emit %s event',
+    async (event) => {
+      channel = await create(connections, type)
+
+      const listener = /** @type {Function} */ jest.fn()
+      const channels = await getCreatedChannels()
+      const index = random(channels.length)
+      const chan = channels[index]
+
+      channel.diagnose(event, listener)
+      expect(chan.diagnose).toHaveBeenCalledWith(event, expect.any(Function))
+
+      const call = chan.diagnose.mock.calls.find((call) => call[0] === event)
+      const emit = call[1]
+
+      const args = [generate(), generate()]
+
+      emit(...args)
+
+      expect(listener).toHaveBeenCalledWith(...args, index)
+    })
+})
+
 /**
- *
  * @return {Promise<Array<comq.Channel>>}
  */
 async function getCreatedChannels () {
