@@ -1,5 +1,6 @@
 'use strict'
 
+const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
 const { promex, sample, immediate, random } = require('@toa.io/generic')
 
@@ -29,7 +30,7 @@ it('should resolve when one of the connections has created a channel', async () 
   for (const conn of connections) {
     const promise = promex()
 
-    conn.createChannel.mockImplementation(() => promise)
+    conn.createChannel.mockImplementationOnce(() => promise)
 
     promises.push(promise)
   }
@@ -47,6 +48,7 @@ it('should resolve when one of the connections has created a channel', async () 
 
   expect(any).toBeDefined()
 
+  // resolve pending promises
   for (const promise of promises) if (promise !== any) promise.resolve(chan)
 
   await Promise.all(promises)
@@ -82,7 +84,7 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
   it(`should should ${method} using available and pending channels`, async () => {
     const promise = promex()
 
-    connections[0].createChannel.mockImplementation(() => promise)
+    connections[0].createChannel.mockImplementationOnce(() => promise)
 
     channel = await create(connections, type)
 
@@ -101,6 +103,94 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
     await immediate()
 
     expect(chan0[method]).toHaveBeenCalled()
+  })
+})
+
+describe.each(/** @type {string[]} */['send', 'publish', 'throw'])('%s', (method) => {
+  const label = generate()
+  const buffer = randomBytes(8)
+  const options = { contentType: generate() }
+
+  /** @type {jest.MockedObject<comq.Channel>[]} */
+  let channels
+
+  beforeEach(async () => {
+    channel = await create(connections, type)
+    channels = await getCreatedChannels()
+  })
+
+  it('should send to single channel', async () => {
+    await channel[method](label, buffer, options)
+
+    let used = 0
+
+    for (const chan of channels) {
+      if (chan[method].mock.calls.length === 0) continue
+
+      used++
+
+      expect(chan[method]).toHaveBeenCalledWith(label, buffer, options)
+    }
+
+    expect(used).toStrictEqual(1)
+  })
+
+  it('should route pending messages among remaining shards', async () => {
+    const b = random(channels.length)
+    const broken = channels[b]
+    const options = { contentType: generate() }
+    let thrown = false
+
+    broken[method].mockImplementationOnce(async () => {
+      thrown = true
+      throw new Error()
+    })
+
+    let i = 0
+
+    // eslint-disable-next-line no-unmodified-loop-condition
+    while (!thrown) await channel[method](label + ++i, buffer, options)
+
+    const last = label + i
+
+    // now channel has thrown an exception
+    expect(broken[method]).toHaveBeenCalledWith(last, buffer, options)
+
+    const r = (b + 1) % 2
+    const remaining = channels[r]
+
+    expect(remaining[method]).toHaveBeenCalledWith(last, buffer, options)
+  })
+
+  it('should wait for recovery', async () => {
+    const reject = async () => { throw new Error() }
+
+    /** @type {jest.MockedObject<comq.Channel>} */
+    let recovered
+
+    // both shards rejects and will be evicted from the pool
+    channels[0][method].mockImplementationOnce(reject)
+    channels[1][method].mockImplementationOnce(reject)
+
+    setImmediate(() => {
+      const r = random(channels.length)
+
+      recovered = channels[r]
+
+      // subscriptions to the 'recover' event
+      const calls = recovered.diagnose.mock.calls.filter(
+        (call) => call[0] === 'recover')
+
+      expect(calls.length).toBeGreaterThan(0)
+
+      // emit 'recover' event to return shard to the pool
+      for (const call of calls) call[1]()
+    })
+
+    await channel[method](label, buffer, options)
+
+    expect(recovered).toBeDefined()
+    expect(recovered[method]).toHaveBeenCalledTimes(2) // failed and succeeded
   })
 })
 
@@ -125,7 +215,7 @@ describe('seal', () => {
     const promise = promex()
     let sealed = false
 
-    chan.seal.mockImplementation(() => promise)
+    chan.seal.mockImplementationOnce(() => promise)
 
     setImmediate(() => {
       expect(sealed).toStrictEqual(false)
@@ -144,7 +234,7 @@ describe('seal', () => {
     const connection = sample(connections)
     const promise = promex()
 
-    connection.createChannel.mockImplementation(() => promise)
+    connection.createChannel.mockImplementationOnce(() => promise)
 
     channel = await create(connections, type)
 
@@ -191,7 +281,7 @@ describe('diagnose', () => {
 })
 
 /**
- * @return {Promise<Array<comq.Channel>>}
+ * @return {Promise<jest.MockedObject<comq.Channel>[]>}
  */
 async function getCreatedChannels () {
   const promises = connections.map((connection) => connection.createChannel.mock.results[0].value)

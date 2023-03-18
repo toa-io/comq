@@ -1,6 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('node:events')
+const { promex, random } = require('@toa.io/generic')
 const events = require('../events')
 
 /**
@@ -13,11 +14,16 @@ class Channel {
   /** @type {Set<comq.Channel>} */
   #channels = new Set()
 
+  /** @type {comq.Channel[]} */
+  #pool
+
   /** @type {Set<Promise<comq.Channel>>} */
   #pending = new Set()
 
   /** @type {comq.topology.type} */
   #type
+
+  #recovery = promex()
 
   #diagnostics = new EventEmitter()
 
@@ -44,6 +50,18 @@ class Channel {
     await this.#any((channel) => channel.subscribe(queue, group, consumer))
   }
 
+  async send (queue, buffer, options) {
+    await this.#one((channel) => channel.send(queue, buffer, options))
+  }
+
+  async publish (exchange, buffer, options) {
+    await this.#one((channel) => channel.publish(exchange, buffer, options))
+  }
+
+  async throw (queue, buffer, options) {
+    await this.#one((channel) => channel.throw(queue, buffer, options))
+  }
+
   async seal () {
     await this.#all((channel) => channel.seal())
   }
@@ -65,8 +83,46 @@ class Channel {
     const channel = await pending
 
     this.#pending.delete(pending)
-    this.#channels.add(channel)
+    this.#add(channel)
     this.#pipe(channel, index)
+
+    channel.diagnose('recover', () => this.#recover(channel))
+  }
+
+  /**
+   * @param {comq.Channel} channel
+   */
+  #add (channel) {
+    this.#channels.add(channel)
+    this.#pool = Array.from(this.#channels)
+  }
+
+  /**
+   * @param {comq.Channel} channel
+   */
+  #remove (channel) {
+    this.#channels.delete(channel)
+    this.#pool = Array.from(this.#channels)
+  }
+
+  /**
+   * @param {comq.Channel} channel
+   */
+  #recover (channel) {
+    this.#add(channel)
+
+    this.#recovery.resolve()
+    this.#recovery = promex()
+  }
+
+  /**
+   * @param {comq.Channel} channel
+   * @param {number} index
+   */
+  #pipe (channel, index) {
+    for (const event of events.channel) {
+      channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
+    }
   }
 
   /**
@@ -91,6 +147,25 @@ class Channel {
 
   /**
    * @param {(channel: comq.Channel) => void} fn
+   * @return {Promise<void>}
+   */
+  async #one (fn) {
+    if (this.#pool.length === 0) await this.#recovery
+
+    const i = random(this.#pool.length)
+    const channel = this.#pool[i]
+
+    try {
+      await fn(channel)
+    } catch {
+      if (this.#channels.has(channel)) this.#remove(channel)
+
+      await this.#one(fn)
+    }
+  }
+
+  /**
+   * @param {(channel: comq.Channel) => void} fn
    * @return {Promise<any>[]}
    */
   #apply (fn) {
@@ -100,16 +175,6 @@ class Channel {
     for (const pending of this.#pending) promises.push(pending.then(fn))
 
     return promises
-  }
-
-  /**
-   * @param {comq.Channel} channel
-   * @param {number} index
-   */
-  #pipe (channel, index) {
-    for (const event of events.channel) {
-      channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
-    }
   }
 }
 

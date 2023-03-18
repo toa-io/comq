@@ -215,14 +215,11 @@ combined into a cluster.
 
 Returns an instance of `IO` once a successful connection to one of the shards is established.
 
-Outgoing messages are sent to one of the shards, having the least amount pending outgoing messages
-(e.g.: awaiting broker confirmations).
-
-Outgoing messages are sent to the shard with the least amount of pending outgoing messages (e.g.
-messages waiting for broker confirmations). If a shard's underlying connection is lost or
-back pressure is applied to one of its channels, it is removed from the shard pool. Any messages
-that meet these conditions while being sent will immediately be routed to the next available shard
-in the pool.
+Outgoing messages are sent to a single connection chosen at random from the shard pool. Shards that
+lose their underlying connection or experience channel [back pressure](#flow-control) on
+corresponding channel are removed from the pool. Pending messages meeting these conditions are
+immediately routed among the remaining shards in the pool. If no shards are available, messages
+will wait until any shard's connection is re-established.
 
 Incoming messages are consumed from all shards.
 
