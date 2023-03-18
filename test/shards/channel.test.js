@@ -104,6 +104,66 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
   })
 })
 
+describe('seal', () => {
+  it('should seal channels', async () => {
+    channel = await create(connections, type)
+
+    await channel.seal()
+
+    const channels = await getCreatedChannels()
+
+    for (const chan of channels) expect(chan.seal).toHaveBeenCalled()
+  })
+
+  it('should seal channels eventually', async () => {
+    expect.assertions(connections.length + 1)
+
+    channel = await create(connections, type)
+
+    const channels = await getCreatedChannels()
+    const chan = sample(channels)
+    const promise = promex()
+    let sealed = false
+
+    chan.seal.mockImplementation(() => promise)
+
+    setImmediate(() => {
+      expect(sealed).toStrictEqual(false)
+
+      promise.resolve()
+    })
+
+    await channel.seal()
+
+    sealed = true
+
+    for (const chan of channels) expect(chan.seal).toHaveBeenCalled()
+  })
+
+  it('should seal pending channel', async () => {
+    const connection = sample(connections)
+    const promise = promex()
+
+    connection.createChannel.mockImplementation(() => promise)
+
+    channel = await create(connections, type)
+
+    /** @type {jest.MockedObject<comq.Channel>} */
+    let chan
+
+    setImmediate(() => {
+      chan = mock.channel()
+
+      promise.resolve(chan)
+    })
+
+    await channel.seal()
+
+    expect(chan).toBeDefined()
+    expect(chan.seal).toHaveBeenCalled()
+  })
+})
+
 describe('diagnose', () => {
   const events = /** @type {comq.diagnostics.event[]} */ ['flow', 'drain', 'recover', 'discard']
 
@@ -117,11 +177,11 @@ describe('diagnose', () => {
       const chan = channels[index]
 
       channel.diagnose(event, listener)
+
       expect(chan.diagnose).toHaveBeenCalledWith(event, expect.any(Function))
 
       const call = chan.diagnose.mock.calls.find((call) => call[0] === event)
       const emit = call[1]
-
       const args = [generate(), generate()]
 
       emit(...args)

@@ -37,11 +37,15 @@ class Channel {
   }
 
   async consume (queue, consumer) {
-    await this.#apply((channel) => channel.consume(queue, consumer))
+    await this.#any((channel) => channel.consume(queue, consumer))
   }
 
   async subscribe (queue, group, consumer) {
-    await this.#apply((channel) => channel.subscribe(queue, group, consumer))
+    await this.#any((channel) => channel.subscribe(queue, group, consumer))
+  }
+
+  async seal () {
+    await this.#all((channel) => channel.seal())
   }
 
   async diagnose (event, listener) {
@@ -66,6 +70,39 @@ class Channel {
   }
 
   /**
+   * @param {(channel: comq.Channel) => void} fn
+   * @return {Promise<void>}
+   */
+  async #any (fn) {
+    const promises = this.#apply(fn)
+
+    await Promise.any(promises)
+  }
+
+  /**
+   * @param {(channel: comq.Channel) => void} fn
+   * @return {Promise<void>}
+   */
+  async #all (fn) {
+    const promises = this.#apply(fn)
+
+    await Promise.all(promises)
+  }
+
+  /**
+   * @param {(channel: comq.Channel) => void} fn
+   * @return {Promise<any>[]}
+   */
+  #apply (fn) {
+    const promises = []
+
+    for (const channel of this.#channels) promises.push(fn(channel))
+    for (const pending of this.#pending) promises.push(pending.then(fn))
+
+    return promises
+  }
+
+  /**
    * @param {comq.Channel} channel
    * @param {number} index
    */
@@ -73,19 +110,6 @@ class Channel {
     for (const event of events.channel) {
       channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
     }
-  }
-
-  /**
-   * @param {(channel: comq.Channel) => void} fn
-   * @return {Promise<void>}
-   */
-  async #apply (fn) {
-    const promises = []
-
-    for (const channel of this.#channels) promises.push(fn(channel))
-    for (const pending of this.#pending) pending.then(fn)
-
-    await Promise.any(promises)
   }
 }
 

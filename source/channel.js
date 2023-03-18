@@ -107,6 +107,7 @@ class Channel {
   }
 
   async seal () {
+    // TODO: failsafe? add scenario
     const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
 
     await Promise.all(cancellations)
