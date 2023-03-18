@@ -1,7 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('node:events')
-const { promex, random } = require('@toa.io/generic')
+const { promex, sample } = require('@toa.io/generic')
 const events = require('../events')
 
 /**
@@ -37,9 +37,9 @@ class Channel {
   }
 
   async create () {
-    const creating = this.#connections.map(this.#create)
+    const promises = this.#connections.map(this.#create)
 
-    await Promise.any(creating)
+    await Promise.any(promises)
   }
 
   async consume (queue, consumer) {
@@ -77,16 +77,26 @@ class Channel {
    */
   #create = async (connection, index) => {
     const pending = connection.createChannel(this.#type, true)
+    const channel = await this.#pend(pending)
 
+    this.#add(channel)
+    this.#pipe(channel, index)
+
+    channel.diagnose('recover', () => this.#recover(channel))
+  }
+
+  /**
+   * @param {Promise<comq.Channel>} pending
+   * @return {Promise<comq.Channel>}
+   */
+  async #pend (pending) {
     this.#pending.add(pending)
 
     const channel = await pending
 
     this.#pending.delete(pending)
-    this.#add(channel)
-    this.#pipe(channel, index)
 
-    channel.diagnose('recover', () => this.#recover(channel))
+    return channel
   }
 
   /**
@@ -152,12 +162,12 @@ class Channel {
   async #one (fn) {
     if (this.#pool.length === 0) await this.#recovery
 
-    const i = random(this.#pool.length)
-    const channel = this.#pool[i]
+    const channel = sample(this.#pool)
 
     try {
       await fn(channel)
     } catch {
+      // TODO: test this condition
       if (this.#channels.has(channel)) this.#remove(channel)
 
       await this.#one(fn)
