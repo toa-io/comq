@@ -219,11 +219,23 @@ describe('close', () => {
     await connection.open()
 
     /** @type {jest.MockedObject<import('amqplib').Connection>} */
-    const amqp = await amqplib.connect.mock.results[0].value
+    const conn = await amqplib.connect.mock.results[0].value
 
-    amqp.close.mockImplementation(async () => { throw new Error() })
+    conn.close.mockImplementation(async () => { throw new Error() })
 
     await expect(connection.close()).resolves.not.toThrow()
+  })
+
+  it('should close after connection', async () => {
+    // don't wait for completion
+    connection.open().then()
+
+    await connection.close()
+
+    /** @type {jest.MockedObject<import('amqplib').Connection>} */
+    const conn = await amqplib.connect.mock.results[0].value
+
+    expect(conn.close).toHaveBeenCalled()
   })
 })
 
