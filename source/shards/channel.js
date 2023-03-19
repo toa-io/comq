@@ -109,6 +109,16 @@ class Channel {
 
   /**
    * @param {comq.Channel} channel
+   * @param {number} index
+   */
+  #pipe (channel, index) {
+    for (const event of events.channel) {
+      channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
+    }
+  }
+
+  /**
+   * @param {comq.Channel} channel
    */
   #remove (channel) {
     this.#channels.delete(channel)
@@ -123,16 +133,6 @@ class Channel {
 
     this.#recovery.resolve()
     this.#recovery = promex()
-  }
-
-  /**
-   * @param {comq.Channel} channel
-   * @param {number} index
-   */
-  #pipe (channel, index) {
-    for (const event of events.channel) {
-      channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
-    }
   }
 
   /**
@@ -157,6 +157,19 @@ class Channel {
 
   /**
    * @param {(channel: comq.Channel) => void} fn
+   * @return {Promise<any>[]}
+   */
+  #apply (fn) {
+    const promises = []
+
+    for (const channel of this.#channels) promises.push(fn(channel))
+    for (const pending of this.#pending) promises.push(pending.then(fn))
+
+    return promises
+  }
+
+  /**
+   * @param {(channel: comq.Channel) => void} fn
    * @return {Promise<void>}
    */
   async #one (fn) {
@@ -167,24 +180,9 @@ class Channel {
     try {
       await fn(channel)
     } catch {
-      // TODO: test this condition
-      if (this.#channels.has(channel)) this.#remove(channel)
-
+      this.#remove(channel)
       await this.#one(fn)
     }
-  }
-
-  /**
-   * @param {(channel: comq.Channel) => void} fn
-   * @return {Promise<any>[]}
-   */
-  #apply (fn) {
-    const promises = []
-
-    for (const channel of this.#channels) promises.push(fn(channel))
-    for (const pending of this.#pending) promises.push(pending.then(fn))
-
-    return promises
   }
 }
 
