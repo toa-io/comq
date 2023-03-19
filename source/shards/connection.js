@@ -23,9 +23,15 @@ class Connection {
   }
 
   async open () {
-    const connecting = this.#connections.map((connection) => connection.open())
+    const opening = this.#connections.map((connection) => connection.open())
 
-    await Promise.any(connecting)
+    await Promise.any(opening)
+  }
+
+  async close () {
+    const closing = this.#connections.map((connection) => connection.close())
+
+    await Promise.all(closing)
   }
 
   async createChannel (type) {

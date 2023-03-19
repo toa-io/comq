@@ -57,6 +57,16 @@ describe('open', () => {
   })
 })
 
+describe('close', () => {
+  it('should close all connections', async () => {
+    await connection.close()
+
+    for (const conn of connections) {
+      expect(conn.close).toHaveBeenCalled()
+    }
+  })
+})
+
 describe('createChannel', () => {
   const type = generate()
 
