@@ -27,13 +27,13 @@ describe('the broker is/has {status}', () => {
     context.io = generate()
   })
 
-  it('should start comq-rmq container', async () => {
+  it('should start comq-rmq-0 container', async () => {
     command.execute.mockImplementationOnce(async () => undefined)
     command.execute.mockImplementationOnce(async () => ({ output: 'healthy' }))
 
     await step.call(context, 'up')
 
-    expect(command.execute).toHaveBeenCalledWith('docker start comq-rmq')
+    expect(command.execute).toHaveBeenCalledWith('docker start comq-rmq-0')
   })
 
   it('should wait for healthy state', async () => {
@@ -59,15 +59,15 @@ describe('the broker is/has {status}', () => {
     expect(command.execute).toHaveBeenCalledTimes(3)
   })
 
-  it('should stop comq-rmq container', async () => {
+  it('should stop comq-rmq-0 container', async () => {
     await step.call(context, 'down')
 
-    expect(command.execute).toHaveBeenCalledWith('docker stop comq-rmq')
+    expect(command.execute).toHaveBeenCalledWith('docker stop comq-rmq-0')
   })
 
-  it('should kill comq-rmq container', async () => {
+  it('should kill comq-rmq-0 container', async () => {
     await step.call(context, 'crashed')
 
-    expect(command.execute).toHaveBeenCalledWith('docker kill comq-rmq')
+    expect(command.execute).toHaveBeenCalledWith('docker kill comq-rmq-0')
   })
 })

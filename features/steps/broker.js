@@ -16,14 +16,14 @@ Given('the broker is/has {status}',
 
 const actions = {
   up: async () => {
-    await execute('docker start comq-rmq')
+    await execute('docker start comq-rmq-0')
     await healthy()
   },
   down: async () => {
-    await execute('docker stop comq-rmq')
+    await execute('docker stop comq-rmq-0')
   },
   crashed: async () => {
-    await execute('docker kill comq-rmq')
+    await execute('docker kill comq-rmq-0')
   }
 }
 
@@ -33,6 +33,6 @@ async function healthy () {
   do {
     await timeout(1000)
 
-    process = await execute('docker inspect -f {{.State.Health.Status}} comq-rmq')
+    process = await execute('docker inspect -f {{.State.Health.Status}} comq-rmq-0')
   } while (process.output !== 'healthy')
 }
