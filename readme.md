@@ -217,9 +217,9 @@ Returns an instance of `IO` once a successful connection to one of the shards is
 
 Outgoing messages are sent to a single connection chosen at random from the shard pool. Shards that
 lose their underlying connection or experience channel [back pressure](#flow-control) on
-corresponding channel are removed from the pool. Pending messages meeting these conditions are
-immediately routed among the remaining shards in the pool. If no shards are available, messages
-will wait until any shard's connection is re-established.
+corresponding channel are removed from the pool until the issue is resolved. Pending messages
+meeting these conditions are immediately routed among the remaining shards in the pool. If no shards
+are available, messages will wait until any shard's connection is re-established.
 
 Incoming messages are consumed from all shards.
 
