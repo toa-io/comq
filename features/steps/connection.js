@@ -46,6 +46,16 @@ When('I attempt to connect to the broker as {string} with password {string}',
     await connect(this, user, password)
   })
 
+When('I attempt to establish sharded connection',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.sharded = true
+
+    await connect(this)
+  })
+
 Then('the connection is not established',
   /**
    * @this {comq.features.Context}

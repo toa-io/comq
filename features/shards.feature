@@ -1,7 +1,11 @@
 Feature: Sharded Connection
 
+  Scenario: Establishing sharded connection
+    When I attempt to establish sharded connection
+    Then the connection is established
+
   Scenario: Connecting while a shard is down
-    Given one of the brokers is down
+    Given one of the brokers has crashed
     When I attempt to establish sharded connection
     Then the connection is established
     Then the broker is up

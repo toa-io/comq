@@ -12,6 +12,7 @@ declare namespace comq.features {
     events?: { [K in _diagnostics.event]?: boolean }
     exception?: Error
     expected?: Promise<any>
+    sharded: boolean
     shard: number
 
     connect(user?: string, password?: string): Promise<void>

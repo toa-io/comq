@@ -11,7 +11,9 @@ Given('the broker is/has {status}',
    * @this {comq.features.Context}
    */
   async function (status) {
-    await actions[status]()
+    const n = this.shard ?? 0
+
+    await actions[status](n)
   })
 
 Given('one of the brokers is/has {status}',

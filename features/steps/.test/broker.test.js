@@ -18,22 +18,29 @@ beforeEach(() => {
   jest.clearAllMocks()
 })
 
-describe('Given the broker is/has {status}', () => {
+describe.each([false, true])('Given the broker is/has {status} #shards:%s', (sharded) => {
   const step = tomato.steps.Gi('the broker is/has {status}')
+
+  const containerNumber = sharded ? 1 : 0
 
   it('should be', async () => undefined)
 
   beforeEach(() => {
     context.io = generate()
+
+    if (sharded) {
+      context.sharded = true
+      context.shard = containerNumber
+    }
   })
 
-  it('should start comq-rmq-0 container', async () => {
+  it('should start comq-rmq container', async () => {
     command.execute.mockImplementationOnce(async () => undefined)
     command.execute.mockImplementationOnce(async () => ({ output: 'healthy' }))
 
     await step.call(context, 'up')
 
-    expect(command.execute).toHaveBeenCalledWith('docker start comq-rmq-0')
+    expect(command.execute).toHaveBeenCalledWith('docker start comq-rmq-' + containerNumber)
   })
 
   it('should wait for healthy state', async () => {
@@ -59,21 +66,27 @@ describe('Given the broker is/has {status}', () => {
     expect(command.execute).toHaveBeenCalledTimes(3)
   })
 
-  it('should stop comq-rmq-0 container', async () => {
+  it('should stop comq-rmq container', async () => {
     await step.call(context, 'down')
 
-    expect(command.execute).toHaveBeenCalledWith('docker stop comq-rmq-0')
+    expect(command.execute).toHaveBeenCalledWith('docker stop comq-rmq-' + containerNumber)
   })
 
   it('should kill comq-rmq-0 container', async () => {
     await step.call(context, 'crashed')
 
-    expect(command.execute).toHaveBeenCalledWith('docker kill comq-rmq-0')
+    expect(command.execute).toHaveBeenCalledWith('docker kill comq-rmq-' + containerNumber)
   })
 })
 
 describe('Given one of the brokers is/has {status}', () => {
   const step = tomato.steps.Gi('one of the brokers is/has {status}')
+
+  it('should store picked broker', async () => {
+    await step.call(context, 'down')
+
+    expect(context.shard).toStrictEqual(expect.any(Number))
+  })
 
   it('should start one of the containers', async () => {
     command.execute.mockImplementationOnce(async () => undefined)
@@ -81,12 +94,6 @@ describe('Given one of the brokers is/has {status}', () => {
 
     await step.call(context, 'up')
 
-    expect(command.execute).toHaveBeenCalledWith(expect.stringMatching(/docker start comq-rmq-\d/))
-  })
-
-  it('should store picked broker', async () => {
-    await step.call(context, 'down')
-
-    expect(context.shard).toStrictEqual(expect.any(Number))
+    expect(command.execute).toHaveBeenCalledWith('docker start comq-rmq-' + context.shard)
   })
 })

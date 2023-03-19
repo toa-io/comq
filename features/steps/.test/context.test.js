@@ -20,11 +20,9 @@ beforeAll(async () => {
 
   // noinspection JSValidateTypes
   context = new Context(_)
-
-  await context.connect()
 })
 
-describe('connect', () => {
+describe.each([false, true])('connect (shards: %s)', (sharded) => {
   it('should be', async () => {
     expect(context.connect).toBeDefined()
   })
@@ -33,11 +31,18 @@ describe('connect', () => {
   let io
 
   beforeEach(async () => {
+    context.sharded = sharded
+
+    await context.connect()
+
     io = await comq.connect.mock.results[0].value
   })
 
   it('should connect', async () => {
-    expect(comq.connect).toHaveBeenCalledWith('amqp://developer:secret@localhost:5673')
+    const shards = ['amqp://developer:secret@localhost:5673', 'amqp://developer:secret@localhost:5674']
+
+    if (sharded) expect(comq.connect).toHaveBeenCalledWith(...shards)
+    else expect(comq.connect).toHaveBeenCalledWith(shards[0])
   })
 
   it('should connect with credentials', async () => {
@@ -46,7 +51,10 @@ describe('connect', () => {
 
     await context.connect(user, password)
 
-    expect(comq.connect).toHaveBeenCalledWith(`amqp://${user}:${password}@localhost:5673`)
+    const shards = [`amqp://${user}:${password}@localhost:5673`, `amqp://${user}:${password}@localhost:5674`]
+
+    if (sharded) expect(comq.connect).toHaveBeenCalledWith(...shards)
+    else expect(comq.connect).toHaveBeenCalledWith(shards[0])
   })
 
   it.each(['open', 'close', 'flow', 'discard'])('should store %s event',

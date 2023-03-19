@@ -125,6 +125,24 @@ describe('When I attempt to connect to the broker as {string} with password {str
   })
 })
 
+describe('When I attempt to establish sharded connection', () => {
+  const step = tomato.steps.Wh('I attempt to establish sharded connection')
+
+  it('should be', async () => undefined)
+
+  it('should set context.sharded to true', async () => {
+    await step.call(context)
+
+    expect(context.sharded).toStrictEqual(true)
+  })
+
+  it('should connect', async () => {
+    await step.call(context)
+
+    expect(context.connect).toHaveBeenCalled()
+  })
+})
+
 describe.each([['', true], [' not', false]])('Then the connection is%s established',
   (not, connected) => {
     const step = tomato.steps.Th(`the connection is${not} established`)
