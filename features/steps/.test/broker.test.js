@@ -12,13 +12,13 @@ jest.setTimeout(10000)
 
 require('../broker')
 
-const context = {}
+const context = /** @type {comq.features.Context} */ {}
 
 beforeEach(() => {
   jest.clearAllMocks()
 })
 
-describe('the broker is/has {status}', () => {
+describe('Given the broker is/has {status}', () => {
   const step = tomato.steps.Gi('the broker is/has {status}')
 
   it('should be', async () => undefined)
@@ -69,5 +69,24 @@ describe('the broker is/has {status}', () => {
     await step.call(context, 'crashed')
 
     expect(command.execute).toHaveBeenCalledWith('docker kill comq-rmq-0')
+  })
+})
+
+describe('Given one of the brokers is/has {status}', () => {
+  const step = tomato.steps.Gi('one of the brokers is/has {status}')
+
+  it('should start one of the containers', async () => {
+    command.execute.mockImplementationOnce(async () => undefined)
+    command.execute.mockImplementationOnce(async () => ({ output: 'healthy' }))
+
+    await step.call(context, 'up')
+
+    expect(command.execute).toHaveBeenCalledWith(expect.stringMatching(/docker start comq-rmq-\d/))
+  })
+
+  it('should store picked broker', async () => {
+    await step.call(context, 'down')
+
+    expect(context.shard).toStrictEqual(expect.any(Number))
   })
 })

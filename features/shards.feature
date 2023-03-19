@@ -1,10 +1,10 @@
 Feature: Sharded Connection
 
   Scenario: Connecting while a shard is down
-    Given one broker has crashed
+    Given one of the brokers is down
     When I attempt to establish sharded connection
     Then the connection is established
-    Then the crashed broker is restored
+    Then the broker is up
 
   Scenario: Sending a request to a sharded connection missing one broker
     Given one broker has crashed

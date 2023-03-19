@@ -1,6 +1,6 @@
 'use strict'
 
-const { timeout } = require('@toa.io/generic')
+const { timeout, random } = require('@toa.io/generic')
 const { execute } = require('@toa.io/command')
 
 const { Given } = require('@cucumber/cucumber')
@@ -11,19 +11,32 @@ Given('the broker is/has {status}',
    * @this {comq.features.Context}
    */
   async function (status) {
-    await actions[status](this)
+    await actions[status]()
+  })
+
+Given('one of the brokers is/has {status}',
+  /**
+   * @param {'up' | 'down'} status
+   * @this {comq.features.Context}
+   */
+  async function (status) {
+    const shard = random(BROKERS_AMOUNT)
+
+    this.shard = shard
+
+    await actions[status](shard)
   })
 
 const actions = {
-  up: async () => {
-    await execute('docker start comq-rmq-0')
+  up: async (n = 0) => {
+    await execute('docker start comq-rmq-' + n)
     await healthy()
   },
-  down: async () => {
-    await execute('docker stop comq-rmq-0')
+  down: async (n = 0) => {
+    await execute('docker stop comq-rmq-' + n)
   },
-  crashed: async () => {
-    await execute('docker kill comq-rmq-0')
+  crashed: async (n = 0) => {
+    await execute('docker kill comq-rmq-' + n)
   }
 }
 
@@ -36,3 +49,5 @@ async function healthy () {
     process = await execute('docker inspect -f {{.State.Health.Status}} comq-rmq-0')
   } while (process.output !== 'healthy')
 }
+
+const BROKERS_AMOUNT = 2
