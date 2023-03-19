@@ -22,7 +22,7 @@ services:
     image: rabbitmq:3.10.0-management
     container_name: comq-rmq-1
     ports:
-      - '56734:5672'
+      - '5674:5672'
       - '15674:15672'
     environment:
       RABBITMQ_DEFAULT_USER: developer
