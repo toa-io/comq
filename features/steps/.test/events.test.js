@@ -57,8 +57,8 @@ describe('Given {token} consuming events from the {token} exchange is expected',
   it('should be', async () => undefined)
 })
 
-describe('Given that events are exclusively consumed from the {token} exchange', () => {
-  tomato.steps.Gi('that events are exclusively consumed from the {token} exchange')
+describe('Given (that )events are exclusively consumed from the {token} exchange', () => {
+  tomato.steps.Gi('(that )events are exclusively consumed from the {token} exchange')
 
   it('should be', async () => undefined)
 })

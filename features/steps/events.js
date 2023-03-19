@@ -27,7 +27,7 @@ Given('{token} consuming events from the {token} exchange is expected',
     this.expected = consume.call(this, group, exchange)
   })
 
-Given('that events are exclusively consumed from the {token} exchange',
+Given('(that )events are exclusively consumed from the {token} exchange',
   /**
    * @param {string} exchange
    * @this {comq.features.Context}

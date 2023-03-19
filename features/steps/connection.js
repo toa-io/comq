@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
-const { timeout } = require('@toa.io/generic')
+const { timeout, promex } = require('@toa.io/generic')
 
 const { Given, When, Then } = require('@cucumber/cucumber')
 
@@ -13,6 +13,35 @@ Given('an active connection to the broker',
     this.connecting = this.connect()
 
     await this.connecting
+  })
+
+Given('an active sharded connection',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.sharded = true
+    this.connecting = this.connect()
+
+    await this.connecting
+  })
+
+Given('the connection to both shards is established',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    const promise = promex()
+
+    this.sharded = true
+    this.connecting = this.connect()
+
+    await this.connecting
+
+    // second shard is connected
+    this.io.diagnose('open', () => promise.resolve())
+
+    return promise
   })
 
 When('I attempt to connect to the broker for {number} second(s)',

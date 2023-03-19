@@ -13,7 +13,7 @@ jest.mock('comq', () => mock.comq)
 
 require('../connection')
 
-/** @type {comq.features.Context} */
+/** @type {jest.MockedObject<comq.features.Context>} */
 let context
 
 beforeEach(() => {
@@ -34,6 +34,38 @@ describe('Given an active connection to the broker', () => {
   it('should connect', async () => {
     expect(context.connect).toHaveBeenCalled()
   })
+
+  it('should store promise', async () => {
+    expect(context.connecting).toBeInstanceOf(Promise)
+  })
+})
+
+describe('Given an active sharded connection', () => {
+  const step = tomato.steps.Gi('an active sharded connection')
+
+  it('should be', async () => undefined)
+
+  beforeEach(async () => {
+    await step.call(context)
+  })
+
+  it('should set sharded to true', async () => {
+    expect(context.sharded).toStrictEqual(true)
+  })
+
+  it('should connect', async () => {
+    expect(context.connect).toHaveBeenCalled()
+  })
+
+  it('should store promise', async () => {
+    expect(context.connecting).toStrictEqual(expect.any(Promise))
+  })
+})
+
+describe('Given the connection to both shards is established', () => {
+  tomato.steps.Gi('the connection to both shards is established')
+
+  it('should be', async () => undefined)
 })
 
 describe('When I attempt to connect to the broker for {number} second(s)', () => {

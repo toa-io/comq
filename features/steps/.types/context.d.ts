@@ -6,6 +6,7 @@ declare namespace comq.features {
   interface Context {
     io?: _io.IO
     connected?: boolean
+    connecting: Promise<any>
     reply?: Promise<any>
     consumed?: Record<string, any>
     published?: any
