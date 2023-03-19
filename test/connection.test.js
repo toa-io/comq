@@ -215,18 +215,7 @@ describe('close', () => {
     expect(amqp.close).toHaveBeenCalled()
   })
 
-  it('should ignore exceptions', async () => {
-    await connection.open()
-
-    /** @type {jest.MockedObject<import('amqplib').Connection>} */
-    const conn = await amqplib.connect.mock.results[0].value
-
-    conn.close.mockImplementation(async () => { throw new Error() })
-
-    await expect(connection.close()).resolves.not.toThrow()
-  })
-
-  it('should close after connection', async () => {
+  it('should close after connection is (re)established', async () => {
     // don't wait for completion
     connection.open().then()
 

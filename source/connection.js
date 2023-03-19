@@ -39,11 +39,7 @@ class Connection {
   async close () {
     if (this.#connection === undefined) await this.#recovery
 
-    try {
-      await this.#connection.close()
-    } catch {
-      // connection already closed
-    }
+    await this.#connection.close()
   }
 
   createChannel = failsafe(this, this.#recover,
