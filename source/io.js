@@ -56,6 +56,7 @@ class IO {
       await this.#requests.consume(queue, consumer)
     })
 
+  // failsafe is aimed to retransmit unanswered messages
   request = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
     failsafe(this, this.#recover,
       /**
@@ -124,7 +125,7 @@ class IO {
     this.#requests = await this.#createChannel('request')
     this.#replies = await this.#createChannel('reply')
 
-    this.#requests.diagnose('recover', this.#resend)
+    this.#requests.diagnose('recover', this.#retransmit)
   }
 
   async #createEventChannel () {
@@ -217,12 +218,14 @@ class IO {
   }
 
   #recover (exception) {
-    if (exception !== REJECTION) return false
+    if (exception !== RETRANSMISSION) return false
   }
 
-  #resend = () => {
+  #retransmit = () => {
     for (const emitter of Object.values(this.#emitters)) emitter.clear()
-    for (const reply of this.#pendingReplies) reply.reject(REJECTION)
+
+    // trigger failsafe attribute
+    for (const reply of this.#pendingReplies) reply.reject(RETRANSMISSION)
   }
 
   /**
@@ -247,7 +250,7 @@ const OCTETS = 'application/octet-stream'
 /** @type {comq.encoding} */
 const DEFAULT = 'application/msgpack'
 
-const REJECTION = /** @type {Error} */ Symbol('resend')
+const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
 
 function noop () {}
 

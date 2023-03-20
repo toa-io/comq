@@ -198,7 +198,8 @@ due to running out of memory.
 
 When initially connecting to the broker or if the established connection is lost, connection
 attempts will be repeated indefinitely with intervals increasing up to 30 seconds. Once reconnected,
-the topology will be recovered, and unanswered Requests and unconfirmed Events will be resent.
+the topology will be recovered, and unanswered Requests and unconfirmed Events will be
+retransmitted.
 
 If the broker rejects the connection (for example, due to access being denied), an exception will be
 thrown.
@@ -243,8 +244,8 @@ await io.close()
 Topology is designed to deliver maximum performance while ensuring that the **at least once**
 guarantee provided by RabbitMQ is maintained.
 
-> Topology design assumes that unanswered Requests and unconfirmed Events will be resent upon
-> reconnection.
+> Topology design assumes that unanswered Requests and unconfirmed Events will be retransmitted
+> upon reconnection.
 
 ### Dynamic
 
