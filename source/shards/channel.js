@@ -133,8 +133,10 @@ class Channel {
    * @param {comq.Channel} channel
    */
   #recover (channel) {
-    this.#bench[channel].resolve(channel)
-    delete this.#bench[channel]
+    if (channel in this.#bench) {
+      this.#bench[channel].resolve(channel)
+      delete this.#bench[channel]
+    }
 
     this.#add(channel)
 

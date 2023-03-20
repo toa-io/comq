@@ -196,7 +196,7 @@ describe.each(/** @type {string[]} */['send', 'publish', 'throw'])('%s', (method
     /** @type {jest.MockedObject<comq.Channel>} */
     let recovered
 
-    // both shards rejects and will be evicted from the pool
+    // both shards rejects and will be removed from the pool
     channels[0][method].mockImplementationOnce(reject)
     channels[1][method].mockImplementationOnce(reject)
 
@@ -306,6 +306,23 @@ describe('diagnose', () => {
 
       expect(listener).toHaveBeenCalledWith(...args, index)
     })
+})
+
+it('should not throw on recovery (if the "bench" is empty)', async () => {
+  channel = await create(connections, type)
+
+  const channels = await getCreatedChannels()
+  const chan = sample(channels)
+
+  expect(chan.diagnose).toHaveBeenCalledWith('recover', expect.any(Function))
+
+  const calls = chan.diagnose.mock.calls.filter((call) => call[0] === 'recover')
+  const listeners = calls.map((call) => call[1])
+
+  // emit 'recover'
+  const emit = () => { for (const listener of listeners) listener() }
+
+  expect(emit).not.toThrow()
 })
 
 /**
