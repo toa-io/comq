@@ -7,6 +7,8 @@ declare namespace comq.features {
     io?: _io.IO
     connected?: boolean
     connecting: Promise<any>
+    requestCount: number
+    replyCount: number
     reply?: Promise<any>
     consumed?: Record<string, any>
     published?: any
@@ -15,6 +17,7 @@ declare namespace comq.features {
     expected?: Promise<any>
     sharded: boolean
     shard: number
+    sealing: Promise<any>
 
     connect(user?: string, password?: string): Promise<void>
     disconnect(): Promise<void>

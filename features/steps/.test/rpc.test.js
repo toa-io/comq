@@ -42,6 +42,24 @@ describe('Given function replying {token} queue:', () => {
   })
 })
 
+describe('Given a producer replying {token} queue', () => {
+  const step = tomato.steps.Gi('a producer replying {token} queue')
+
+  it('should be', async () => undefined)
+
+  it('should reply', async () => {
+    await step.call(context, queue)
+
+    expect(io.reply).toHaveBeenCalledWith(queue, expect.any(Function))
+
+    const producer = io.reply.mock.calls[0][1]
+    const message = /** @type {comq.amqp.Message} */ {}
+    const reply = await producer(message)
+
+    expect(reply).toBeInstanceOf(Buffer)
+  })
+})
+
 describe('Given function replying {token} queue is expected:', () => {
   tomato.steps.Gi('function replying {token} queue is expected:')
 
@@ -140,6 +158,30 @@ describe('Then the consumer receives the reply:', () => {
   })
 })
 
+describe('Then the consumer receives the reply', () => {
+  const step = tomato.steps.Th('the consumer receives the reply')
+
+  it('should be', async () => undefined)
+
+  it('should await reply', async () => {
+    context.reply = promex()
+
+    let completed = false
+
+    setImmediate(() => {
+      expect(completed).toStrictEqual(false)
+
+      context.reply.resolve()
+
+      completed = true
+    })
+
+    await step.call(context)
+
+    expect(completed).toStrictEqual(true)
+  })
+})
+
 describe('Then the consumer does not receive the reply', () => {
   const step = tomato.steps.Th('the consumer does not receive the reply')
 
@@ -158,4 +200,12 @@ describe('Then the consumer does not receive the reply', () => {
   it('should not throw if reply is not received', async () => {
     await expect(step.call(context)).resolves.not.toThrow(AssertionError)
   })
+})
+
+describe('Then all replies have been received', () => {
+  const step = tomato.steps.Th('all replies have been received')
+
+  it('should be', async () => undefined)
+
+
 })

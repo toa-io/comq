@@ -106,12 +106,13 @@ class Channel {
     }
   }
 
-  async seal () {
-    // TODO: failsafe? add scenario
-    const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
+  seal = failsafe(this, this.#recover,
+    async () => {
+      // TODO: failsafe? add scenario
+      const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
 
-    await Promise.all(cancellations)
-  }
+      await Promise.all(cancellations)
+    })
 
   diagnose (event, listener) {
     this.#diagnostics.on(event, listener)

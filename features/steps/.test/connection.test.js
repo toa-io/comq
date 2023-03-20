@@ -235,3 +235,41 @@ describe('Then an exception is thrown: {string}', () => {
     expect(() => step.call(context)).toThrow(AssertionError)
   })
 })
+
+describe('Given the connection has started sealing', () => {
+  const step = tomato.steps.Gi('the connection has started sealing')
+
+  it('should be', async () => undefined)
+
+  it('should seal the connection', async () => {
+    context.io = /** @type {jest.MockedObject<comq.IO>} */ {
+      seal: jest.fn(async () => undefined)
+    }
+
+    await step.call(context)
+
+    expect(context.io.seal).toHaveBeenCalled()
+    expect(context.sealing).toBeInstanceOf(Promise)
+  })
+})
+
+describe('Then the connection is sealed', () => {
+  const step = tomato.steps.Th('the connection is sealed')
+
+  it('should be', async () => undefined)
+
+  it('should await for sealing', async () => {
+    context.sealing = promex()
+
+    let sealed = false
+
+    setImmediate(() => {
+      context.sealing.resolve()
+      sealed = true
+    })
+
+    await step.call(context)
+
+    expect(sealed).toStrictEqual(true)
+  })
+})

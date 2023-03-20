@@ -30,7 +30,7 @@ describe('When I\'m sending {quantity}B requests to the {token} queue at {quanti
   beforeAll(async () => {
     jest.clearAllMocks()
 
-    context = /** @type {comq.features.Context} */ { io }
+    context = /** @type {comq.features.Context} */ { io, requestCount: 0, replyCount: 0 }
 
     await step.call(context, bytesQ, queue, frequencyQ, seconds)
   })

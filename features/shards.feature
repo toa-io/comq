@@ -12,7 +12,7 @@ Feature: Sharded Connection
     Then the connection is established
     Then the broker is up
 
-  Scenario: Sending a request to a sharded connection while one broker is missing
+  Scenario: Sending a request to a sharded connection while one broker is down
     Given one of the brokers has crashed
     And an active sharded connection
     And a producer replying `add_numbers` queue
@@ -30,7 +30,8 @@ Feature: Sharded Connection
 
   Scenario: Shard crashes while sending requests
     Given the connection to both shards is established
-    And I'm sending 1kB requests to the `flood` queue at 500Hz for 1 second
+    And a producer replying `flood` queue
+    And I'm sending 1kB requests to the `flood` queue at 100Hz
     When one of the brokers has crashed
     Then no exceptions are thrown
     And all replies have been received
@@ -38,12 +39,22 @@ Feature: Sharded Connection
 
   Scenario: Shard crashes while publishing events
     Given the connection to both shards is established
-    And I'm publishing 1kB events to the `flood` queue at 500Hz for 1 second
+    And I'm publishing 1kB events to the `flood` queue at 100Hz
     When one of the brokers has crashed
     Then no exceptions are thrown
     And all events have been received
     Then the broker is up
 
+  Scenario: Sealing sharded connection while one broker is down
+    Given the connection to both shards is established
+    And a producer replying `echo` queue
+    And one of the brokers has crashed
+    And the connection has started sealing
+    When the consumer sends a request to the `echo` queue
+    And the broker is up
+    Then the connection is sealed
+    And the consumer does not receive the reply
+
   Scenario: Connecting with wrong credentials
-    When I attempt to establish sharded connection as "someone" with password "whatever"
+    When I attempt to establish a sharded connection as "someone" with password "whatever"
     Then an exception is thrown: "Handshake terminated by server: 403 (ACCESS-REFUSED)"

@@ -10,6 +10,8 @@ class Context extends World {
   io
   connected = false
   connecting
+  requestCount = 0
+  replyCount = 0
   reply
   consumed
   published
@@ -18,6 +20,7 @@ class Context extends World {
   expected
   sharded
   shard
+  sealing
 
   async connect (user, password) {
     const urls = this.#urls(user, password)

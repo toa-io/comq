@@ -137,6 +137,22 @@ Then('the connection is {connection-event}',
     assert.equal(this.events[event], true, 'connection was not ' + key)
   })
 
+Given('the connection has started sealing',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.sealing = this.io.seal()
+  })
+
+Then('the connection is sealed',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    await this.sealing
+  })
+
 /**
  * @param {comq.features.Context} context
  * @param {string} [user]

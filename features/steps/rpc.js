@@ -19,6 +19,17 @@ Given('function replying {token} queue:',
     await this.io.reply(queue, producer)
   })
 
+Given('a producer replying {token} queue',
+  /**
+   * @param {string} queue
+   * @this {comq.features.Context}
+   */
+  async function (queue) {
+    const producer = async () => randomBytes(8)
+
+    await this.io.reply(queue, producer)
+  })
+
 Given('function replying {token} queue is expected:',
   /**
    * @param {string} queue
@@ -68,6 +79,14 @@ Then('the consumer receives the reply:',
     assert.equal(matches, true, 'Reply mismatch')
   })
 
+Then('the consumer receives the reply',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    await this.reply
+  })
+
 Then('the consumer does not receive the reply',
   /**
    * @this {comq.features.Context}
@@ -81,6 +100,14 @@ Then('the consumer does not receive the reply',
     await Promise.any([get(), gap()])
 
     assert.equal(reply, undefined, 'The reply was received')
+  })
+
+Then('all replies have been received',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+
   })
 
 async function send (queue, payload) {
