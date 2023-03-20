@@ -20,6 +20,9 @@ class Channel {
   /** @type {Set<Promise<comq.Channel>>} */
   #pending = new Set()
 
+  /** @type {Record<comq.Channel, toa.generic.Promex>} */
+  #bench = {}
+
   /** @type {comq.topology.type} */
   #type
 
@@ -121,6 +124,7 @@ class Channel {
    * @param {comq.Channel} channel
    */
   #remove (channel) {
+    this.#bench[channel] = promex()
     this.#channels.delete(channel)
     this.#pool = Array.from(this.#channels)
   }
@@ -129,6 +133,9 @@ class Channel {
    * @param {comq.Channel} channel
    */
   #recover (channel) {
+    this.#bench[channel].resolve(channel)
+    delete this.#bench[channel]
+
     this.#add(channel)
 
     this.#recovery.resolve()
@@ -164,6 +171,7 @@ class Channel {
 
     for (const channel of this.#channels) promises.push(fn(channel))
     for (const pending of this.#pending) promises.push(pending.then(fn))
+    for (const recover of Object.values(this.#bench)) promises.push(recover.then(fn))
 
     return promises
   }

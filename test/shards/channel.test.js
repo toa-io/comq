@@ -104,6 +104,34 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
 
     expect(chan0[method]).toHaveBeenCalled()
   })
+
+  it(`should ${method} using a channel removed from the pool once it is recovered`, async () => {
+    channel = await create(connections, type)
+
+    const channels = await getCreatedChannels()
+    const chan = sample(channels)
+    const buffer = randomBytes(8)
+    const fail = /** @type {jest.MockedFunction} */ jest.fn(async () => { throw new Error() })
+
+    chan.publish.mockImplementationOnce(fail)
+
+    // `chan` has failed and removed from the pool
+    while (fail.mock.calls.length === 0) await channel.publish(exchange, buffer)
+
+    await channel[method](...args)
+
+    expect(chan[method]).not.toHaveBeenCalled()
+
+    const calls = chan.diagnose.mock.calls.filter((call) => call[0] === 'recover')
+    const listeners = calls.map((call) => call[1])
+
+    // emit `recover` event
+    for (const listener of listeners) await listener()
+
+    await immediate()
+
+    expect(chan[method]).toHaveBeenCalled()
+  })
 })
 
 describe.each(/** @type {string[]} */['send', 'publish', 'throw'])('%s', (method) => {

@@ -1,11 +1,11 @@
-import { ConsumeMessage, Options, Connection } from 'amqplib'
+import { Message, Options, Connection } from 'amqplib'
 import * as _diagnostics from './diagnostic'
 
 declare namespace comq {
 
   namespace channels {
 
-    type consumer = (message: ConsumeMessage) => void | Promise<void>
+    type consumer = (message: Message) => void | Promise<void>
 
   }
 
