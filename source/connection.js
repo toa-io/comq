@@ -33,7 +33,7 @@ class Connection {
   }
 
   async open () {
-    await retry((retry) => this.#open(retry), RETRY)
+    await retry(this.#open, RETRY)
   }
 
   async close () {
@@ -64,9 +64,9 @@ class Connection {
   }
 
   /**
-   * @param {Function} retry
+   * @type {toa.generic.retry.Task}
    */
-  async #open (retry) {
+  #open = async (retry) => {
     try {
       this.#connection = await amqp.connect(this.#url)
     } catch (exception) {
@@ -77,6 +77,7 @@ class Connection {
     // prevents process crash, 'close' will be emitted next
     // https://amqp-node.github.io/amqplib/channel_api.html#model_events
     this.#connection.on('error', noop)
+
     this.#connection.on('close', this.#close)
     this.#diagnostics.emit('open')
 

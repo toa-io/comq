@@ -43,9 +43,9 @@
   },
   "scripts": {
     "prepare": "husky install",
-    "test": "npm run lint && jest",
-    "test:features": "npx cucumber-js",
-    "lint": "npx standard --verbose | npx snazzy"
+    "test": "standard && jest",
+    "test:features": "cucumber-js",
+    "lint": "standard --fix --verbose | snazzy"
   },
   "standard": {
     "env": [

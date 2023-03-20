@@ -129,7 +129,7 @@ class Channel {
 
     for (const confirmation of this.#confirmations) confirmation.reject(INTERRUPTION)
 
-    // let unpause and confirmation rejections be handled
+    // let unpause and confirmation interruptions be handled
     await immediate()
 
     this.#recovery.resolve()
@@ -292,7 +292,7 @@ class Channel {
   }
 
   async #recover (exception) {
-    if (permanent(exception)) return false // TODO: if (this.transient || permanent(exception))
+    if (permanent(exception)) return false
     else await this.#recovery
   }
 }
