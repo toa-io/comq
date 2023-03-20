@@ -64,7 +64,7 @@ describe('initial connection', () => {
 })
 
 describe('reconnection', () => {
-  /** @type {jest.MockedObject<import('amqplib').Connection>} */
+  /** @type {jest.MockedObject<comq.amqp.Connection>} */
   let conn
 
   beforeEach(async () => {
@@ -115,7 +115,7 @@ describe('reconnection', () => {
 })
 
 describe('create channel', () => {
-  /** @type {jest.MockedObject<import('amqplib').Connection>} */
+  /** @type {jest.MockedObject<comq.amqp.Connection>} */
   let conn
 
   beforeEach(async () => {
@@ -221,7 +221,7 @@ describe('close', () => {
 
     await connection.close()
 
-    /** @type {jest.MockedObject<import('amqplib').Connection>} */
+    /** @type {jest.MockedObject<comq.amqp.Connection>} */
     const conn = await amqplib.connect.mock.results[0].value
 
     expect(conn.close).toHaveBeenCalled()

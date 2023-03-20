@@ -14,7 +14,7 @@ class Connection {
   /** @type {string} */
   #url
 
-  /** @type {import('amqplib').Connection} */
+  /** @type {comq.amqp.Connection} */
   #connection
 
   /** @type {comq.Channel[]} */

@@ -74,7 +74,7 @@ describe('queues', () => {
   it('should throw if message is missing replyTo', async () => {
     const content = randomBytes(10)
     const properties = {}
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
     const producer = requests.consume.mock.calls[0][1]
 
     await expect(producer(message)).rejects.toThrow('is missing the `replyTo` property')
@@ -99,7 +99,7 @@ describe('reply', () => {
 
     const content = randomBytes(10)
     const properties = { replyTo: generate(), contentType: 'text/plain' }
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
     const producer = requests.consume.mock.calls[0][1]
 
     await producer(message)
@@ -119,7 +119,7 @@ describe('reply', () => {
     const callback = requests.consume.mock.calls[0][1]
     const content = randomBytes(10)
     const properties = { replyTo: generate() }
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
 
     await expect(callback(message)).rejects.toThrow('must return a value')
   })
@@ -143,7 +143,7 @@ describe('encoding', () => {
     const value = { [generate()]: generate() }
     const content = encode(value, encoding)
     const properties = { contentType: encoding, replyTo: generate() }
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
     const producer = requests.consume.mock.calls[0][1]
 
     await producer(message)
@@ -161,7 +161,7 @@ describe('encoding', () => {
       contentType: encoding
     }
 
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
     const producer = requests.consume.mock.calls[0][1]
 
     await producer(message)
@@ -190,7 +190,7 @@ describe('encoding', () => {
       contentType: 'application/msgpack'
     }
 
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
     const producer = requests.consume.mock.calls[0][1]
     const buffer = randomBytes(8)
 
@@ -214,7 +214,7 @@ describe('encoding', () => {
       correlationId: generate()
     }
 
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
     const producer = requests.consume.mock.calls[0][1]
 
     await expect(producer(message)).rejects.toThrow('must be of type `Buffer`')

@@ -15,7 +15,7 @@ it('should be', async () => {
   expect(create).toBeDefined()
 })
 
-/** @type {jest.MockedObject<import('amqplib').Connection>} */
+/** @type {jest.MockedObject<comq.amqp.Connection>} */
 let connection
 
 /** @type {comq.Topology} */
@@ -83,7 +83,7 @@ describe('consume', () => {
     expect(chan.consume).toHaveBeenCalledWith(queue, expect.any(Function), expect.anything())
 
     const content = randomBytes(8)
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content }
+    const message = /** @type {comq.amqp.Message} */ { content }
     const callback = chan.consume.mock.calls[0][1]
 
     await callback(message)
@@ -108,7 +108,7 @@ describe('acknowledgments', () => {
 
     const callback = chan.consume.mock.calls[0][1]
     const content = randomBytes(8)
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content }
+    const message = /** @type {comq.amqp.Message} */ { content }
 
     await callback(message)
 
@@ -149,7 +149,7 @@ describe('acknowledgments', () => {
     const content = randomBytes(8)
     const properties = {}
     const fields = {}
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties, fields }
+    const message = /** @type {comq.amqp.Message} */ { content, properties, fields }
 
     if (!requeue) fields.redelivered = !requeue
 
@@ -172,7 +172,7 @@ describe('acknowledgments', () => {
     const content = randomBytes(8)
     const properties = {}
     const fields = {}
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties, fields }
+    const message = /** @type {comq.amqp.Message} */ { content, properties, fields }
 
     chan.ack.mockImplementation(() => { throw new Error('Channel closed') })
     chan.nack.mockImplementation(() => { throw new Error('Channel closed') })
@@ -837,7 +837,7 @@ describe('diagnostics', () => {
     const content = randomBytes(8)
     const properties = {}
     const fields = { redelivered }
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties, fields }
+    const message = /** @type {comq.amqp.Message} */ { content, properties, fields }
 
     await callback(message)
 

@@ -91,7 +91,7 @@ class Channel {
       /**
        * @param {string} exchange
        * @param {Buffer} buffer
-       * @param {import('amqplib').Options.Publish} [options]
+       * @param {comq.amqp.options.Publish} [options]
        */
       async (exchange, buffer, options) => {
         await this.#publish(exchange, DEFAULT, buffer, options)
@@ -157,7 +157,7 @@ class Channel {
    * @returns {Promise<void>}
    */
   async #assertExchange (exchange) {
-    /** @type {import('amqplib').Options.AssertExchange} */
+    /** @type {comq.amqp.options.Exchange} */
     const options = { durable: this.#topology.durable }
 
     await this.#channel.assertExchange(exchange, 'fanout', options)
@@ -223,7 +223,7 @@ class Channel {
    * @returns {Promise<void>}
    */
   async #consume (queue, consumer) {
-    /** @type {import('amqplib').Options.Consume} */
+    /** @type {comq.amqp.options.Consume} */
     const options = {}
 
     if (this.#topology.acknowledgments) consumer = this.#getAcknowledgingConsumer(consumer)
@@ -253,14 +253,14 @@ class Channel {
     }
 
   /**
-   * @param {import('amqplib').ConsumeMessage} message
+   * @param {comq.amqp.Message} message
    */
   #requeue (message) {
     this.#channel.nack(message, false, true)
   }
 
   /**
-   * @param {import('amqplib').ConsumeMessage} message
+   * @param {comq.amqp.Message} message
    * @param {Error} [exception]
    */
   #discard (message, exception) {
@@ -324,10 +324,10 @@ function permanent (exception) {
 
 const DEFAULT = ''
 
-/** @type {import('amqplib').Options.AssertQueue} */
+/** @type {comq.amqp.options.Queue} */
 const DURABLE = { durable: true }
 
-/** @type {import('amqplib').Options.AssertQueue} */
+/** @type {comq.amqp.options.Queue} */
 const EXCLUSIVE = { exclusive: true }
 
 const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')

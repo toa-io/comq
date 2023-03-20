@@ -210,7 +210,7 @@ const reply = async (content = randomBytes(8), contentType = undefined) => {
   const correlationId = requests.send.mock.calls[0][2].correlationId
   const properties = { correlationId, contentType }
   const callback = replies.consume.mock.calls[0][1]
-  const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+  const message = /** @type {comq.amqp.Message} */ { content, properties }
 
   await callback(message)
 }
