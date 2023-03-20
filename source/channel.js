@@ -25,6 +25,9 @@ class Channel {
   /** @type {toa.generic.Promex} */
   #paused
 
+  /** @type {boolean} */
+  #sealed = false
+
   /** @type {toa.generic.Promex} */
   #recovery = promex()
 
@@ -59,7 +62,7 @@ class Channel {
          * @param {comq.channels.consumer} callback
          */
         async (queue, callback) => {
-          await this.#consume(queue, callback)
+          if (!this.#sealed) await this.#consume(queue, callback)
         })))
 
   subscribe = recall(this,
@@ -72,7 +75,7 @@ class Channel {
          * @returns {Promise<void>}
          */
         async (exchange, queue, callback) => {
-          await this.#consume(queue, callback)
+          if (!this.#sealed) await this.#consume(queue, callback)
         })))
 
   send = failsafe(this, this.#recover,
@@ -106,13 +109,13 @@ class Channel {
     }
   }
 
-  seal = failsafe(this, this.#recover,
-    async () => {
-      // TODO: failsafe? add scenario
-      const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
+  async seal () {
+    this.#sealed = true
 
-      await Promise.all(cancellations)
-    })
+    const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
+
+    await Promise.all(cancellations).catch(noop) // won't recover anyway
+  }
 
   diagnose (event, listener) {
     this.#diagnostics.on(event, listener)
