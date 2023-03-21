@@ -124,6 +124,8 @@ class Channel {
    * @param {comq.Channel} channel
    */
   #remove (channel) {
+    if (!this.#channels.has(channel)) return
+
     this.#bench[channel] = promex()
     this.#channels.delete(channel)
     this.#pool = Array.from(this.#channels)
@@ -133,15 +135,17 @@ class Channel {
    * @param {comq.Channel} channel
    */
   #recover (channel) {
-    if (channel in this.#bench) {
-      this.#bench[channel].resolve(channel)
-      delete this.#bench[channel]
-    }
+    if (channel in this.#bench) this.#comeback(channel)
 
     this.#add(channel)
 
     this.#recovery.resolve()
     this.#recovery = promex()
+  }
+
+  #comeback (channel) {
+    this.#bench[channel].resolve(channel)
+    delete this.#bench[channel]
   }
 
   /**
@@ -189,7 +193,7 @@ class Channel {
 
     try {
       await fn(channel)
-    } catch {
+    } catch (e) {
       this.#remove(channel)
       await this.#one(fn)
     }
