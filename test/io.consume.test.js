@@ -63,7 +63,7 @@ describe('group consumption', () => {
     const payload = generate()
     const content = encode(payload, contentType)
     const properties = { contentType }
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
     const callback = events.subscribe.mock.calls[0][2]
 
     await callback(message)

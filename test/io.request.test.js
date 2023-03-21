@@ -174,6 +174,32 @@ describe('send', () => {
 
     expect(requests.send).toHaveBeenCalledTimes(2)
   })
+
+  it('should resend unanswered Requests on sharded connection', async () => {
+    jest.clearAllMocks()
+
+    connection = mock.connection(true)
+    io = new IO(connection)
+
+    promise = io.request(queue, payload)
+
+    // allows initializers to run
+    await immediate()
+
+    requests = await findChannel('request')
+
+    expect(requests.sharded).toStrictEqual(true)
+    expect(requests.diagnose).toHaveBeenCalledWith('remove', expect.any(Function))
+
+    const calls = requests.diagnose.mock.calls.filter((call) => call[0] === 'remove')
+    const listeners = calls.map((call) => call[1])
+
+    for (const listener of listeners) listener()
+
+    await immediate()
+
+    expect(requests.send).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('reply', () => {
@@ -210,7 +236,7 @@ const reply = async (content = randomBytes(8), contentType = undefined) => {
   const correlationId = requests.send.mock.calls[0][2].correlationId
   const properties = { correlationId, contentType }
   const callback = replies.consume.mock.calls[0][1]
-  const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+  const message = /** @type {comq.amqp.Message} */ { content, properties }
 
   await callback(message)
 }

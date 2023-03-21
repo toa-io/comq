@@ -1,3 +1,1 @@
-'use strict'
-
-exports.url = 'amqp://developer:secret@localhost:5673'
+export const url = 'amqp://developer:secret@localhost:5673'

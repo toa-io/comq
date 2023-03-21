@@ -1,5 +1,8 @@
 Feature: Connection Tolerance
 
+  Scenario: Connect
+    Given an active connection to the broker
+
   Scenario: Connecting to a broker before it was started
     Given the broker is down
     When I attempt to connect to the broker for 0.2 seconds

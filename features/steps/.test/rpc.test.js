@@ -2,7 +2,7 @@
 
 const { AssertionError } = require('node:assert')
 const { generate } = require('randomstring')
-const { promex } = require('@toa.io/generic')
+const { promex, timeout } = require('@toa.io/generic')
 const { dump } = require('@toa.io/yaml')
 const tomato = require('@toa.io/tomato')
 const { io } = require('./io.mock')
@@ -39,6 +39,24 @@ describe('Given function replying {token} queue:', () => {
     const sum = producer({ a: 1, b: 2 })
 
     expect(sum).toStrictEqual(3)
+  })
+})
+
+describe('Given a producer replying {token} queue', () => {
+  const step = tomato.steps.Gi('a producer replying {token} queue')
+
+  it('should be', async () => undefined)
+
+  it('should reply', async () => {
+    await step.call(context, queue)
+
+    expect(io.reply).toHaveBeenCalledWith(queue, expect.any(Function))
+
+    const producer = io.reply.mock.calls[0][1]
+    const message = generate()
+    const reply = await producer(message)
+
+    expect(reply).toStrictEqual(message)
   })
 })
 
@@ -140,6 +158,30 @@ describe('Then the consumer receives the reply:', () => {
   })
 })
 
+describe('Then the consumer receives the reply', () => {
+  const step = tomato.steps.Th('the consumer receives the reply')
+
+  it('should be', async () => undefined)
+
+  it('should await reply', async () => {
+    context.reply = promex()
+
+    let completed = false
+
+    setImmediate(() => {
+      expect(completed).toStrictEqual(false)
+
+      context.reply.resolve()
+
+      completed = true
+    })
+
+    await step.call(context)
+
+    expect(completed).toStrictEqual(true)
+  })
+})
+
 describe('Then the consumer does not receive the reply', () => {
   const step = tomato.steps.Th('the consumer does not receive the reply')
 
@@ -157,5 +199,61 @@ describe('Then the consumer does not receive the reply', () => {
 
   it('should not throw if reply is not received', async () => {
     await expect(step.call(context)).resolves.not.toThrow(AssertionError)
+  })
+})
+
+describe('Given I\'m sending {quantity}B requests to the {token} queue at {quantity}Hz', () => {
+  const step = tomato.steps.Gi('I\'m sending {quantity}B requests to the {token} queue at {quantity}Hz')
+
+  it('should be', async () => undefined)
+
+  it('should send requests continuously', async () => {
+    context = /** @type {comq.features.Context} */  {
+      io: /** @type {jest.MockedObject<comq.IO>} */ { request: jest.fn() },
+      requestsSent: []
+    }
+
+    const bytesQ = '1k'
+    const queue = generate()
+    const frequencyQ = '100'
+
+    step.call(context, bytesQ, queue, frequencyQ)
+
+    await timeout(100 + 11)
+
+    expect(context.io.request).toHaveBeenCalledTimes(10)
+    expect(context.sending).toBeDefined()
+    expect(context.requestsSent.length).toStrictEqual(10)
+
+    clearInterval(context.sending)
+  })
+})
+
+describe('Then all replies have been received', () => {
+  const step = tomato.steps.Th('all replies have been received')
+
+  /** @type {jest.MockedObject<comq.features.Context>} */
+  let context
+
+  it('should be', async () => undefined)
+
+  beforeEach(async () => {
+    context = /** @type {jest.MockedObject<comq.features.Context>} */ {
+      requestsSent: [promex(), promex()]
+    }
+  })
+
+  it('should pass if replies received', async () => {
+    let completed = false
+
+    setImmediate(() => {
+      completed = true
+
+      for (const promise of context.requestsSent) promise.resolve()
+    })
+
+    await step.call(context)
+
+    expect(completed).toStrictEqual(true)
   })
 })

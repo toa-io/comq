@@ -1,4 +1,4 @@
-Feature: Events (pub/sub)
+Feature: Events
 
   Background:
     Given an active connection to the broker

@@ -1,10 +1,9 @@
 'use strict'
 
-const { randomBytes } = require('node:crypto')
-const { connect } = require('comq')
-const { url } = require('../const')
+import { connect } from 'comq'
+import { url } from '../const.js'
 
-const group = process.argv[2] ?? randomBytes(4).toString('hex')
+const group = process.argv[2]
 
 let io
 
@@ -15,7 +14,7 @@ async function run () {
 
   await io.consume('random_numbers', group, consume)
 
-  console.log('Waiting for random numbers as ' + group)
+  console.log('Waiting for random numbers ' + (group ? 'as ' + group : 'exclusively'))
 
   process.on('SIGINT', exit)
 }
@@ -30,4 +29,4 @@ async function exit () {
   console.log('\nDisconnected')
 }
 
-run().then()
+await run()

@@ -6,6 +6,7 @@ const { lazy, track, failsafe, promex } = require('@toa.io/generic')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
+const events = require('./events')
 const io = require('./.io')
 
 /**
@@ -38,7 +39,7 @@ class IO {
   constructor (connection) {
     this.#connection = connection
 
-    for (const event of CONNECTION_EVENTS) {
+    for (const event of events.connection) {
       this.#connection.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args))
     }
   }
@@ -55,13 +56,14 @@ class IO {
       await this.#requests.consume(queue, consumer)
     })
 
+  // failsafe is aimed to retransmit unanswered messages
   request = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
     failsafe(this, this.#recover,
       /**
        * @param {string} queue
        * @param {any} payload
        * @param {comq.encoding} [encoding]
-       * @param {comq.ReplyToPropertyFormatter} replyToFormatter
+       * @param {comq.ReplyToPropertyFormatter} [replyToFormatter]
        * @returns {Promise<void>}
        */
       async (queue, payload, encoding, replyToFormatter) => {
@@ -123,7 +125,7 @@ class IO {
     this.#requests = await this.#createChannel('request')
     this.#replies = await this.#createChannel('reply')
 
-    this.#requests.diagnose('recover', this.#resend)
+    this.#setupRetransmission()
   }
 
   async #createEventChannel () {
@@ -148,11 +150,17 @@ class IO {
   async #createChannel (type) {
     const channel = await this.#connection.createChannel(type)
 
-    for (const event of CHANNEL_EVENTS) {
+    for (const event of events.channel) {
       channel.diagnose(event, (...args) => this.#diagnostics.emit(event, type, ...args))
     }
 
     return channel
+  }
+
+  #setupRetransmission () {
+    const event = (this.#requests.sharded === true) ? 'remove' : 'recover'
+
+    this.#requests.diagnose(event, this.#retransmit)
   }
 
   /**
@@ -185,6 +193,9 @@ class IO {
    * @returns {comq.channels.consumer}
    */
   #getReplyConsumer = (queue, emitter) =>
+    /**
+     * @param {comq.amqp.Message} message
+     */
     (message) => {
       const payload = decode(message)
 
@@ -216,12 +227,14 @@ class IO {
   }
 
   #recover (exception) {
-    if (exception !== REJECTION) return false
+    if (exception !== RETRANSMISSION) return false
   }
 
-  #resend = () => {
+  #retransmit = () => {
     for (const emitter of Object.values(this.#emitters)) emitter.clear()
-    for (const reply of this.#pendingReplies) reply.reject(REJECTION)
+
+    // trigger failsafe attribute
+    for (const reply of this.#pendingReplies) reply.reject(RETRANSMISSION)
   }
 
   /**
@@ -246,13 +259,7 @@ const OCTETS = 'application/octet-stream'
 /** @type {comq.encoding} */
 const DEFAULT = 'application/msgpack'
 
-/** @type {comq.diagnostics.event[]} */
-const CONNECTION_EVENTS = ['open', 'close']
-
-/** @type {comq.diagnostics.event[]} */
-const CHANNEL_EVENTS = ['flow', 'drain', 'recover', 'discard']
-
-const REJECTION = /** @type {Error} */ Symbol('resend')
+const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
 
 function noop () {}
 

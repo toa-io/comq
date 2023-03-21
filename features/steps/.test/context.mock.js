@@ -1,8 +1,8 @@
 'use strict'
 
-const { generate } = require('randomstring')
+const { comq } = require('./comq.mock')
 
-const connect = jest.fn(async () => generate())
+const connect = jest.fn(() => comq.connect())
 const disconnect = jest.fn(async () => undefined)
 
 /**

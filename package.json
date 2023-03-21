@@ -1,6 +1,6 @@
 {
   "name": "comq",
-  "version": "0.4.1",
+  "version": "0.5.0-dev.0",
   "description": "ComQ",
   "author": {
     "name": "Artem Gurtovoi",
@@ -37,15 +37,15 @@
     "standard": "17.0.0"
   },
   "dependencies": {
-    "@toa.io/generic": "0.4.0-dev.3",
+    "@toa.io/generic": "0.4.0-dev.5",
     "amqplib": "0.10.3",
     "msgpackr": "1.8.5"
   },
   "scripts": {
     "prepare": "husky install",
-    "test": "npm run lint && jest",
-    "test:features": "npx cucumber-js",
-    "lint": "npx standard --verbose | npx snazzy"
+    "test": "standard && jest",
+    "test:features": "cucumber-js",
+    "lint": "standard --fix --verbose | snazzy"
   },
   "standard": {
     "env": [

@@ -3,8 +3,8 @@
 ## "At least once"
 
 RabbitMQ delivers a message **before** it has been written to disk, therefore provides "at least
-once" delivery guarantee. Considering that, system using communications over AMQP
-must be idempotent.
+once" delivery guarantee. Considering that, system using communications over AMQP must be
+idempotent.
 
 ## Cause-Effect Confirmation Lag
 
@@ -36,12 +36,18 @@ A lightweight Producer (one that produces responses quickly) can result in being
 from the Consumer's perspective (that is, does not consume messages with an expected rate), even
 though the Producer being idle while waiting for response publication confirmations.
 
-## `replyTo` property prefix `direct:///`
+## Flow Control Lock
 
-`IO.request` accepts `replyTo` property modifier function `(replyTo): string` as fourth argument. It
-is the temporary solution to provide an option for compatibility with
-official [RabbitMQ client for .NET](https://github.com/rabbitmq/rabbitmq-dotnet-client/blob/feceedccd6b81d4b461795390432dc3330fdf596/projects/Unit/TestPublicationAddress.cs).
+When the [flow control mechanism](../readme.md#flow-control) is applied, an application that
+consumes requests and sends other request will hit the prefetch limit of incoming messages and
+become unresponsive until the issue is resolved.
 
-It is yet to be clarified and implemented correctly. [#6](https://github.com/toa-io/comq/issues/6)
+When an application becomes unresponsive, it can cause a chain reaction that makes all of its
+clients unresponsive, up to the system's *entry point* (which is typically the API Gateway).
+Therefore, the flow control of a distributed system is managed by its entry point, giving developers
+the choice to either stop accepting new requests (e.g., by replying with
+a [`429`](https://www.rfc-editor.org/rfc/rfc6585.html#section-4) HTTP status code for an API), or to
+continue sending new requests ignoring back pressure mechanism, risking a potential RabbitMQ crash
+due to running out of memory.
 
-See [Direct Reply-to](https://www.rabbitmq.com/direct-reply-to.html).
+> ComQ does not currently provide an option to ignore back pressure mechanism.

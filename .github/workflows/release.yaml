@@ -6,6 +6,10 @@ on:
     branches:
       - main
       - dev
+    paths:
+      - 'source/**'
+      - 'types/**'
+      - 'package-lock.json'
 
 jobs:
   publish:
@@ -27,24 +31,32 @@ jobs:
       - name: Run tests
         run: npm i && npm test
 
-      - name: Run features
-        if: github.ref == 'refs/heads/main'
-        run: docker-compose up -d && npx cucumber-js --fail-fast --exit --format summary --publish-quiet
+      - name: Import GPG key
+        id: gpg
+        uses: crazy-max/ghaction-import-gpg@v5
+        with:
+          gpg_private_key: ${{ secrets.TOABOT_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.TOABOT_GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
 
       - name: Bump version
         run: |
-          git config user.name "toabot"
-          git config user.email "127577558+toabot@users.noreply.github.com"
-          
           if [ ${{ github.base_ref }} = main ]; then
-            npx lerna@6.5.1 version --conventional-graduate --no-commit-hooks --no-changelog --yes --message "chore(release): %s"
+            npx lerna@6.5.1 version --conventional-graduate --no-commit-hooks --no-changelog --yes --message "ci: %s" --sign-git-commit --sign-git-tag
             git fetch
             git checkout dev
             git merge main
             git push --all origin --no-verify
           else
-            npx lerna@6.5.1 version --conventional-prerelease --preid dev --no-commit-hooks --no-changelog --yes --message "chore(prerelease): %s" --git-tag-command "echo %s"
+            npx lerna@6.5.1 version --conventional-prerelease --preid dev --no-commit-hooks --no-changelog --yes --message "ci: %s" --git-tag-command "echo %s" --sign-git-commit
           fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOABOT_GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: ${{ steps.gpg.outputs.name }}
+          GIT_AUTHOR_EMAIL: ${{ steps.gpg.outputs.email }}
+          GIT_COMMITTER_NAME: ${{ steps.gpg.outputs.name }}
+          GIT_COMMITTER_EMAIL: ${{ steps.gpg.outputs.email }}
 
       - name: Publish packages
         env:

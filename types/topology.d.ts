@@ -4,6 +4,10 @@ declare namespace comq {
 
     type type = 'request' | 'reply' | 'event'
 
+    type Set = {
+      [K in type]: Topology
+    }
+
   }
 
   type Topology = {

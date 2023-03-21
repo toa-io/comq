@@ -10,17 +10,23 @@ class Context extends World {
   io
   connected = false
   connecting
+  requestsSent = []
   reply
   consumed
   published
+  eventsPublishedCount = 0
+  eventsConsumedCount = 0
   events = {}
   exception
   expected
+  sharded
+  shard
+  sealing
 
   async connect (user, password) {
-    const url = locator(user, password)
+    const urls = this.#urls(user, password)
 
-    await this.#connect(url)
+    await this.#connect(...urls)
   }
 
   async disconnect () {
@@ -34,13 +40,13 @@ class Context extends World {
   }
 
   /**
-   * @param {string} url
+   * @param {...string} urls
    * @return {Promise<void>}
    */
-  async #connect (url) {
+  async #connect (...urls) {
     if (this.io !== undefined) await this.disconnect()
 
-    this.io = await connect(url)
+    this.io = await connect(...urls)
     this.connected = true
 
     for (const event of EVENTS) this.io.diagnose(event, () => (this.events[event] = true))
@@ -48,19 +54,29 @@ class Context extends World {
     this.io.diagnose('close', () => (this.connected = false))
     this.io.diagnose('open', () => (this.connected = true))
   }
-}
 
-const locator = (user, password) => {
-  if (user === undefined) {
-    user = USER
-    password = PASSWORD
+  #urls (user, password) {
+    if (user === undefined) {
+      user = USER
+      password = PASSWORD
+    }
+
+    const urls = []
+
+    urls.push(this.#url(0, user, password))
+
+    if (this.sharded) urls.push(this.#url(1, user, password))
+
+    return urls
   }
 
-  return PROTOCOL + user + ':' + password + '@' + HOST
+  #url (i, user, password) {
+    return PROTOCOL + user + ':' + password + '@' + SHARDS[i]
+  }
 }
 
 const PROTOCOL = 'amqp://'
-const HOST = 'localhost:5673'
+const SHARDS = ['localhost:5673', 'localhost:5674']
 const USER = 'developer'
 const PASSWORD = 'secret'
 
