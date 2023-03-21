@@ -5,17 +5,16 @@ Node.js.
 
 ## Features
 
-1. Dynamic topology
-2. Request-reply (RPC)
-3. Events (pub/sub)
-4. Content encoding
-5. Flow control and back pressure handling
-6. Consumer acknowledgments and publisher confirms
-7. Poison message handling
-8. Connection tolerance
-9. Sharded connection
-10. Broker restart resilience
-11. Graceful shutdown
+1. [Dynamic topology](#topology)
+2. [Request](#request)-[reply](#reply) (RPC)
+3. Events ([pub](#emission)/[sub](#consumption))
+4. [Content encoding](#encoding)
+5. [Flow control](#flow-control) and back pressure handling
+6. [Consumer acknowledgments](#messages) and [publisher confirms](#channels)
+7. [Poison message handling](#messages)
+8. [Connection tolerance](#connection-tolerance) and broker restart resilience
+9. [Sharded connection](#sharded-connection)
+10. [Graceful shutdown](#graceful-shutdown)
 
 > CommonJS, ECMAScript and TypeScript compatible (types included).
 
