@@ -4,7 +4,7 @@
 
 const { generate } = require('randomstring')
 
-const { timeout } = require('@toa.io/generic')
+const { timeout, promex, random } = require('@toa.io/generic')
 const { amqplib } = require('./amqplib.mock')
 const { channel: create } = require('./connection.mock')
 const mock = { amqplib, channel: { create } }
@@ -12,7 +12,7 @@ const mock = { amqplib, channel: { create } }
 jest.mock('amqplib', () => mock.amqplib)
 jest.mock('../source/channel', () => mock.channel)
 
-const presets = require('../source/presets')
+const presets = require('../source/topology')
 const { Connection } = require('../source/connection')
 
 it('should be', async () => {
@@ -64,7 +64,7 @@ describe('initial connection', () => {
 })
 
 describe('reconnection', () => {
-  /** @type {jest.MockedObject<import('amqplib').Connection>} */
+  /** @type {jest.MockedObject<comq.amqp.Connection>} */
   let conn
 
   beforeEach(async () => {
@@ -115,7 +115,7 @@ describe('reconnection', () => {
 })
 
 describe('create channel', () => {
-  /** @type {jest.MockedObject<import('amqplib').Connection>} */
+  /** @type {jest.MockedObject<comq.amqp.Connection>} */
   let conn
 
   beforeEach(async () => {
@@ -126,7 +126,7 @@ describe('create channel', () => {
 
   it.each(
     /** @type {comq.topology.type[]} */
-    ['request', 'reply', 'event'])('should create channel of %s type',
+    ['request', 'reply', 'event'])('should create failsafe channel of %s type',
     async (type) => {
       // noinspection JSCheckFunctionSignatures
       create.mockImplementationOnce(async () => generate())
@@ -134,9 +134,18 @@ describe('create channel', () => {
       const preset = presets[type]
       const channel = await connection.createChannel(type)
 
-      expect(create).toHaveBeenCalledWith(conn, preset)
+      expect(create).toHaveBeenCalledWith(conn, preset, undefined)
       expect(channel).toStrictEqual(await create.mock.results[0].value)
     })
+
+  it('should create failfast channel', async () => {
+    const type = 'request'
+    const index = random()
+
+    await connection.createChannel(type, index)
+
+    expect(create).toHaveBeenCalledWith(expect.anything(), expect.anything(), index)
+  })
 
   it('should create channel after exception', async () => {
     create.mockImplementation(async () => { throw new Error() })
@@ -152,6 +161,49 @@ describe('create channel', () => {
 
     expect(channel).toStrictEqual(await create.mock.results[1].value)
   })
+
+  it('should wait for initial connection', async () => {
+    jest.clearAllMocks()
+    expect.assertions(2)
+
+    connection = new Connection(url)
+
+    setImmediate(async () => {
+      expect(create).not.toHaveBeenCalled()
+
+      await connection.open()
+    })
+
+    await connection.createChannel('request')
+
+    expect(create).toHaveBeenCalled()
+  })
+
+  it('should wait for reconnection', async () => {
+    expect.assertions(3)
+
+    jest.clearAllMocks()
+
+    const promise = promex()
+
+    amqplib.connect.mockImplementationOnce(() => promise)
+
+    conn.emit('close', new Error())
+
+    expect(amqplib.connect).toHaveBeenCalled()
+
+    setImmediate(async () => {
+      expect(create).not.toHaveBeenCalled()
+
+      const conn = await amqplib.connect()
+
+      promise.resolve(conn)
+    })
+
+    await connection.createChannel('request')
+
+    expect(create).toHaveBeenCalled()
+  })
 })
 
 describe('close', () => {
@@ -164,15 +216,16 @@ describe('close', () => {
     expect(amqp.close).toHaveBeenCalled()
   })
 
-  it('should ignore exceptions', async () => {
-    await connection.open()
+  it('should close after connection is (re)established', async () => {
+    // don't wait for completion
+    connection.open().then()
 
-    /** @type {jest.MockedObject<import('amqplib').Connection>} */
-    const amqp = await amqplib.connect.mock.results[0].value
+    await connection.close()
 
-    amqp.close.mockImplementation(async () => { throw new Error() })
+    /** @type {jest.MockedObject<comq.amqp.Connection>} */
+    const conn = await amqplib.connect.mock.results[0].value
 
-    await expect(connection.close()).resolves.not.toThrow()
+    expect(conn.close).toHaveBeenCalled()
   })
 })
 

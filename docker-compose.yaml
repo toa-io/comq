@@ -1,11 +1,29 @@
 version: "3.9"
 services:
-  rabbitmq:
+  rabbitmq-0:
     image: rabbitmq:3.10.0-management
-    container_name: comq-rmq
+    container_name: comq-rmq-0
     ports:
       - '5673:5672'
       - '15673:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: developer
+      RABBITMQ_DEFAULT_PASS: secret
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      timeout: 1s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512MB
+  rabbitmq-1:
+    image: rabbitmq:3.10.0-management
+    container_name: comq-rmq-1
+    ports:
+      - '5674:5672'
+      - '15674:15672'
     environment:
       RABBITMQ_DEFAULT_USER: developer
       RABBITMQ_DEFAULT_PASS: secret

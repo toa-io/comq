@@ -1,16 +1,19 @@
-import { ConsumeMessage, Options, Connection } from 'amqplib'
+import { Message, Options, Connection } from 'amqplib'
 import * as _diagnostics from './diagnostic'
 
 declare namespace comq {
 
   namespace channels {
 
-    type consumer = (message: ConsumeMessage) => void | Promise<void>
+    type consumer = (message: Message) => void | Promise<void>
 
   }
 
   interface Channel {
-    create(connection: Connection): Promise<void>
+    index?: number
+    sharded?: boolean
+
+    create(): Promise<void>
 
     consume(queue: string, consumer: channels.consumer): Promise<void>
 
@@ -18,9 +21,9 @@ declare namespace comq {
 
     send(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
-    throw(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
-
     publish(exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+
+    throw(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
     seal(): Promise<void>
 

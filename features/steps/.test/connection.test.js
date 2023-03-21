@@ -13,7 +13,7 @@ jest.mock('comq', () => mock.comq)
 
 require('../connection')
 
-/** @type {comq.features.Context} */
+/** @type {jest.MockedObject<comq.features.Context>} */
 let context
 
 beforeEach(() => {
@@ -34,6 +34,38 @@ describe('Given an active connection to the broker', () => {
   it('should connect', async () => {
     expect(context.connect).toHaveBeenCalled()
   })
+
+  it('should store promise', async () => {
+    expect(context.connecting).toBeInstanceOf(Promise)
+  })
+})
+
+describe('Given an active sharded connection', () => {
+  const step = tomato.steps.Gi('an active sharded connection')
+
+  it('should be', async () => undefined)
+
+  beforeEach(async () => {
+    await step.call(context)
+  })
+
+  it('should set sharded to true', async () => {
+    expect(context.sharded).toStrictEqual(true)
+  })
+
+  it('should connect', async () => {
+    expect(context.connect).toHaveBeenCalled()
+  })
+
+  it('should store promise', async () => {
+    expect(context.connecting).toStrictEqual(expect.any(Promise))
+  })
+})
+
+describe('Given the connection to both shards is established', () => {
+  tomato.steps.Gi('the connection to both shards is established')
+
+  it('should be', async () => undefined)
 })
 
 describe('When I attempt to connect to the broker for {number} second(s)', () => {
@@ -125,6 +157,40 @@ describe('When I attempt to connect to the broker as {string} with password {str
   })
 })
 
+describe('When I attempt to establish sharded connection', () => {
+  const step = tomato.steps.Wh('I attempt to establish sharded connection')
+
+  it('should be', async () => undefined)
+
+  it('should set context.sharded to true', async () => {
+    await step.call(context)
+
+    expect(context.sharded).toStrictEqual(true)
+  })
+
+  it('should connect', async () => {
+    await step.call(context)
+
+    expect(context.connect).toHaveBeenCalled()
+  })
+})
+
+describe('When I attempt to establish a sharded connection as {string} with password {string}', () => {
+  const step = tomato.steps.Wh('I attempt to establish a sharded connection as {string} with password {string}')
+
+  it('should be', async () => undefined)
+
+  const user = generate()
+  const password = generate()
+
+  it('should connect with credentials', async () => {
+    await step.call(context, user, password)
+
+    expect(context.sharded).toStrictEqual(true)
+    expect(context.connect).toHaveBeenCalledWith(user, password)
+  })
+})
+
 describe.each([['', true], [' not', false]])('Then the connection is%s established',
   (not, connected) => {
     const step = tomato.steps.Th(`the connection is${not} established`)
@@ -183,5 +249,43 @@ describe('Then an exception is thrown: {string}', () => {
     context.exception = new Error(generate())
 
     expect(() => step.call(context)).toThrow(AssertionError)
+  })
+})
+
+describe('Given the connection has started sealing', () => {
+  const step = tomato.steps.Gi('the connection has started sealing')
+
+  it('should be', async () => undefined)
+
+  it('should seal the connection', async () => {
+    context.io = /** @type {jest.MockedObject<comq.IO>} */ {
+      seal: jest.fn(async () => undefined)
+    }
+
+    await step.call(context)
+
+    expect(context.io.seal).toHaveBeenCalled()
+    expect(context.sealing).toBeInstanceOf(Promise)
+  })
+})
+
+describe('Then the connection is sealed', () => {
+  const step = tomato.steps.Th('the connection is sealed')
+
+  it('should be', async () => undefined)
+
+  it('should await for sealing', async () => {
+    context.sealing = promex()
+
+    let sealed = false
+
+    setImmediate(() => {
+      context.sealing.resolve()
+      sealed = true
+    })
+
+    await step.call(context)
+
+    expect(sealed).toStrictEqual(true)
   })
 })

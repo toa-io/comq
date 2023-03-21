@@ -3,7 +3,7 @@
 const decoders = require('./encoders')
 
 /**
- * @param {import('amqplib').ConsumeMessage} message
+ * @param {comq.amqp.Message} message
  * @returns {any}
  */
 const decode = (message) => {

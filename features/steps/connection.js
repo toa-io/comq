@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
-const { timeout } = require('@toa.io/generic')
+const { timeout, promex } = require('@toa.io/generic')
 
 const { Given, When, Then } = require('@cucumber/cucumber')
 
@@ -13,6 +13,35 @@ Given('an active connection to the broker',
     this.connecting = this.connect()
 
     await this.connecting
+  })
+
+Given('an active sharded connection',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.sharded = true
+    this.connecting = this.connect()
+
+    await this.connecting
+  })
+
+Given('the connection to both shards is established',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    const promise = promex()
+
+    this.sharded = true
+    this.connecting = this.connect()
+
+    await this.connecting
+
+    // second shard is connected
+    this.io.diagnose('open', () => promise.resolve())
+
+    return promise
   })
 
 When('I attempt to connect to the broker for {number} second(s)',
@@ -43,6 +72,28 @@ When('I attempt to connect to the broker as {string} with password {string}',
    * @this {comq.features.Context}
    */
   async function (user, password) {
+    await connect(this, user, password)
+  })
+
+When('I attempt to establish sharded connection',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.sharded = true
+
+    await connect(this)
+  })
+
+When('I attempt to establish a sharded connection as {string} with password {string}',
+  /**
+   * @param {string} user
+   * @param {string} password
+   * @this {comq.features.Context}
+   */
+  async function (user, password) {
+    this.sharded = true
+
     await connect(this, user, password)
   })
 
@@ -98,6 +149,22 @@ Then('the connection is {connection-event}',
     assert.equal(this.events[event], true, 'connection was not ' + key)
   })
 
+Given('the connection has started sealing',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.sealing = this.io.seal()
+  })
+
+Then('the connection is sealed',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    await this.sealing
+  })
+
 /**
  * @param {comq.features.Context} context
  * @param {string} [user]
@@ -108,7 +175,7 @@ const connect = async (context, user, password) => {
   try {
     await context.connect(user, password)
   } catch (exception) {
-    context.exception = exception
+    context.exception = exception instanceof AggregateError ? exception.errors[0] : exception
   }
 }
 

@@ -30,7 +30,7 @@ describe('When I\'m sending {quantity}B requests to the {token} queue at {quanti
   beforeAll(async () => {
     jest.clearAllMocks()
 
-    context = /** @type {comq.features.Context} */ { io }
+    context = /** @type {comq.features.Context} */ { io, requestCount: 0, replyCount: 0 }
 
     await step.call(context, bytesQ, queue, frequencyQ, seconds)
   })
@@ -62,7 +62,7 @@ describe('Then back pressure was applied', () => {
   const step = tomato.steps.Th('back pressure was applied')
 
   beforeEach(() => {
-    context = /** @type {comq.features.Context} */ { io }
+    context = /** @type {comq.features.Context} */ { io, events: {} }
   })
 
   it('should be', async () => undefined)

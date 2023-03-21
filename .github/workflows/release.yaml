@@ -31,14 +31,6 @@ jobs:
       - name: Run tests
         run: npm i && npm test
 
-      - name: Run features
-        run: |
-          if [ ${{ github.base_ref }} = main ]; then
-            docker-compose up -d && npx cucumber-js --fail-fast --exit --format summary --publish-quiet
-          else
-            echo "Skipping features run on ${{ github.base_ref }}" 
-          fi
-
       - name: Import GPG key
         id: gpg
         uses: crazy-max/ghaction-import-gpg@v5

@@ -42,5 +42,5 @@ Then('back pressure was applied',
    * @this {comq.features.Context}
    */
   function () {
-    assert.equal(this.events?.flow, true, 'Back pressure hasn\'t been applied')
+    assert.equal(this.events.flow, true, 'Back pressure hasn\'t been applied')
   })

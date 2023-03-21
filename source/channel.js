@@ -7,17 +7,28 @@ const { lazy, recall, promex, failsafe, immediate } = require('@toa.io/generic')
  * @implements {comq.Channel}
  */
 class Channel {
+  index
+
+  /** @type {comq.amqp.Connection} */
+  #connection
+
   /** @type {comq.Topology} */
   #topology
 
   /** @type {comq.amqp.Channel} */
   #channel
 
+  /** @type {boolean} */
+  #failfast
+
   /** @type {string[]} */
   #tags = []
 
   /** @type {toa.generic.Promex} */
   #paused
+
+  /** @type {boolean} */
+  #sealed = false
 
   /** @type {toa.generic.Promex} */
   #recovery = promex()
@@ -28,16 +39,23 @@ class Channel {
   #diagnostics = new EventEmitter()
 
   /**
+   * @param {comq.amqp.Connection} connection
    * @param {comq.Topology} topology
+   * @param {number} index
    */
-  constructor (topology) {
+  constructor (connection, topology, index) {
+    this.index = index
+
+    this.#connection = connection
     this.#topology = topology
+    this.#failfast = index !== undefined
+
+    if (this.#failfast) failsafe.disable(this.send, this.publish)
   }
 
-  async create (connection) {
-    const method = `create${this.#topology.confirms ? 'Confirm' : ''}Channel`
-
-    this.#channel = await connection[method]()
+  async create () {
+    if (this.#topology.confirms) this.#channel = await this.#connection.createConfirmChannel()
+    else this.#channel = await this.#connection.createChannel()
   }
 
   consume = recall(this,
@@ -48,7 +66,7 @@ class Channel {
          * @param {comq.channels.consumer} callback
          */
         async (queue, callback) => {
-          await this.#consume(queue, callback)
+          if (!this.#sealed) await this.#consume(queue, callback)
         })))
 
   subscribe = recall(this,
@@ -61,7 +79,7 @@ class Channel {
          * @returns {Promise<void>}
          */
         async (exchange, queue, callback) => {
-          await this.#consume(queue, callback)
+          if (!this.#sealed) await this.#consume(queue, callback)
         })))
 
   send = failsafe(this, this.#recover,
@@ -80,7 +98,7 @@ class Channel {
       /**
        * @param {string} exchange
        * @param {Buffer} buffer
-       * @param {import('amqplib').Options.Publish} [options]
+       * @param {comq.amqp.options.Publish} [options]
        */
       async (exchange, buffer, options) => {
         await this.#publish(exchange, DEFAULT, buffer, options)
@@ -89,15 +107,18 @@ class Channel {
   async throw (queue, buffer, options) {
     try {
       await this.#publish(DEFAULT, queue, buffer, options)
-    } catch {
-      // whatever
+    } catch (exception) {
+      if (this.#failfast) throw exception
+      // ignore otherwise
     }
   }
 
   async seal () {
+    this.#sealed = true
+
     const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
 
-    await Promise.all(cancellations)
+    await Promise.all(cancellations).catch(noop) // won't recover anyway
   }
 
   diagnose (event, listener) {
@@ -105,16 +126,18 @@ class Channel {
   }
 
   async recover (connection) {
-    await this.create(connection)
+    this.#connection = connection
+
+    await this.create()
 
     lazy.reset(this)
     await recall(this)
 
-    this.#unpause(REJECTION)
+    this.#unpause(INTERRUPTION)
 
-    for (const confirmation of this.#confirmations) confirmation.reject(REJECTION)
+    for (const confirmation of this.#confirmations) confirmation.reject(INTERRUPTION)
 
-    // let unpause and confirmation rejections be handled
+    // let unpause and confirmation interruptions be handled
     await immediate()
 
     this.#recovery.resolve()
@@ -142,7 +165,7 @@ class Channel {
    * @returns {Promise<void>}
    */
   async #assertExchange (exchange) {
-    /** @type {import('amqplib').Options.AssertExchange} */
+    /** @type {comq.amqp.options.Exchange} */
     const options = { durable: this.#topology.durable }
 
     await this.#channel.assertExchange(exchange, 'fanout', options)
@@ -208,7 +231,7 @@ class Channel {
    * @returns {Promise<void>}
    */
   async #consume (queue, consumer) {
-    /** @type {import('amqplib').Options.Consume} */
+    /** @type {comq.amqp.options.Consume} */
     const options = {}
 
     if (this.#topology.acknowledgments) consumer = this.#getAcknowledgingConsumer(consumer)
@@ -230,7 +253,7 @@ class Channel {
 
         this.#channel.ack(message)
       } catch (exception) {
-        if (exception.message === 'Channel closed') return // message will be requeued by the broker
+        if (exception.message === 'Channel closed') return // the message will be requeued by the broker
 
         if (message.fields.redelivered) this.#discard(message, exception)
         else this.#requeue(message)
@@ -238,14 +261,14 @@ class Channel {
     }
 
   /**
-   * @param {import('amqplib').ConsumeMessage} message
+   * @param {comq.amqp.Message} message
    */
   #requeue (message) {
     this.#channel.nack(message, false, true)
   }
 
   /**
-   * @param {import('amqplib').ConsumeMessage} message
+   * @param {comq.amqp.Message} message
    * @param {Error} [exception]
    */
   #discard (message, exception) {
@@ -259,6 +282,8 @@ class Channel {
     this.#paused = promex()
     this.#channel.once('drain', this.#unpause)
     this.#diagnostics.emit('flow')
+
+    if (this.#failfast) throw INTERRUPTION
   }
 
   /**
@@ -276,20 +301,20 @@ class Channel {
 
   async #recover (exception) {
     if (permanent(exception)) return false
-
-    await this.#recovery
+    else await this.#recovery
   }
 }
 
 /**
  * @param {comq.amqp.Connection} connection
  * @param {comq.Topology} topology
+ * @param {number} [index]
  * @return {Promise<comq.Channel>}
  */
-const create = async (connection, topology) => {
-  const channel = new Channel(topology)
+async function create (connection, topology, index) {
+  const channel = new Channel(connection, topology, index)
 
-  await channel.create(connection)
+  await channel.create()
 
   return channel
 }
@@ -297,24 +322,23 @@ const create = async (connection, topology) => {
 /**
  * @return {boolean}
  */
-const permanent = (exception) => {
+function permanent (exception) {
   const closed = exception.message === 'Channel closed'
   const ended = exception.message === 'Channel ended, no reply will be forthcoming'
-  const internal = exception === REJECTION
-  const unpause = exception.pause === 1
+  const internal = exception === INTERRUPTION
 
-  return !closed && !ended && !internal && !unpause
+  return !closed && !ended && !internal
 }
 
 const DEFAULT = ''
 
-/** @type {import('amqplib').Options.AssertQueue} */
+/** @type {comq.amqp.options.Queue} */
 const DURABLE = { durable: true }
 
-/** @type {import('amqplib').Options.AssertQueue} */
+/** @type {comq.amqp.options.Queue} */
 const EXCLUSIVE = { exclusive: true }
 
-const REJECTION = /** @type {Error} */ Symbol('rejection')
+const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 
 function noop () {}
 

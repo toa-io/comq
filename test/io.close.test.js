@@ -104,7 +104,7 @@ describe('close', () => {
     const callback = channel.subscribe.mock.calls[0][2]
     const content = randomBytes(8)
     const properties = {}
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
 
     callback(message)
 
@@ -137,7 +137,7 @@ describe('close', () => {
     const callback = channel.consume.mock.calls[0][1]
     const content = generate()
     const properties = { replyTo: generate(), contentType: 'text/plain' }
-    const message = /** @type {import('amqplib').ConsumeMessage} */ { content, properties }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
 
     callback(message)
 

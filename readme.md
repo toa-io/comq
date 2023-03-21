@@ -5,16 +5,16 @@ Node.js.
 
 ## Features
 
-1. Dynamic topology
-2. Request-reply (RPC)
-3. Events (pub/sub)
-4. Content encoding
-5. Flow control and back pressure handling
-6. Consumer acknowledgments and publisher confirms
-7. Poison message handling
-8. Connection tolerance
-9. Broker restart resilience
-10. Graceful shutdown
+1. [Dynamic topology](#topology)
+2. [Request](#request)-[reply](#reply) (RPC)
+3. Events ([pub](#emission)/[sub](#consumption))
+4. [Content encoding](#encoding)
+5. [Flow control](#flow-control) and back pressure handling
+6. [Consumer acknowledgments](#messages) and [publisher confirms](#channels)
+7. [Poison message handling](#messages)
+8. [Connection tolerance](#connection-tolerance) and broker restart resilience
+9. [Sharded connection](#sharded-connection)
+10. [Graceful shutdown](#graceful-shutdown)
 
 > CommonJS, ECMAScript and TypeScript compatible (types included).
 
@@ -177,18 +177,61 @@ The following encoding formats are supported:
 
 When initially connecting to the broker or if the established connection is lost, connection
 attempts will be repeated indefinitely with intervals increasing up to 30 seconds. Once reconnected,
-the topology will be recovered, and unanswered Requests and unconfirmed Events will be resent.
+the topology will be recovered, and unanswered Requests and unconfirmed Events will be
+retransmitted.
 
 If the broker rejects the connection (for example, due to access being denied), an exception will be
 thrown.
+
+## Sharded Connection
+
+*Send to one, receive from all.*
+
+A sharded connection is a mechanism that uses multiple connections simultaneously to achieve load
+balancing and mitigate failover scenarios, utilizing a set of broker instances that are **not**
+combined into a cluster.
+
+`async connect(...shards: string[]): IO`
+
+Returns an instance of `IO` once a successful connection to one of the shards is established.
+
+Outgoing messages are sent to a single connection chosen at random from the shard pool. Shards that
+lose their underlying connection or experience channel [back pressure](#flow-control) on
+corresponding channel are removed from the pool until the issue is resolved. Pending messages
+meeting these conditions are immediately routed among the remaining shards in the pool. If no shards
+are available, messages will wait until any shard's connection is re-established.
+
+Incoming messages are consumed from all shards.
+
+### Example
+
+```javascript
+
+const shard0 = 'amqp://developer:secret@localhost:5673'
+const shard1 = 'amqp://developer:secret@localhost:5674'
+
+const io = await connect(shard0, shard1)
+
+// ...
+
+await io.close()
+
+```
+
+## Flow Control
+
+When [back pressure](https://www.rabbitmq.com/flow-control.html) is applied to a channel or the
+underlying broker connection is lost, any current and future outgoing messages will be paused.
+Corresponding returned promises will remain in a `pending` state until the pressure is removed or
+the connection is restored.
 
 ## Topology
 
 Topology is designed to deliver maximum performance while ensuring that the **at least once**
 guarantee provided by RabbitMQ is maintained.
 
-> Topology design assumes that unanswered Requests and unconfirmed Events will be resent upon
-> reconnection.
+> Topology design assumes that unanswered Requests and unconfirmed Events will be retransmitted
+> upon reconnection.
 
 ### Dynamic
 
@@ -297,18 +340,23 @@ calling `IO.close()`.
 
 Subscribe to one of the diagnostic events:
 
-- `open`: connection is restored[^3].
+- `open`: connection is opened[^3].
 - `close`: connection is closed.
   Optional [`error`](https://amqp-node.github.io/amqplib/channel_api.html#model_events) is passed
   as an argument.
 - `flow`: back pressure is applied to a channel. [Channel type](./types/topology.d.ts) is passed as
   an argument.
 - `drain`: back pressure is removed from a channel. Channel type is passed.
+- `remove`: channel is removed from the [pool](#sharded-connection).
 - `recover`: channel's topology is recovered. Channel type is passed.
 - `discard`: message is [discarded](#messages) as it repeatedly caused
   exceptions. Channel type,
   raw [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_consume)
   and the exception are passed as arguments.
+
+In the case of a [sharded connection](#sharded-connection), an additional argument specifying the
+shard number will be passed to listeners. The shard number corresponds to the number of the argument
+used in the `connect` function call.
 
 [^3]: As [`connect`](#connect) function returns an instance of `IO` *after* the connection has been
 established, there is no way to capture the initial `open` event.
