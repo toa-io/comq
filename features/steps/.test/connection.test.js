@@ -175,6 +175,22 @@ describe('When I attempt to establish sharded connection', () => {
   })
 })
 
+describe('When I attempt to establish a sharded connection as {string} with password {string}', () => {
+  const step = tomato.steps.Wh('I attempt to establish a sharded connection as {string} with password {string}')
+
+  it('should be', async () => undefined)
+
+  const user = generate()
+  const password = generate()
+
+  it('should connect with credentials', async () => {
+    await step.call(context, user, password)
+
+    expect(context.sharded).toStrictEqual(true)
+    expect(context.connect).toHaveBeenCalledWith(user, password)
+  })
+})
+
 describe.each([['', true], [' not', false]])('Then the connection is%s established',
   (not, connected) => {
     const step = tomato.steps.Th(`the connection is${not} established`)

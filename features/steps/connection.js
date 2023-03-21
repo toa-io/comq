@@ -85,6 +85,18 @@ When('I attempt to establish sharded connection',
     await connect(this)
   })
 
+When('I attempt to establish a sharded connection as {string} with password {string}',
+  /**
+   * @param {string} user
+   * @param {string} password
+   * @this {comq.features.Context}
+   */
+  async function (user, password) {
+    this.sharded = true
+
+    await connect(this, user, password)
+  })
+
 Then('the connection is not established',
   /**
    * @this {comq.features.Context}
@@ -163,7 +175,7 @@ const connect = async (context, user, password) => {
   try {
     await context.connect(user, password)
   } catch (exception) {
-    context.exception = exception
+    context.exception = exception instanceof AggregateError ? exception.errors[0] : exception
   }
 }
 
