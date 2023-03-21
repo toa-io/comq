@@ -10,11 +10,11 @@ class Context extends World {
   io
   connected = false
   connecting
-  requestCount = 0
-  replyCount = 0
+  requestsSent = []
   reply
   consumed
   published
+  eventsPublishedCount = 0
   events = {}
   exception
   expected

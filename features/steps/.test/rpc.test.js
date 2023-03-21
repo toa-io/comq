@@ -2,7 +2,7 @@
 
 const { AssertionError } = require('node:assert')
 const { generate } = require('randomstring')
-const { promex } = require('@toa.io/generic')
+const { promex, timeout } = require('@toa.io/generic')
 const { dump } = require('@toa.io/yaml')
 const tomato = require('@toa.io/tomato')
 const { io } = require('./io.mock')
@@ -53,10 +53,10 @@ describe('Given a producer replying {token} queue', () => {
     expect(io.reply).toHaveBeenCalledWith(queue, expect.any(Function))
 
     const producer = io.reply.mock.calls[0][1]
-    const message = /** @type {comq.amqp.Message} */ {}
+    const message = generate()
     const reply = await producer(message)
 
-    expect(reply).toBeInstanceOf(Buffer)
+    expect(reply).toStrictEqual(message)
   })
 })
 
@@ -202,10 +202,58 @@ describe('Then the consumer does not receive the reply', () => {
   })
 })
 
-describe('Then all replies have been received', () => {
-  const step = tomato.steps.Th('all replies have been received')
+describe('Given I\'m sending {quantity}B requests to the {token} queue at {quantity}Hz', () => {
+  const step = tomato.steps.Gi('I\'m sending {quantity}B requests to the {token} queue at {quantity}Hz')
 
   it('should be', async () => undefined)
 
+  it('should send requests continuously', async () => {
+    context = /** @type {comq.features.Context} */  {
+      io: /** @type {jest.MockedObject<comq.IO>} */ { request: jest.fn() },
+      requestsSent: []
+    }
 
+    const bytesQ = '1k'
+    const queue = generate()
+    const frequencyQ = '100'
+
+    step.call(context, bytesQ, queue, frequencyQ)
+
+    await timeout(100 + 15)
+
+    expect(context.io.request).toHaveBeenCalledTimes(10)
+    expect(context.sending).toBeDefined()
+    expect(context.requestsSent.length).toStrictEqual(10)
+
+    clearInterval(context.sending)
+  })
+})
+
+describe('Then all replies have been received', () => {
+  const step = tomato.steps.Th('all replies have been received')
+
+  /** @type {jest.MockedObject<comq.features.Context>} */
+  let context
+
+  it('should be', async () => undefined)
+
+  beforeEach(async () => {
+    context = /** @type {jest.MockedObject<comq.features.Context>} */ {
+      requestsSent: [promex(), promex()]
+    }
+  })
+
+  it('should pass if replies received', async () => {
+    let completed = false
+
+    setImmediate(() => {
+      completed = true
+
+      for (const promise of context.requestsSent) promise.resolve()
+    })
+
+    await step.call(context)
+
+    expect(completed).toStrictEqual(true)
+  })
 })

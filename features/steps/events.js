@@ -2,8 +2,9 @@
 
 const assert = require('node:assert')
 const { generate } = require('randomstring')
-const { timeout } = require('@toa.io/generic')
+const { timeout, quantity } = require('@toa.io/generic')
 const { Given, When, Then } = require('@cucumber/cucumber')
+const { randomBytes } = require('node:crypto')
 
 Given('(that ){token} is consuming events from the {token} exchange',
   /**
@@ -68,6 +69,43 @@ Then('the event is received',
     await consumed.call(this)
   })
 
+Given('I\'m publishing {quantity}B events to the {token} exchange at {quantity}Hz',
+  /**
+   * @param {string} bytesQ
+   * @param {string} queue
+   * @param {string} frequencyQ
+   * @this {comq.features.Context}
+   */
+  async function (bytesQ, queue, frequencyQ) {
+    const bytes = quantity(bytesQ)
+    const frequency = quantity(frequencyQ)
+    const buffer = randomBytes(bytes)
+
+    const delay = Math.max((1000 / frequency), 1)
+
+    const emit = async () => {
+      await this.io.emit(queue, buffer)
+
+      this.eventsPublishedCount++
+    }
+
+    this.publishing = setInterval(emit, delay)
+
+    await timeout(delay * 2) // send at least twice
+  })
+
+Then('all events have been received',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    clearInterval(this.publishing)
+
+    await timeout(50)
+
+    assert.equal(this.eventsPublishedCount, this.eventsConsumedCount, 'Not all events has been consumed')
+  })
+
 /**
  * @this {comq.features.Context} context
  * @param {string} group
@@ -79,6 +117,7 @@ async function consume (group, exchange) {
 
   return this.io.consume(exchange, group, async (payload) => {
     this.consumed[group] = payload
+    this.eventsConsumedCount++
   })
 }
 

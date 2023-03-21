@@ -3,7 +3,7 @@
 const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
 const { parse } = require('@toa.io/yaml')
-const { match, timeout } = require('@toa.io/generic')
+const { match, timeout, quantity } = require('@toa.io/generic')
 const { Given, When, Then } = require('@cucumber/cucumber')
 
 Given('function replying {token} queue:',
@@ -25,7 +25,7 @@ Given('a producer replying {token} queue',
    * @this {comq.features.Context}
    */
   async function (queue) {
-    const producer = async () => randomBytes(8)
+    const producer = async (request) => request
 
     await this.io.reply(queue, producer)
   })
@@ -102,12 +102,38 @@ Then('the consumer does not receive the reply',
     assert.equal(reply, undefined, 'The reply was received')
   })
 
+Given('I\'m sending {quantity}B requests to the {token} queue at {quantity}Hz',
+  /**
+   * @param {string} bytesQ
+   * @param {string} queue
+   * @param {string} frequencyQ
+   * @this {comq.features.Context}
+   */
+  async function (bytesQ, queue, frequencyQ) {
+    const bytes = quantity(bytesQ)
+    const buffer = randomBytes(bytes)
+    const frequency = quantity(frequencyQ)
+    const delay = Math.max((1000 / frequency), 1)
+
+    const emit = () => {
+      const promise = this.io.request(queue, buffer)
+
+      this.requestsSent.push(promise)
+    }
+
+    this.sending = setInterval(emit, delay)
+
+    await timeout(delay) // send at least twice
+  })
+
 Then('all replies have been received',
   /**
    * @this {comq.features.Context}
    */
   async function () {
+    clearInterval(this.sending)
 
+    await Promise.all(this.requestsSent)
   })
 
 async function send (queue, payload) {

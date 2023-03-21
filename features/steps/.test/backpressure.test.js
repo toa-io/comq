@@ -62,7 +62,7 @@ describe('Then back pressure was applied', () => {
   const step = tomato.steps.Th('back pressure was applied')
 
   beforeEach(() => {
-    context = /** @type {comq.features.Context} */ { io }
+    context = /** @type {comq.features.Context} */ { io, events: {} }
   })
 
   it('should be', async () => undefined)

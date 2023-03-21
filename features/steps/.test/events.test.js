@@ -2,7 +2,7 @@
 
 const { AssertionError } = require('node:assert')
 const { generate } = require('randomstring')
-const { promex } = require('@toa.io/generic')
+const { promex, timeout, random } = require('@toa.io/generic')
 const tomato = require('@toa.io/tomato')
 const { io } = require('./io.mock')
 const mock = { tomato }
@@ -150,5 +150,68 @@ describe('Then the event is received', () => {
     context.published = payload
 
     await expect(step.call(context, group)).resolves.not.toThrow()
+  })
+})
+
+
+describe('Given I\'m publishing {quantity}B events to the {token} exchange at {quantity}Hz', () => {
+  const step = tomato.steps.Gi('I\'m publishing {quantity}B events to the {token} exchange at {quantity}Hz')
+
+  it('should be', async () => undefined)
+
+  it('should publish events continuously', async () => {
+    context = /** @type {comq.features.Context} */  {
+      io: /** @type {jest.MockedObject<comq.IO>} */ { emit: jest.fn() },
+      requestsSent: [],
+      eventsPublishedCount: 0
+    }
+
+    const bytesQ = '1k'
+    const exchange = generate()
+    const frequencyQ = '100'
+
+    step.call(context, bytesQ, exchange, frequencyQ)
+
+    await timeout(100 + 15)
+
+    expect(context.io.emit).toHaveBeenCalledTimes(10)
+    expect(context.publishing).toBeDefined()
+    expect(context.eventsPublishedCount).toStrictEqual(10)
+
+    clearInterval(context.publishing)
+  })
+})
+
+describe('Then all events have been received', () => {
+  const step = tomato.steps.Th('all events have been received')
+
+  /** @type {jest.MockedObject<comq.features.Context>} */
+  let context
+
+  it('should be', async () => undefined)
+
+  beforeEach(async () => {
+    context = /** @type {jest.MockedObject<comq.features.Context>} */ {
+      eventsPublishedCount: random(100),
+      eventsConsumedCount: 100 + random()
+    }
+  })
+
+  it('should pass if events received', async () => {
+    context.eventsConsumedCount = context.eventsPublishedCount
+
+    await expect(step.call(context)).resolves.not.toThrow()
+  })
+
+  it('should fail if events are not received', async () => {
+    await expect(step.call(context)).rejects.toThrow(AssertionError)
+  })
+
+  it('should wait for last events (50ms)', async () => {
+    setTimeout(() => {
+      context.eventsConsumedCount = context.eventsPublishedCount
+    }, 49)
+
+    await expect(step.call(context)).resolves.not.toThrow()
   })
 })
