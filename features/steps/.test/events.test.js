@@ -172,7 +172,7 @@ describe('Given I\'m publishing {quantity}B events to the {token} exchange at {q
 
     step.call(context, bytesQ, exchange, frequencyQ)
 
-    await timeout(100 + 15)
+    await timeout(100 + 11)
 
     expect(context.io.emit).toHaveBeenCalledTimes(10)
     expect(context.publishing).toBeDefined()

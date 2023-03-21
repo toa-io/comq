@@ -219,7 +219,7 @@ describe('Given I\'m sending {quantity}B requests to the {token} queue at {quant
 
     step.call(context, bytesQ, queue, frequencyQ)
 
-    await timeout(100 + 15)
+    await timeout(100 + 11)
 
     expect(context.io.request).toHaveBeenCalledTimes(10)
     expect(context.sending).toBeDefined()
