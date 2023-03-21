@@ -25,7 +25,11 @@ Given('a producer replying {token} queue',
    * @this {comq.features.Context}
    */
   async function (queue) {
-    const producer = async (request) => request
+    const producer = async (request) => {
+      await timeout(10)
+
+      return request
+    }
 
     await this.io.reply(queue, producer)
   })

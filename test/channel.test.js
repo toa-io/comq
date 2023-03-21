@@ -872,9 +872,10 @@ describe('transient', () => {
   const exchange = generate()
   const queue = generate()
   const buffer = randomBytes(8)
+  const index = random()
 
   beforeEach(async () => {
-    channel = await create(connection, topology, true)
+    channel = await create(connection, topology, index)
     chan = await getCreatedChannel()
   })
 
@@ -900,6 +901,10 @@ describe('transient', () => {
     chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
 
     await expect(channel.throw(queue, buffer)).rejects.toThrow()
+  })
+
+  it('should expose index', async () => {
+    expect(channel.index).toStrictEqual(index)
   })
 })
 

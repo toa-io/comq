@@ -8,6 +8,8 @@ const events = require('../events')
  * @implements {comq.Channel}
  */
 class Channel {
+  sharded = true
+
   /** @type {comq.Connection[]} */
   #connections
 
@@ -79,11 +81,11 @@ class Channel {
    * @return {Promise<void>}
    */
   #create = async (connection, index) => {
-    const pending = connection.createChannel(this.#type, true)
+    const pending = connection.createChannel(this.#type, index)
     const channel = await this.#pend(pending)
 
     this.#add(channel)
-    this.#pipe(channel, index)
+    this.#pipe(channel)
 
     channel.diagnose('recover', () => this.#recover(channel))
   }
@@ -105,6 +107,15 @@ class Channel {
   /**
    * @param {comq.Channel} channel
    */
+  #pipe (channel) {
+    for (const event of events.channel) {
+      channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, channel.index))
+    }
+  }
+
+  /**
+   * @param {comq.Channel} channel
+   */
   #add (channel) {
     this.#channels.add(channel)
     this.#pool = Array.from(this.#channels)
@@ -112,19 +123,11 @@ class Channel {
 
   /**
    * @param {comq.Channel} channel
-   * @param {number} index
-   */
-  #pipe (channel, index) {
-    for (const event of events.channel) {
-      channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
-    }
-  }
-
-  /**
-   * @param {comq.Channel} channel
    */
   #remove (channel) {
     if (!this.#channels.has(channel)) return
+
+    this.#diagnostics.emit('remove', channel.index)
 
     this.#bench[channel] = promex()
     this.#channels.delete(channel)

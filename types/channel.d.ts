@@ -10,6 +10,9 @@ declare namespace comq {
   }
 
   interface Channel {
+    index?: number
+    sharded?: boolean
+
     create(): Promise<void>
 
     consume(queue: string, consumer: channels.consumer): Promise<void>

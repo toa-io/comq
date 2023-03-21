@@ -45,14 +45,14 @@ class Connection {
   createChannel = failsafe(this, this.#recover,
     /**
      * @param {comq.topology.type} type
-     * @param {boolean} [failfast]
+     * @param {number} [index]
      * @return {Promise<comq.Channel>}
      */
-    async (type, failfast = false) => {
+    async (type, index) => {
       if (this.#connection === undefined) await this.#recovery
 
       const topology = presets[type]
-      const channel = await channels.create(this.#connection, topology, failfast)
+      const channel = await channels.create(this.#connection, topology, index)
 
       this.#channels.push(channel)
 

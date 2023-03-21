@@ -125,7 +125,7 @@ class IO {
     this.#requests = await this.#createChannel('request')
     this.#replies = await this.#createChannel('reply')
 
-    this.#requests.diagnose('recover', this.#retransmit)
+    this.#setupRetransmission()
   }
 
   async #createEventChannel () {
@@ -155,6 +155,12 @@ class IO {
     }
 
     return channel
+  }
+
+  #setupRetransmission () {
+    const event = (this.#requests.sharded === true) ? 'remove' : 'recover'
+
+    this.#requests.diagnose(event, this.#retransmit)
   }
 
   /**
@@ -187,6 +193,9 @@ class IO {
    * @returns {comq.channels.consumer}
    */
   #getReplyConsumer = (queue, emitter) =>
+    /**
+     * @param {comq.amqp.Message} message
+     */
     (message) => {
       const payload = decode(message)
 

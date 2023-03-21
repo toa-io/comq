@@ -31,7 +31,7 @@ Feature: Sharded Connection
   Scenario: Shard crashes while sending requests
     Given the connection to both shards is established
     And a producer replying `flood` queue
-    And I'm sending 1kB requests to the `flood` queue at 100Hz
+    And I'm sending 1kB requests to the `flood` queue at 1kHz
     When one of the brokers has crashed
     Then no exceptions are thrown
     And all replies have been received

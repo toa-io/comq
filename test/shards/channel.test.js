@@ -2,7 +2,7 @@
 
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
-const { promex, sample, immediate, random } = require('@toa.io/generic')
+const { promex, sample, immediate, random, each } = require('@toa.io/generic')
 
 const mock = require('../connection.mock')
 
@@ -21,6 +21,12 @@ let channel
 
 beforeEach(() => {
   jest.clearAllMocks()
+})
+
+it('should expose `sharded`', async () => {
+  channel = await create(connections, type)
+
+  expect(channel.sharded).toStrictEqual(true)
 })
 
 it('should resolve when one of the connections has created a channel', async () => {
@@ -57,9 +63,9 @@ it('should resolve when one of the connections has created a channel', async () 
 it('should create failfast channels of given type', async () => {
   await create(connections, type)
 
-  for (const conn of connections) {
-    expect(conn.createChannel).toHaveBeenCalledWith(type, true)
-  }
+  each(connections, (conn, index) => {
+    expect(conn.createChannel).toHaveBeenCalledWith(type, index)
+  })
 })
 
 describe.each(['consume', 'subscribe'])('%s', (method) => {
@@ -285,12 +291,17 @@ describe('seal', () => {
 describe('diagnose', () => {
   const events = /** @type {comq.diagnostics.event[]} */ ['flow', 'drain', 'recover', 'discard']
 
-  it.each(events)('should re-emit %s event',
-    async (event) => {
-      channel = await create(connections, type)
+  /** @type {jest.MockedObject<comq.Channel>[]} */
+  let channels
 
+  beforeEach(async () => {
+    channel = await create(connections, type)
+    channels = await getCreatedChannels()
+  })
+
+  it.each(events)('should re-emit `%s` event',
+    async (event) => {
       const listener = /** @type {Function} */ jest.fn()
-      const channels = await getCreatedChannels()
       const index = random(channels.length)
       const chan = channels[index]
 
@@ -306,6 +317,27 @@ describe('diagnose', () => {
 
       expect(listener).toHaveBeenCalledWith(...args, index)
     })
+
+  it('should emit `remove` event', async () => {
+    const queue = generate()
+    const buffer = randomBytes(8)
+    const chan = sample(channels)
+    const listener = /** @type {jest.MockedFunction} */ jest.fn()
+
+    let thrown = false
+
+    channel.diagnose('remove', listener)
+
+    chan.send.mockImplementationOnce(() => {
+      thrown = true
+      throw new Error()
+    })
+
+    // eslint-disable-next-line no-unmodified-loop-condition
+    while (!thrown) await channel.send(queue, buffer)
+
+    expect(listener).toHaveBeenCalledWith(expect.any(Number))
+  })
 })
 
 it('should not throw on recovery (if the "bench" is empty)', async () => {

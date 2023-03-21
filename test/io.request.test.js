@@ -174,6 +174,32 @@ describe('send', () => {
 
     expect(requests.send).toHaveBeenCalledTimes(2)
   })
+
+  it('should resend unanswered Requests on sharded connection', async () => {
+    jest.clearAllMocks()
+
+    connection = mock.connection(true)
+    io = new IO(connection)
+
+    promise = io.request(queue, payload)
+
+    // allows initializers to run
+    await immediate()
+
+    requests = await findChannel('request')
+
+    expect(requests.sharded).toStrictEqual(true)
+    expect(requests.diagnose).toHaveBeenCalledWith('remove', expect.any(Function))
+
+    const calls = requests.diagnose.mock.calls.filter((call) => call[0] === 'remove')
+    const listeners = calls.map((call) => call[1])
+
+    for (const listener of listeners) listener()
+
+    await immediate()
+
+    expect(requests.send).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('reply', () => {

@@ -7,6 +7,8 @@ const { lazy, recall, promex, failsafe, immediate } = require('@toa.io/generic')
  * @implements {comq.Channel}
  */
 class Channel {
+  index
+
   /** @type {comq.amqp.Connection} */
   #connection
 
@@ -39,14 +41,16 @@ class Channel {
   /**
    * @param {comq.amqp.Connection} connection
    * @param {comq.Topology} topology
-   * @param {boolean} failfast
+   * @param {number} index
    */
-  constructor (connection, topology, failfast) {
+  constructor (connection, topology, index) {
+    this.index = index
+
     this.#connection = connection
     this.#topology = topology
-    this.#failfast = failfast
+    this.#failfast = index !== undefined
 
-    if (failfast) failsafe.disable(this.send, this.publish)
+    if (this.#failfast) failsafe.disable(this.send, this.publish)
   }
 
   async create () {
@@ -304,11 +308,11 @@ class Channel {
 /**
  * @param {comq.amqp.Connection} connection
  * @param {comq.Topology} topology
- * @param {boolean} [failfast]
+ * @param {number} [index]
  * @return {Promise<comq.Channel>}
  */
-async function create (connection, topology, failfast = false) {
-  const channel = new Channel(connection, topology, failfast)
+async function create (connection, topology, index) {
+  const channel = new Channel(connection, topology, index)
 
   await channel.create()
 

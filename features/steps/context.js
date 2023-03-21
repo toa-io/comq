@@ -15,6 +15,7 @@ class Context extends World {
   consumed
   published
   eventsPublishedCount = 0
+  eventsConsumedCount = 0
   events = {}
   exception
   expected

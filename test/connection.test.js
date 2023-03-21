@@ -4,7 +4,7 @@
 
 const { generate } = require('randomstring')
 
-const { timeout, promex } = require('@toa.io/generic')
+const { timeout, promex, random } = require('@toa.io/generic')
 const { amqplib } = require('./amqplib.mock')
 const { channel: create } = require('./connection.mock')
 const mock = { amqplib, channel: { create } }
@@ -134,16 +134,17 @@ describe('create channel', () => {
       const preset = presets[type]
       const channel = await connection.createChannel(type)
 
-      expect(create).toHaveBeenCalledWith(conn, preset, false)
+      expect(create).toHaveBeenCalledWith(conn, preset, undefined)
       expect(channel).toStrictEqual(await create.mock.results[0].value)
     })
 
   it('should create failfast channel', async () => {
     const type = 'request'
+    const index = random()
 
-    await connection.createChannel(type, true)
+    await connection.createChannel(type, index)
 
-    expect(create).toHaveBeenCalledWith(expect.anything(), expect.anything(), true)
+    expect(create).toHaveBeenCalledWith(expect.anything(), expect.anything(), index)
   })
 
   it('should create channel after exception', async () => {
