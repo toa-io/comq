@@ -206,7 +206,7 @@ thrown.
 
 ## Sharded Connection
 
-*Send to one, consume from all.*
+*Send to one, receive from all.*
 
 A sharded connection is a mechanism that uses multiple connections simultaneously to achieve load
 balancing and mitigate failover scenarios, utilizing a set of broker instances that are **not**
