@@ -174,26 +174,6 @@ The following encoding formats are supported:
 - `application/octet-stream`
 - `text/plain`
 
-## Flow Control
-
-When [back pressure](https://www.rabbitmq.com/flow-control.html) is applied to a channel or the
-underlying broker connection is lost, any current and future outgoing messages will be paused.
-Corresponding returned promises will remain in a `pending` state until the pressure is removed or
-the connection is restored.
-
-Under these circumstances, an application that consumes requests and produces replies will hit the
-prefetch limit of incoming messages and become unresponsive until the issue is resolved.
-
-When an application becomes unresponsive, it can cause a chain reaction that makes all of its
-clients unresponsive, up to the system's *entry point* (which is typically the API Gateway).
-Therefore, the flow control of a distributed system is managed by its entry point, giving developers
-the choice to either stop accepting new requests (e.g., by replying with
-a [`429`](https://www.rfc-editor.org/rfc/rfc6585.html#section-4) HTTP status code for an API), or to
-continue sending new requests ignoring back pressure mechanism, risking a potential RabbitMQ crash
-due to running out of memory.
-
-> ComQ does not currently provide an option to ignore back pressure mechanism.
-
 ## Connection Tolerance
 
 When initially connecting to the broker or if the established connection is lost, connection
@@ -238,6 +218,13 @@ const io = await connect(shard0, shard1)
 await io.close()
 
 ```
+
+## Flow Control
+
+When [back pressure](https://www.rabbitmq.com/flow-control.html) is applied to a channel or the
+underlying broker connection is lost, any current and future outgoing messages will be paused.
+Corresponding returned promises will remain in a `pending` state until the pressure is removed or
+the connection is restored.
 
 ## Topology
 
@@ -361,7 +348,7 @@ Subscribe to one of the diagnostic events:
 - `flow`: back pressure is applied to a channel. [Channel type](./types/topology.d.ts) is passed as
   an argument.
 - `drain`: back pressure is removed from a channel. Channel type is passed.
-- `remove`: channel is removed from the [pool](#sharded-connection). Channel type is passed.
+- `remove`: channel is removed from the [pool](#sharded-connection).
 - `recover`: channel's topology is recovered. Channel type is passed.
 - `discard`: message is [discarded](#messages) as it repeatedly caused
   exceptions. Channel type,
