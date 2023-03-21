@@ -361,6 +361,7 @@ Subscribe to one of the diagnostic events:
 - `flow`: back pressure is applied to a channel. [Channel type](./types/topology.d.ts) is passed as
   an argument.
 - `drain`: back pressure is removed from a channel. Channel type is passed.
+- `remove`: channel is removed from the [pool](#sharded-connection). Channel type is passed.
 - `recover`: channel's topology is recovered. Channel type is passed.
 - `discard`: message is [discarded](#messages) as it repeatedly caused
   exceptions. Channel type,
