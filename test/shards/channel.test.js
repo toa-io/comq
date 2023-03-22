@@ -140,7 +140,7 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
   })
 })
 
-describe.each(/** @type {string[]} */['send', 'publish', 'throw'])('%s', (method) => {
+describe.each(/** @type {string[]} */['send', 'publish', 'fire'])('%s', (method) => {
   const label = generate()
   const buffer = randomBytes(8)
   const options = { contentType: generate() }

@@ -184,7 +184,7 @@ class IO {
       const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
       const properties = { contentType, correlationId }
 
-      await this.#replies.throw(message.properties.replyTo, buffer, properties)
+      await this.#replies.fire(message.properties.replyTo, buffer, properties)
     })
 
   /**
