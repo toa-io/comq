@@ -2,6 +2,8 @@
 
 To run examples please start RabbitMQ server with `docker compose up -d` in the package root.
 
+> Try to run example first.
+
 ## RPC
 
 Run in two terminals:
