@@ -14,6 +14,10 @@
   "bugs": {
     "url": "https://github.com/toa-io/comq/issues"
   },
+  "keywords": [
+    "AMQP",
+    "RabbitMQ"
+  ],
   "engines": {
     "node": ">= 12.0.0"
   },
