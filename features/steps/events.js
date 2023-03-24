@@ -115,10 +115,14 @@ Then('all events have been received',
 async function consume (group, exchange) {
   this.consumed ??= {}
 
-  return this.io.consume(exchange, group, async (payload) => {
+  const consumer = async (payload) => {
     this.consumed[group] = payload
     this.eventsConsumedCount++
-  })
+  }
+
+  return group === undefined
+    ? this.io.consume(exchange, consumer)
+    : this.io.consume(exchange, group, consumer)
 }
 
 /**

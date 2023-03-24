@@ -124,8 +124,8 @@ Event message is delivered to a single Consumer within *each group*.
 > Typically, the value of `group` refers to the name of a microservice running in multiple
 > instances.
 
-If the `group` is `undefined` or omitted, a unique value is generated and the queue is declared as
-exclusive.
+If the `group` is `undefined` or omitted, a queue for the Consumer is asserted as exclusive with
+auto-generated name.
 
 ### Example
 
