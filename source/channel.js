@@ -104,7 +104,7 @@ class Channel {
         await this.#publish(exchange, DEFAULT, buffer, options)
       }))
 
-  async throw (queue, buffer, options) {
+  async fire (queue, buffer, options) {
     try {
       await this.#publish(DEFAULT, queue, buffer, options)
     } catch (exception) {

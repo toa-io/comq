@@ -83,7 +83,12 @@ class IO {
 
   consume = lazy(this, this.#createEventChannel,
     async (exchange, group, callback) => {
-      const exclusive = group === undefined || callback === undefined // 2 arguments passed
+      if (callback === undefined) { // 2 arguments passed
+        callback = group
+        group = undefined
+      }
+
+      const exclusive = group === undefined
       const queue = exclusive ? undefined : io.concat(exchange, group)
       const consumer = this.#getEventConsumer(callback)
 
@@ -184,7 +189,7 @@ class IO {
       const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
       const properties = { contentType, correlationId }
 
-      await this.#replies.throw(message.properties.replyTo, buffer, properties)
+      await this.#replies.fire(message.properties.replyTo, buffer, properties)
     })
 
   /**

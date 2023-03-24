@@ -91,7 +91,7 @@ describe('reply', () => {
   beforeEach(async () => {
   })
 
-  it('should `throw` reply', async () => {
+  it('should `fire` reply', async () => {
     await io.reply(queue, produce)
 
     requests = await findChannel('request')
@@ -107,7 +107,7 @@ describe('reply', () => {
     const reply = await produce.mock.results[0].value
     const buffer = encode(reply, properties.contentType)
 
-    expect(replies.throw).toHaveBeenCalledWith(properties.replyTo, buffer, expect.anything())
+    expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, buffer, expect.anything())
   })
 
   it('should throw if producer returned undefined', async () => {
@@ -177,7 +177,7 @@ describe('encoding', () => {
       contentType: properties.contentType
     }
 
-    expect(replies.throw).toHaveBeenCalledWith(properties.replyTo, reply, props)
+    expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, reply, props)
   })
 
   it('should set octet-stream for Buffer reply', async () => {
@@ -198,7 +198,7 @@ describe('encoding', () => {
 
     await producer(message)
 
-    expect(replies.throw)
+    expect(replies.fire)
       .toHaveBeenCalledWith(
         expect.any(String),
         buffer,

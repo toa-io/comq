@@ -283,7 +283,7 @@ describe('send', () => {
   })
 })
 
-describe('throw', () => {
+describe('fire', () => {
   const queue = generate()
   const buffer = randomBytes(10)
   const options = { contentType: 'application/octet-stream' }
@@ -294,11 +294,11 @@ describe('throw', () => {
   })
 
   it('should be', async () => {
-    expect(channel.throw).toBeDefined()
+    expect(channel.fire).toBeDefined()
   })
 
   it('should publish a message', async () => {
-    await channel.throw(queue, buffer, options)
+    await channel.fire(queue, buffer, options)
 
     const call = chan.publish.mock.calls[0]
 
@@ -311,7 +311,7 @@ describe('throw', () => {
   it('should ignore exceptions', async () => {
     chan.publish.mockImplementation(() => { throw new Error() })
 
-    await expect(channel.throw(queue, buffer, options)).resolves.not.toThrow()
+    await expect(channel.fire(queue, buffer, options)).resolves.not.toThrow()
   })
 
   it('should wait for unpause', async () => {
@@ -342,7 +342,7 @@ describe('throw', () => {
       chan.emit('drain')
     })
 
-    await channel.throw(queue, buffer, options)
+    await channel.fire(queue, buffer, options)
 
     expect(chan.publish).toHaveBeenCalledTimes(3)
   })
@@ -900,7 +900,7 @@ describe('transient', () => {
   it('should not ignore exceptions on `throw()`', async () => {
     chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
 
-    await expect(channel.throw(queue, buffer)).rejects.toThrow()
+    await expect(channel.fire(queue, buffer)).rejects.toThrow()
   })
 
   it('should expose index', async () => {

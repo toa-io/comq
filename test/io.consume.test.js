@@ -84,6 +84,18 @@ describe.each(['omitted', 'undefined'])('exclusive consumption (group is %s)', (
     expect(events).toBeDefined()
     expect(events.subscribe).toHaveBeenCalledWith(exchange, undefined, expect.any(Function))
   })
+
+  it('should pass messages to the consumer', async () => {
+    const emit = events.subscribe.mock.calls[0][2]
+    const content = generate()
+    const contentType = 'text/plain'
+    const properties = { contentType }
+    const message = { content, properties }
+
+    await emit(message)
+
+    expect(consumer).toHaveBeenCalledWith(message.content)
+  })
 })
 
 /**

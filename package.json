@@ -1,6 +1,6 @@
 {
   "name": "comq",
-  "version": "0.5.0",
+  "version": "0.5.1-dev.1",
   "description": "ComQ",
   "author": {
     "name": "Artem Gurtovoi",
@@ -14,6 +14,10 @@
   "bugs": {
     "url": "https://github.com/toa-io/comq/issues"
   },
+  "keywords": [
+    "AMQP",
+    "RabbitMQ"
+  ],
   "engines": {
     "node": ">= 12.0.0"
   },
@@ -23,13 +27,13 @@
   "main": "source/index.js",
   "types": "types/index.d.ts",
   "devDependencies": {
-    "@cucumber/cucumber": "9.0.0",
+    "@cucumber/cucumber": "9.0.1",
     "@toa.io/command": "0.3.0",
     "@toa.io/mock": "0.3.0",
     "@toa.io/tomato": "0.4.0-dev.2",
     "@toa.io/yaml": "0.4.0-dev.2",
     "@types/amqplib": "0.10.1",
-    "@types/jest": "29.4.2",
+    "@types/jest": "29.5.0",
     "husky": "8.0.3",
     "jest": "29.5.0",
     "randomstring": "1.2.3",

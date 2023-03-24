@@ -63,8 +63,8 @@ class Channel {
     await this.#one((channel) => channel.publish(exchange, buffer, options))
   }
 
-  async throw (queue, buffer, options) {
-    await this.#one((channel) => channel.throw(queue, buffer, options))
+  async fire (queue, buffer, options) {
+    await this.#one((channel) => channel.fire(queue, buffer, options))
   }
 
   async seal () {
