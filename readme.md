@@ -366,3 +366,8 @@ established, there is no way to capture the initial `open` event.
 ```javascript
 io.diagnose('flow', (type) => console.log(`Back pressure was applied to the ${type} channel`))
 ```
+
+# Gratitude
+
+I want to express my deep appreciation to [@mzabolotko](https://github.com/mzabolotko) for his
+generous contribution of time and expertise.
