@@ -173,6 +173,13 @@ The following encoding formats are supported:
 - `application/octet-stream`
 - `text/plain`
 
+## Flow Control
+
+When [back pressure](https://www.rabbitmq.com/flow-control.html) is applied to a channel or the
+underlying broker connection is lost, any current and future outgoing messages will be paused.
+Corresponding returned promises will remain in a `pending` state until the pressure is removed or
+the connection is restored.
+
 ## Connection Tolerance
 
 When initially connecting to the broker or if the established connection is lost, connection
@@ -191,10 +198,6 @@ A sharded connection is a mechanism that uses multiple connections simultaneousl
 balancing and mitigate failover scenarios, utilizing a set of broker instances that are **not**
 combined into a cluster.
 
-`async connect(...shards: string[]): IO`
-
-Returns an instance of `IO` once a successful connection to one of the shards is established.
-
 Outgoing messages are sent to a single connection chosen at random from the shard pool. Shards that
 lose their underlying connection or experience channel [back pressure](#flow-control) on
 corresponding channel are removed from the pool until the issue is resolved. Pending messages
@@ -202,6 +205,10 @@ meeting these conditions are immediately routed among the remaining shards in th
 are available, messages will wait until any shard's connection is re-established.
 
 Incoming messages are consumed from all shards.
+
+`async connect(...shards: string[]): IO`
+
+Returns an instance of `IO` once a successful connection to one of the shards is established.
 
 ### Example
 
@@ -217,13 +224,6 @@ const io = await connect(shard0, shard1)
 await io.close()
 
 ```
-
-## Flow Control
-
-When [back pressure](https://www.rabbitmq.com/flow-control.html) is applied to a channel or the
-underlying broker connection is lost, any current and future outgoing messages will be paused.
-Corresponding returned promises will remain in a `pending` state until the pressure is removed or
-the connection is restored.
 
 ## Topology
 
