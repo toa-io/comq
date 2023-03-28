@@ -22,8 +22,8 @@ class Channel {
   /** @type {Set<Promise<comq.Channel>>} */
   #pending = new Set()
 
-  /** @type {Record<comq.Channel, toa.generic.Promex>} */
-  #bench = {}
+  /** @type {Map<comq.Channel, toa.generic.Promex>} */
+  #bench = new Map()
 
   /** @type {comq.topology.type} */
   #type
@@ -127,18 +127,17 @@ class Channel {
   #remove (channel) {
     if (!this.#channels.has(channel)) return
 
-    this.#diagnostics.emit('remove', channel.index)
-
-    this.#bench[channel] = promex()
+    this.#bench.set(channel, promex())
     this.#channels.delete(channel)
     this.#pool = Array.from(this.#channels)
+    this.#diagnostics.emit('remove', channel.index)
   }
 
   /**
    * @param {comq.Channel} channel
    */
   #recover (channel) {
-    if (channel in this.#bench) this.#comeback(channel)
+    if (this.#bench.has(channel)) this.#comeback(channel)
 
     this.#add(channel)
 
@@ -147,8 +146,8 @@ class Channel {
   }
 
   #comeback (channel) {
-    this.#bench[channel].resolve(channel)
-    delete this.#bench[channel]
+    this.#bench.get(channel).resolve(channel)
+    this.#bench.delete(channel)
   }
 
   /**
@@ -180,7 +179,7 @@ class Channel {
 
     for (const channel of this.#channels) promises.push(fn(channel))
     for (const pending of this.#pending) promises.push(pending.then(fn))
-    for (const recover of Object.values(this.#bench)) promises.push(recover.then(fn))
+    for (const recover of this.#bench.values()) promises.push(recover.then(fn))
 
     return promises
   }
@@ -196,8 +195,9 @@ class Channel {
 
     try {
       await fn(channel)
-    } catch (e) {
+    } catch {
       this.#remove(channel)
+
       await this.#one(fn)
     }
   }
