@@ -1,5 +1,3 @@
-'use strict'
-
 import { connect } from 'comq'
 import { url } from '../const.js'
 

@@ -357,6 +357,40 @@ it('should not throw on recovery (if the "bench" is empty)', async () => {
   expect(emit).not.toThrow()
 })
 
+it('should remove channel with back pressure from the pool', async () => {
+  channel = await create(connections, type)
+
+  const queue = generate()
+  const buffer = randomBytes(8)
+  const channels = await getCreatedChannels()
+  const chan = sample(channels)
+  const flowCalls = chan.diagnose.mock.calls.filter((call) => call[0] === 'flow')
+  const drainCalls = chan.diagnose.mock.calls.filter((call) => call[0] === 'drain')
+  const flowListeners = flowCalls.map((call) => call[1])
+  const drainListeners = drainCalls.map((call) => call[1])
+
+  async function send () {
+    for (let i = 0; i < 10; i++) await channel.send(queue, buffer)
+  }
+
+  await send()
+  expect(chan.send).toHaveBeenCalled()
+  chan.send.mockClear()
+
+  // emit 'flow'
+  for (const listener of flowListeners) listener()
+
+  await send()
+  expect(chan.send).not.toHaveBeenCalled()
+  chan.send.mockClear()
+
+  // emit 'drain'
+  for (const listener of drainListeners) listener()
+
+  await send()
+  expect(chan.send).toHaveBeenCalled()
+})
+
 /**
  * @return {Promise<jest.MockedObject<comq.Channel>[]>}
  */
