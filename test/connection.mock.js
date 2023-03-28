@@ -1,6 +1,6 @@
 'use strict'
 
-const channel = /** @type {jest.MockedFunction<(sharded?: boolean, index?: number) => comq.Channel>} */ jest.fn(
+const channel = /** @type {jest.MockedFunction<(sharded?: boolean, index?: number) => jest.MockedObject<comq.Channel>>} */ jest.fn(
   (sharded = false, index = undefined) => ({
     index,
     sharded,
