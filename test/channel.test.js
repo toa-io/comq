@@ -871,6 +871,7 @@ describe('diagnostics', () => {
 describe('transient', () => {
   const exchange = generate()
   const queue = generate()
+  const label = generate()
   const buffer = randomBytes(8)
   const index = random()
 
@@ -879,25 +880,27 @@ describe('transient', () => {
     chan = await getCreatedChannel()
   })
 
-  it('should throw transient exceptions on publish', async () => {
-    chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
+  it.each(/** @type {string[]} */ ['publish', 'send'])('should throw transient exceptions on %s',
+    async (method) => {
+      chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
 
-    await expect(channel.publish(exchange, buffer)).rejects.toThrow()
-  })
+      await expect(channel[method](label, buffer)).rejects.toThrow()
+    })
 
-  it('should throw transient exceptions on send', async () => {
-    chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
-
-    await expect(channel.send(queue, buffer)).rejects.toThrow()
-  })
-
-  it('should not throw on back pressure', async () => {
+  it('should not throw when back pressure is applied', async () => {
     chan.publish.mockImplementationOnce(backpressure.publish)
 
     await expect(channel.publish(exchange, buffer)).resolves.not.toThrow()
   })
 
-  it('should not ignore exceptions on `throw()`', async () => {
+  it('should throw if backpressure was applied before', async () => {
+    chan.publish.mockImplementationOnce(backpressure.publish)
+
+    await expect(channel.publish(exchange, buffer)).resolves.not.toThrow()
+    await expect(channel.publish(exchange, buffer)).rejects.toBeDefined()
+  })
+
+  it('should not ignore exceptions on `fire()`', async () => {
     chan.publish.mockImplementation(() => { throw new Error('Channel closed') })
 
     await expect(channel.fire(queue, buffer)).rejects.toThrow()

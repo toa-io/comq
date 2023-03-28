@@ -198,7 +198,7 @@ class Channel {
    * @param {comq.amqp.options.Publish} options
    */
   async #publish (exchange, queue, buffer, options) {
-    if (this.#paused !== undefined) await this.#paused
+    if (this.#paused !== undefined) await this.#unpaused()
 
     options = Object.assign({ persistent: this.#topology.persistent }, options)
 
@@ -295,6 +295,11 @@ class Channel {
 
     this.#paused = undefined
     this.#diagnostics.emit('drain')
+  }
+
+  async #unpaused () {
+    if (this.#failfast) throw INTERRUPTION // tell shards.Channel to remove this one from the pool
+    else await this.#paused
   }
 
   async #recover (exception) {
