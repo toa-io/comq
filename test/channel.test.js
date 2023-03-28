@@ -891,10 +891,10 @@ describe('transient', () => {
     await expect(channel.send(queue, buffer)).rejects.toThrow()
   })
 
-  it('should throw on back pressure', async () => {
+  it('should not throw on back pressure', async () => {
     chan.publish.mockImplementationOnce(backpressure.publish)
 
-    await expect(channel.publish(exchange, buffer)).rejects.toBeDefined()
+    await expect(channel.publish(exchange, buffer)).resolves.not.toThrow()
   })
 
   it('should not ignore exceptions on `throw()`', async () => {

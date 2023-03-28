@@ -282,8 +282,6 @@ class Channel {
     this.#paused = promex()
     this.#channel.once('drain', this.#unpause)
     this.#diagnostics.emit('flow')
-
-    if (this.#failfast) throw INTERRUPTION
   }
 
   /**
