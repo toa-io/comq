@@ -87,6 +87,8 @@ class Channel {
     this.#add(channel)
     this.#pipe(channel)
 
+    channel.diagnose('flow', () => this.#remove((channel)))
+    channel.diagnose('drain', () => this.#recover(channel))
     channel.diagnose('recover', () => this.#recover(channel))
   }
 
