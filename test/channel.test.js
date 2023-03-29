@@ -4,7 +4,7 @@
 
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
-const { flip, random } = require('@toa.io/generic')
+const { flip, random, timeout } = require('@toa.io/generic')
 
 const backpressure = require('./backpressure')
 const { amqplib } = require('./amqplib.mock')
@@ -730,7 +730,7 @@ describe('recovery', () => {
 
       const chan = await getCreatedChannel()
 
-      chan.publish.mockImplementation(() => true)
+      chan.publish.mockImplementation(() => true) // back pressure
 
       /** @type {jest.MockedObject<comq.amqp.Connection>} */
       let replacement
@@ -746,6 +746,8 @@ describe('recovery', () => {
       expect(replacement).toBeDefined()
 
       const repl = await getCreatedChannel(replacement)
+
+      await timeout(1)
 
       expect(repl.publish).toHaveBeenCalledWith(
         exchange, '', buffer, expect.objectContaining(options), expect.any(Function)

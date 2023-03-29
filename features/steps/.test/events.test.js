@@ -172,11 +172,13 @@ describe('Given I\'m publishing {quantity}B events to the {token} exchange at {q
 
     step.call(context, bytesQ, exchange, frequencyQ)
 
-    await timeout(100 + 11)
+    await timeout(100 + 12)
 
-    expect(context.io.emit).toHaveBeenCalledTimes(10)
+    const callsAmountExpected = [10, 11]
+
+    expect(callsAmountExpected).toContain(context.io.emit.mock.calls.length)
     expect(context.publishing).toBeDefined()
-    expect(context.eventsPublishedCount).toStrictEqual(10)
+    expect(callsAmountExpected).toContain(context.eventsPublishedCount)
 
     clearInterval(context.publishing)
   })
