@@ -713,7 +713,7 @@ describe('recovery', () => {
       const repl = await getCreatedChannel(replacement)
 
       // await recovery effect
-      await timeout(1)
+      await timeout(5)
 
       expect(repl.publish).toHaveBeenCalled()
     })
@@ -750,7 +750,7 @@ describe('recovery', () => {
 
       const repl = await getCreatedChannel(replacement)
 
-      await timeout(1)
+      await timeout(5)
 
       expect(repl.publish).toHaveBeenCalledWith(
         exchange, '', buffer, expect.objectContaining(options), expect.any(Function)

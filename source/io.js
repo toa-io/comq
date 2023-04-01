@@ -190,24 +190,36 @@ class IO {
    * @returns {comq.channels.consumer}
    */
   #getRequestConsumer = (producer) =>
-    track(this, async (message) => {
-      if (!('replyTo' in message.properties)) throw new Error('Request is missing the `replyTo` property')
+    track(this,
+      /**
+       * @param {comq.amqp.Message} request
+       * @returns {Promise<void>}
+       */
+      async (request) => {
+        const payload = decode(request)
+        const reply = await producer(payload)
 
-      const payload = decode(message)
-      const reply = await producer(payload)
+        if ('replyTo' in request.properties) await this.#sendReply(request, reply)
+      })
 
-      if (reply === undefined) throw new Error('The `producer` function must return a value')
+  /**
+   * @param {comq.amqp.Message} request
+   * @param {any} reply
+   * @returns {Promise<void>}
+   */
+  async #sendReply (request, reply) {
+    if (reply === undefined) throw new Error('The `producer` function must return a value')
 
-      let { correlationId, contentType } = message.properties
+    let { replyTo, correlationId, contentType } = request.properties
 
-      if (Buffer.isBuffer(reply)) contentType = OCTETS
-      if (contentType === undefined) throw new Error('Reply to a Request without the `contentType` property must be of type `Buffer`')
+    if (Buffer.isBuffer(reply)) contentType = OCTETS
+    if (contentType === undefined) throw new Error('Reply to a Request without the `contentType` property must be of type `Buffer`')
 
-      const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
-      const properties = { contentType, correlationId }
+    const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
+    const properties = { contentType, correlationId }
 
-      await this.#replies.fire(message.properties.replyTo, buffer, properties)
-    })
+    await this.#replies.fire(replyTo, buffer, properties)
+  }
 
   /**
    * @param {string} queue
@@ -215,9 +227,6 @@ class IO {
    * @returns {comq.channels.consumer}
    */
   #getReplyConsumer = (queue, emitter) =>
-    /**
-     * @param {comq.amqp.Message} message
-     */
     (message) => {
       const payload = decode(message)
 
