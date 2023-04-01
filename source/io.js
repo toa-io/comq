@@ -67,12 +67,13 @@ class IO {
        * @returns {Promise<void>}
        */
       async (queue, payload, encoding, replyToFormatter) => {
-        const [buffer, contentType] = this.#encode(payload, encoding)
-        const correlationId = randomBytes(8).toString('hex')
+        const [buffer, properties] = this.#encode(payload, encoding)
         const emitter = this.#emitters.get(queue)
-        const replyTo = replyToFormatter?.(emitter.queue) ?? emitter.queue
-        const properties = { contentType, correlationId, replyTo }
         const reply = this.#createReply()
+        const correlationId = randomBytes(8).toString('hex')
+
+        properties.replyTo = replyToFormatter?.(emitter.queue) ?? emitter.queue
+        properties.correlationId = correlationId
 
         emitter.once(correlationId, reply.resolve)
 
@@ -80,6 +81,19 @@ class IO {
 
         return reply
       }))
+
+  fire = lazy(this, this.#createRequestChannel,
+    /**
+     * @param {string} queue
+     * @param {any} payload
+     * @param {comq.encoding} [encoding]
+     * @returns {Promise<void>}
+     */
+    async (queue, payload, encoding) => {
+      const [buffer, properties] = this.#encode(payload, encoding)
+
+      await this.#requests.send(queue, buffer, properties)
+    })
 
   consume = lazy(this, this.#createEventChannel,
     async (exchange, group, callback) => {
@@ -103,8 +117,7 @@ class IO {
      * @returns {Promise<void>}
      */
     async (exchange, payload, encoding) => {
-      const [buffer, contentType] = this.#encode(payload, encoding)
-      const properties = { contentType }
+      const [buffer, properties] = this.#encode(payload, encoding)
 
       await this.#events.publish(exchange, buffer, properties)
     })
@@ -127,10 +140,14 @@ class IO {
   // region initializers
 
   async #createRequestReplyChannels () {
-    this.#requests = await this.#createChannel('request')
-    this.#replies = await this.#createChannel('reply')
+    await this.#createRequestChannel()
 
+    this.#replies = await this.#createChannel('reply')
     this.#setupRetransmission()
+  }
+
+  async #createRequestChannel () {
+    this.#requests = await this.#createChannel('request')
   }
 
   async #createEventChannel () {
@@ -246,17 +263,18 @@ class IO {
 
   /**
    * @param {any} payload
-   * @param {comq.encoding} [encoding]
-   * @returns [Buffer, string]
+   * @param {comq.encoding} [contentType]
+   * @returns [Buffer, comq.amqp.options.Publish]
    */
-  #encode (payload, encoding) {
+  #encode (payload, contentType) {
     const raw = Buffer.isBuffer(payload)
 
-    encoding ??= raw ? OCTETS : DEFAULT
+    contentType ??= raw ? OCTETS : DEFAULT
 
-    const buffer = raw ? payload : encode(payload, encoding)
+    const buffer = raw ? payload : encode(payload, contentType)
+    const properties = { contentType }
 
-    return [buffer, encoding]
+    return [buffer, properties]
   }
 }
 
