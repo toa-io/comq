@@ -26,3 +26,8 @@ Feature: Request-reply (RPC)
     When the consumer sends a request to the `throw_error` queue
     Then the message is discarded
     And the consumer does not receive the reply
+
+  Scenario: Fire-and-forget
+    Given a producer replying `one_way` queue
+    When the consumer fires a message to the `one_way` queue
+    Then the producer receives the request
