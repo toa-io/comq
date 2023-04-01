@@ -712,6 +712,9 @@ describe('recovery', () => {
 
       const repl = await getCreatedChannel(replacement)
 
+      // await recovery effect
+      await timeout(1)
+
       expect(repl.publish).toHaveBeenCalled()
     })
 

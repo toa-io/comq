@@ -25,8 +25,8 @@ class IO {
   /** @type {comq.Channel} */
   #events
 
-  /** @type {Record<string, comq.ReplyEmitter>} */
-  #emitters = {}
+  /** @type {Map<string, comq.ReplyEmitter>} */
+  #emitters = new Map()
 
   /** @type {Set<toa.generic.Promex>} */
   #pendingReplies = new Set()
@@ -69,7 +69,7 @@ class IO {
       async (queue, payload, encoding, replyToFormatter) => {
         const [buffer, contentType] = this.#encode(payload, encoding)
         const correlationId = randomBytes(8).toString('hex')
-        const emitter = this.#emitters[queue]
+        const emitter = this.#emitters.get(queue)
         const replyTo = replyToFormatter?.(emitter.queue) ?? emitter.queue
         const properties = { contentType, correlationId, replyTo }
         const reply = this.#createReply()
@@ -141,7 +141,7 @@ class IO {
     const emitter = io.createReplyEmitter(queue)
     const consumer = this.#getReplyConsumer(queue, emitter)
 
-    this.#emitters[queue] = emitter
+    this.#emitters.set(queue, emitter)
 
     await this.#replies.consume(emitter.queue, consumer)
   }
@@ -226,7 +226,9 @@ class IO {
 
     this.#pendingReplies.add(reply)
 
-    reply.catch(noop).finally(() => this.#pendingReplies.delete(reply))
+    reply
+      .catch(noop)
+      .finally(() => this.#pendingReplies.delete(reply))
 
     return reply
   }
@@ -236,7 +238,7 @@ class IO {
   }
 
   #retransmit = () => {
-    for (const emitter of Object.values(this.#emitters)) emitter.clear()
+    for (const emitter of this.#emitters.values()) emitter.clear()
 
     // trigger failsafe attribute
     for (const reply of this.#pendingReplies) reply.reject(RETRANSMISSION)
