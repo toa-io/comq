@@ -83,10 +83,10 @@ The Reply message is encoded using the same encoding format as the Request messa
 `application/octet-stream` and the `producer` function returns something other than a `Buffer`, an
 exception will be thrown.
 
-> If the incoming message does not have a `replyTo` property, an exception is thrown without
-> calling `producer`.
-
 > The `replyTo` queue is not asserted, as it is expected to be done by the Consumer.
+
+> If the incoming message does not have a `replyTo` property, the result of the `producer` is
+> ignored.
 
 ### Example
 
@@ -366,6 +366,19 @@ established, there is no way to capture the initial `open` event.
 ```javascript
 io.diagnose('flow', (type) => console.log(`Back pressure was applied to the ${type} channel`))
 ```
+
+# Special Cases
+
+## Fire-and-Forget
+
+`async IO.fire(queue: string, payload: any, [encoding: string]): void`
+
+Send encoded message to the `queue` using Requests channel
+with [corresponding topology](#cheatsheet). On the initial call, the `queue` is asserted.
+
+> ![Warning](https://img.shields.io/badge/Warning-red)<br/>
+> **Does not provide delivery guarantee.** Messages sent with `IO.fire` are not persistent and not
+> supported by retransmission mechanism, therefore may be lost.
 
 # Gratitude
 
