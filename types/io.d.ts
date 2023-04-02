@@ -28,8 +28,6 @@ declare namespace comq {
       replyToFormatter?: ReplyToPropertyFormatter)
       : Promise<any>
 
-    fire(queue: string, payload: any, encoding?: _encoding.encoding): Promise<void>
-
     consume(exchange: string, group: string, consumer: consumer): Promise<void>
 
     consume(exchange: string, consumer: consumer): Promise<void>

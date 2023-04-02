@@ -367,19 +367,6 @@ established, there is no way to capture the initial `open` event.
 io.diagnose('flow', (type) => console.log(`Back pressure was applied to the ${type} channel`))
 ```
 
-# Special Cases
-
-## Fire-and-Forget
-
-`async IO.fire(queue: string, payload: any, [encoding: string]): void`
-
-Send encoded message to the `queue` using Requests channel
-with [corresponding topology](#cheatsheet). On the initial call, the `queue` is asserted.
-
-> ![Warning](https://img.shields.io/badge/Warning-red)<br/>
-> **Does not provide delivery guarantee.** Messages sent with `IO.fire` are not persistent and not
-> supported by retransmission mechanism, therefore may be lost.
-
 # Gratitude
 
 I want to express my deep appreciation to [@mzabolotko](https://github.com/mzabolotko) for his

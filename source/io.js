@@ -82,19 +82,6 @@ class IO {
         return reply
       }))
 
-  fire = lazy(this, this.#createRequestChannel,
-    /**
-     * @param {string} queue
-     * @param {any} payload
-     * @param {comq.encoding} [encoding]
-     * @returns {Promise<void>}
-     */
-    async (queue, payload, encoding) => {
-      const [buffer, properties] = this.#encode(payload, encoding)
-
-      await this.#requests.send(queue, buffer, properties)
-    })
-
   consume = lazy(this, this.#createEventChannel,
     async (exchange, group, callback) => {
       if (callback === undefined) { // 2 arguments passed
@@ -199,7 +186,7 @@ class IO {
         const payload = decode(request)
         const reply = await producer(payload)
 
-        if ('replyTo' in request.properties) await this.#sendReply(request, reply)
+        if ('replyTo' in request.properties) await this.#reply(request, reply)
       })
 
   /**
@@ -207,7 +194,7 @@ class IO {
    * @param {any} reply
    * @returns {Promise<void>}
    */
-  async #sendReply (request, reply) {
+  async #reply (request, reply) {
     if (reply === undefined) throw new Error('The `producer` function must return a value')
 
     let { replyTo, correlationId, contentType } = request.properties
