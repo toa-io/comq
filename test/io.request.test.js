@@ -43,8 +43,6 @@ let promise
 const REPLY = new RegExp(`^${queue}..[0-9a-f]+$`)
 
 beforeEach(async () => {
-  jest.clearAllMocks()
-
   promise = io.request(queue, payload)
 
   // allows initializers to run

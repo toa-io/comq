@@ -25,8 +25,8 @@ class IO {
   /** @type {comq.Channel} */
   #events
 
-  /** @type {Record<string, comq.ReplyEmitter>} */
-  #emitters = {}
+  /** @type {Map<string, comq.ReplyEmitter>} */
+  #emitters = new Map()
 
   /** @type {Set<toa.generic.Promex>} */
   #pendingReplies = new Set()
@@ -67,12 +67,13 @@ class IO {
        * @returns {Promise<void>}
        */
       async (queue, payload, encoding, replyToFormatter) => {
-        const [buffer, contentType] = this.#encode(payload, encoding)
-        const correlationId = randomBytes(8).toString('hex')
-        const emitter = this.#emitters[queue]
-        const replyTo = replyToFormatter?.(emitter.queue) ?? emitter.queue
-        const properties = { contentType, correlationId, replyTo }
+        const [buffer, properties] = this.#encode(payload, encoding)
+        const emitter = this.#emitters.get(queue)
         const reply = this.#createReply()
+        const correlationId = randomBytes(8).toString('hex')
+
+        properties.replyTo = replyToFormatter?.(emitter.queue) ?? emitter.queue
+        properties.correlationId = correlationId
 
         emitter.once(correlationId, reply.resolve)
 
@@ -103,8 +104,7 @@ class IO {
      * @returns {Promise<void>}
      */
     async (exchange, payload, encoding) => {
-      const [buffer, contentType] = this.#encode(payload, encoding)
-      const properties = { contentType }
+      const [buffer, properties] = this.#encode(payload, encoding)
 
       await this.#events.publish(exchange, buffer, properties)
     })
@@ -127,10 +127,14 @@ class IO {
   // region initializers
 
   async #createRequestReplyChannels () {
-    this.#requests = await this.#createChannel('request')
-    this.#replies = await this.#createChannel('reply')
+    await this.#createRequestChannel()
 
+    this.#replies = await this.#createChannel('reply')
     this.#setupRetransmission()
+  }
+
+  async #createRequestChannel () {
+    this.#requests = await this.#createChannel('request')
   }
 
   async #createEventChannel () {
@@ -141,7 +145,7 @@ class IO {
     const emitter = io.createReplyEmitter(queue)
     const consumer = this.#getReplyConsumer(queue, emitter)
 
-    this.#emitters[queue] = emitter
+    this.#emitters.set(queue, emitter)
 
     await this.#replies.consume(emitter.queue, consumer)
   }
@@ -173,24 +177,36 @@ class IO {
    * @returns {comq.channels.consumer}
    */
   #getRequestConsumer = (producer) =>
-    track(this, async (message) => {
-      if (!('replyTo' in message.properties)) throw new Error('Request is missing the `replyTo` property')
+    track(this,
+      /**
+       * @param {comq.amqp.Message} request
+       * @returns {Promise<void>}
+       */
+      async (request) => {
+        const payload = decode(request)
+        const reply = await producer(payload)
 
-      const payload = decode(message)
-      const reply = await producer(payload)
+        if ('replyTo' in request.properties) await this.#reply(request, reply)
+      })
 
-      if (reply === undefined) throw new Error('The `producer` function must return a value')
+  /**
+   * @param {comq.amqp.Message} request
+   * @param {any} reply
+   * @returns {Promise<void>}
+   */
+  async #reply (request, reply) {
+    if (reply === undefined) throw new Error('The `producer` function must return a value')
 
-      let { correlationId, contentType } = message.properties
+    let { replyTo, correlationId, contentType } = request.properties
 
-      if (Buffer.isBuffer(reply)) contentType = OCTETS
-      if (contentType === undefined) throw new Error('Reply to a Request without the `contentType` property must be of type `Buffer`')
+    if (Buffer.isBuffer(reply)) contentType = OCTETS
+    if (contentType === undefined) throw new Error('Reply to a Request without the `contentType` property must be of type `Buffer`')
 
-      const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
-      const properties = { contentType, correlationId }
+    const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
+    const properties = { contentType, correlationId }
 
-      await this.#replies.fire(message.properties.replyTo, buffer, properties)
-    })
+    await this.#replies.fire(replyTo, buffer, properties)
+  }
 
   /**
    * @param {string} queue
@@ -198,9 +214,6 @@ class IO {
    * @returns {comq.channels.consumer}
    */
   #getReplyConsumer = (queue, emitter) =>
-    /**
-     * @param {comq.amqp.Message} message
-     */
     (message) => {
       const payload = decode(message)
 
@@ -226,7 +239,9 @@ class IO {
 
     this.#pendingReplies.add(reply)
 
-    reply.catch(noop).finally(() => this.#pendingReplies.delete(reply))
+    reply
+      .catch(noop)
+      .finally(() => this.#pendingReplies.delete(reply))
 
     return reply
   }
@@ -236,7 +251,7 @@ class IO {
   }
 
   #retransmit = () => {
-    for (const emitter of Object.values(this.#emitters)) emitter.clear()
+    for (const emitter of this.#emitters.values()) emitter.clear()
 
     // trigger failsafe attribute
     for (const reply of this.#pendingReplies) reply.reject(RETRANSMISSION)
@@ -244,17 +259,18 @@ class IO {
 
   /**
    * @param {any} payload
-   * @param {comq.encoding} [encoding]
-   * @returns [Buffer, string]
+   * @param {comq.encoding} [contentType]
+   * @returns [Buffer, comq.amqp.options.Publish]
    */
-  #encode (payload, encoding) {
+  #encode (payload, contentType) {
     const raw = Buffer.isBuffer(payload)
 
-    encoding ??= raw ? OCTETS : DEFAULT
+    contentType ??= raw ? OCTETS : DEFAULT
 
-    const buffer = raw ? payload : encode(payload, encoding)
+    const buffer = raw ? payload : encode(payload, contentType)
+    const properties = { contentType }
 
-    return [buffer, encoding]
+    return [buffer, properties]
   }
 }
 

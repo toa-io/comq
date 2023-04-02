@@ -70,15 +70,6 @@ describe('queues', () => {
   it('should consume queue', async () => {
     expect(requests.consume).toHaveBeenCalledWith(queue, expect.any(Function))
   })
-
-  it('should throw if message is missing replyTo', async () => {
-    const content = randomBytes(10)
-    const properties = {}
-    const message = /** @type {comq.amqp.Message} */ { content, properties }
-    const producer = requests.consume.mock.calls[0][1]
-
-    await expect(producer(message)).rejects.toThrow('is missing the `replyTo` property')
-  })
 })
 
 describe('reply', () => {
@@ -89,14 +80,13 @@ describe('reply', () => {
   let replies
 
   beforeEach(async () => {
-  })
-
-  it('should `fire` reply', async () => {
     await io.reply(queue, produce)
 
     requests = await findChannel('request')
     replies = await findChannel('reply')
+  })
 
+  it('should `fire` reply', async () => {
     const content = randomBytes(10)
     const properties = { replyTo: generate(), contentType: 'text/plain' }
     const message = /** @type {comq.amqp.Message} */ { content, properties }
@@ -111,17 +101,38 @@ describe('reply', () => {
   })
 
   it('should throw if producer returned undefined', async () => {
+    jest.clearAllMocks()
+
     const produce = () => undefined
 
     await io.reply(queue, produce)
 
-    const requests = await findChannel('request')
     const callback = requests.consume.mock.calls[0][1]
-    const content = randomBytes(10)
-    const properties = { replyTo: generate() }
+    const content = generate()
+    const properties = { replyTo: generate(), contentType: 'text/plain' }
     const message = /** @type {comq.amqp.Message} */ { content, properties }
 
     await expect(callback(message)).rejects.toThrow('must return a value')
+  })
+
+  it('should not throw if message is missing replyTo', async () => {
+    const content = generate()
+    const properties = { contentType: 'text/plain' }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
+    const producer = requests.consume.mock.calls[0][1]
+
+    await expect(producer(message)).resolves.not.toThrow()
+  })
+
+  it('should not send reply if request has no `replyTo` property', async () => {
+    const content = generate()
+    const properties = { contentType: 'text/plain' }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
+    const producer = requests.consume.mock.calls[0][1]
+
+    await producer(message)
+
+    expect(replies.fire).not.toHaveBeenCalled()
   })
 })
 
