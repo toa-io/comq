@@ -127,14 +127,10 @@ class IO {
   // region initializers
 
   async #createRequestReplyChannels () {
-    await this.#createRequestChannel()
-
-    this.#replies = await this.#createChannel('reply')
-    this.#setupRetransmission()
-  }
-
-  async #createRequestChannel () {
     this.#requests = await this.#createChannel('request')
+    this.#replies = await this.#createChannel('reply')
+
+    this.#setupRetransmission()
   }
 
   async #createEventChannel () {
