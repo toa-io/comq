@@ -4,8 +4,8 @@ import * as _topology from './topology';
 
 declare namespace comq {
 
-  type producer = (message: any) => Promise<any>
-  type consumer = (message: any) => Promise<void>
+  type producer = (message: any) => any | Promise<any>
+  type consumer = (message: any) => void | Promise<void>
 
   interface ReplyEmitter {
     queue: string
@@ -40,13 +40,17 @@ declare namespace comq {
     close(): Promise<void>
 
     diagnose(event: 'open', listener: (index?: number) => void)
+
     diagnose(event: 'close', listener: (index?: number) => void)
 
     diagnose(event: 'flow', listener: (channel: _topology.type, index?: number) => void)
+
     diagnose(event: 'drain', listener: (channel: _topology.type, index?: number) => void)
 
     diagnose(event: 'remove', listener: (index?: number) => void)
+
     diagnose(event: 'recover', listener: (channel: _topology.type, index?: number) => void)
+
     diagnose(event: 'discard', listener: (channel: _topology.type, message: any, index?: number) => void)
   }
 }
