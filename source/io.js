@@ -235,7 +235,7 @@ class IO {
     track(this, async (message) => {
       const payload = decode(message)
 
-      await callback(payload)
+      await callback(payload, message.properties)
     })
 
   /**

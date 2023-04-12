@@ -6,7 +6,7 @@ import * as amqplib from 'amqplib'
 declare namespace comq {
 
   type producer = (message: any) => any | Promise<any>
-  type consumer = (message: any) => void | Promise<void>
+  type consumer = (message: any, properties?: amqplib.Options.Consume) => void | Promise<void>
 
   interface ReplyEmitter {
     queue: string
