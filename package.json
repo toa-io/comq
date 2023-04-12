@@ -28,10 +28,10 @@
   "types": "types/index.d.ts",
   "devDependencies": {
     "@cucumber/cucumber": "9.1.0",
-    "@toa.io/command": "0.3.0",
+    "@toa.io/command": "0.4.0",
     "@toa.io/mock": "0.3.0",
     "@toa.io/tomato": "0.4.0-dev.2",
-    "@toa.io/yaml": "0.4.0-dev.2",
+    "@toa.io/yaml": "0.4.0",
     "@types/amqplib": "0.10.1",
     "@types/jest": "29.5.0",
     "husky": "8.0.3",
@@ -41,7 +41,7 @@
     "standard": "17.0.0"
   },
   "dependencies": {
-    "@toa.io/generic": "0.4.0-dev.5",
+    "@toa.io/generic": "0.4.0",
     "amqplib": "0.10.3",
     "msgpackr": "1.8.5"
   },
