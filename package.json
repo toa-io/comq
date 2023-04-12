@@ -29,7 +29,6 @@
   "devDependencies": {
     "@cucumber/cucumber": "9.1.0",
     "@toa.io/command": "0.4.0",
-    "@toa.io/mock": "0.3.0",
     "@toa.io/tomato": "0.4.0",
     "@toa.io/yaml": "0.4.0",
     "@types/amqplib": "0.10.1",
