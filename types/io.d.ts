@@ -1,11 +1,12 @@
 import * as _diagnostics from './diagnostic'
 import * as _encoding from './encoding'
-import * as _topology from './topology';
+import * as _topology from './topology'
+import * as _amqp from './amqp'
 
 declare namespace comq {
 
-  type producer = (message: any) => Promise<any>
-  type consumer = (message: any) => Promise<void>
+  type producer = (message: any) => any | Promise<any>
+  type consumer = (message: any, headers?: _amqp.Properties) => void | Promise<void>
 
   interface ReplyEmitter {
     queue: string
@@ -35,18 +36,24 @@ declare namespace comq {
 
     emit(exchange: string, payload: any, encoding?: _encoding.encoding): Promise<void>
 
+    emit(exchange: string, payload: any, properties?: _amqp.Properties): Promise<void>
+
     seal(): Promise<void>
 
     close(): Promise<void>
 
     diagnose(event: 'open', listener: (index?: number) => void)
+
     diagnose(event: 'close', listener: (index?: number) => void)
 
     diagnose(event: 'flow', listener: (channel: _topology.type, index?: number) => void)
+
     diagnose(event: 'drain', listener: (channel: _topology.type, index?: number) => void)
 
     diagnose(event: 'remove', listener: (index?: number) => void)
+
     diagnose(event: 'recover', listener: (channel: _topology.type, index?: number) => void)
+
     diagnose(event: 'discard', listener: (channel: _topology.type, message: any, index?: number) => void)
   }
 }

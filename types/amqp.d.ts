@@ -12,7 +12,9 @@ declare namespace comq.amqp {
   type Connection = amqplib.Connection
   type Channel = amqplib.Channel | amqplib.ConfirmChannel
   type Message = amqplib.Message
+  type Properties = Partial<amqplib.MessageProperties>
 }
 
 export type Connection = comq.amqp.Connection
 export type Channel = comq.amqp.Channel
+export type Properties = comq.amqp.Properties

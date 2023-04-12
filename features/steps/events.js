@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert')
-const { generate } = require('randomstring')
-const { timeout, quantity } = require('@toa.io/generic')
-const { Given, When, Then } = require('@cucumber/cucumber')
 const { randomBytes } = require('node:crypto')
+const { timeout, quantity, match } = require('@toa.io/generic')
+const { parse } = require('@toa.io/yaml')
+const { Given, When, Then } = require('@cucumber/cucumber')
 
 Given('(that ){token} is consuming events from the {token} exchange',
   /**
@@ -25,7 +25,7 @@ Given('{token} consuming events from the {token} exchange is expected',
   async function (group, exchange) {
     await timeout(500) // let it crash
 
-    this.expected = consume.call(this, group, exchange)
+    this.consumptionPromise = consume.call(this, group, exchange)
   })
 
 Given('(that )events are exclusively consumed from the {token} exchange',
@@ -34,7 +34,7 @@ Given('(that )events are exclusively consumed from the {token} exchange',
    * @this {comq.features.Context}
    */
   async function (exchange) {
-    this.expected = consume.call(this, undefined, exchange)
+    this.consumptionPromise = consume.call(this, undefined, exchange)
   })
 
 When('an event is emitted to the {token} exchange',
@@ -43,13 +43,22 @@ When('an event is emitted to the {token} exchange',
    * @this {comq.features.Context}
    */
   async function (exchange) {
-    if (this.expected) await this.expected
+    const message = randomBytes(8)
 
-    const message = generate()
+    await emit.call(this, exchange, message)
+  })
 
-    await this.io.emit(exchange, message)
+When('an event is emitted to the {token} exchange with properties:',
+  /**
+   * @param {string} exchange
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (exchange, yaml) {
+    const message = randomBytes(8)
+    const properties = parse(yaml)
 
-    this.published = message
+    await emit.call(this, exchange, message, properties)
   })
 
 Then('{token} receives the event',
@@ -59,6 +68,21 @@ Then('{token} receives the event',
    */
   async function (group) {
     await consumed.call(this, group)
+  })
+
+Then('{token} receives the event with properties:',
+  /**
+   * @param {string} group
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (group, yaml) {
+    await consumed.call(this, group)
+
+    const properties = parse(yaml)
+    const matches = match(this.consumed[group].properties, properties)
+
+    assert.equal(matches, true, 'Consumed event properties doesn\'t match')
   })
 
 Then('the event is received',
@@ -115,8 +139,8 @@ Then('all events have been received',
 async function consume (group, exchange) {
   this.consumed ??= {}
 
-  const consumer = async (payload) => {
-    this.consumed[group] = payload
+  const consumer = async (payload, properties) => {
+    this.consumed[group] = { payload, properties }
     this.eventsConsumedCount++
   }
 
@@ -133,5 +157,24 @@ async function consumed (group) {
   await timeout(100) // let it consume
 
   assert.notEqual(this.published, undefined, 'No event has been published')
-  assert.equal(this.published, this.consumed[group], 'Event hasn\'t been exclusively consumed')
+
+  const consumed = this.consumed[group]
+  const equals = this.published.equals(consumed.payload)
+
+  assert.equal(equals, true, 'Consumed event doesn\'t match')
+}
+
+/**
+ * @param {string} exchange
+ * @param {any} message
+ * @param {import('amqplib').Options.Publish} [properties]
+ * @return {Promise<void>}
+ * @this {comq.features.Context}
+ */
+async function emit (exchange, message, properties) {
+  if (this.consumptionPromise) await this.consumptionPromise
+
+  await this.io.emit(exchange, message, properties)
+
+  this.published = message
 }

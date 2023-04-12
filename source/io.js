@@ -67,13 +67,13 @@ class IO {
        * @returns {Promise<void>}
        */
       async (queue, payload, encoding, replyToFormatter) => {
-        const [buffer, properties] = this.#encode(payload, encoding)
+        const [buffer, contentType] = this.#encode(payload, encoding)
         const emitter = this.#emitters.get(queue)
         const reply = this.#createReply()
         const correlationId = randomBytes(8).toString('hex')
+        const properties = { contentType, correlationId }
 
         properties.replyTo = replyToFormatter?.(emitter.queue) ?? emitter.queue
-        properties.correlationId = correlationId
 
         emitter.once(correlationId, reply.resolve)
 
@@ -100,11 +100,22 @@ class IO {
     /**
      * @param {string} exchange
      * @param {any} payload
-     * @param {comq.encoding} [encoding]
+     * @param {comq.encoding | comq.amqp.options.Publish} [encoding]
      * @returns {Promise<void>}
      */
     async (exchange, payload, encoding) => {
-      const [buffer, properties] = this.#encode(payload, encoding)
+      /** @type {comq.amqp.options.Publish} */
+      const properties = {}
+
+      if (typeof encoding === 'object') { // properties passed
+        Object.assign(properties, encoding)
+
+        encoding = /** @type {comq.encoding} */ properties.contentType
+      }
+
+      const [buffer, contentType] = this.#encode(payload, encoding)
+
+      properties.contentType = contentType
 
       await this.#events.publish(exchange, buffer, properties)
     })
@@ -224,7 +235,7 @@ class IO {
     track(this, async (message) => {
       const payload = decode(message)
 
-      await callback(payload)
+      await callback(payload, message.properties)
     })
 
   /**
@@ -256,7 +267,7 @@ class IO {
   /**
    * @param {any} payload
    * @param {comq.encoding} [contentType]
-   * @returns [Buffer, comq.amqp.options.Publish]
+   * @returns [Buffer, comq.encoding]
    */
   #encode (payload, contentType) {
     const raw = Buffer.isBuffer(payload)
@@ -264,9 +275,8 @@ class IO {
     contentType ??= raw ? OCTETS : DEFAULT
 
     const buffer = raw ? payload : encode(payload, contentType)
-    const properties = { contentType }
 
-    return [buffer, properties]
+    return [buffer, contentType]
   }
 }
 
