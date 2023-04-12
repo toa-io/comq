@@ -1,12 +1,12 @@
 import * as _diagnostics from './diagnostic'
 import * as _encoding from './encoding'
 import * as _topology from './topology'
-import * as amqplib from 'amqplib'
+import * as _amqp from './amqp'
 
 declare namespace comq {
 
   type producer = (message: any) => any | Promise<any>
-  type consumer = (message: any, properties?: amqplib.Options.Consume) => void | Promise<void>
+  type consumer = (message: any, headers?: _amqp.Properties) => void | Promise<void>
 
   interface ReplyEmitter {
     queue: string
@@ -36,7 +36,7 @@ declare namespace comq {
 
     emit(exchange: string, payload: any, encoding?: _encoding.encoding): Promise<void>
 
-    emit(exchange: string, payload: any, properties?: amqplib.Options.Publish): Promise<void>
+    emit(exchange: string, payload: any, properties?: _amqp.Properties): Promise<void>
 
     seal(): Promise<void>
 

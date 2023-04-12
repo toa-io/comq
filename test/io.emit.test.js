@@ -92,7 +92,9 @@ it('should publish Buffer with specified encoding format', async () => {
 
 it('should publish a message with specified properties', async () => {
   const payload = randomBytes(8)
-  const properties = { [generate()]: generate() }
+
+  /** @type {comq.amqp.Properties} */
+  const properties = { headers: { [generate()]: generate() } }
 
   await io.emit(exchange, payload, properties)
 
@@ -101,17 +103,16 @@ it('should publish a message with specified properties', async () => {
   expect(options).toStrictEqual(expect.objectContaining(properties))
 })
 
-it('should publish a message with specified properties.contentType', async () => {
+it('should publish a message with headers', async () => {
   const message = generate()
-  const contentType = 'text/plain'
-  const properties = { contentType }
+  const headers = { [generate()]: generate() }
+  const properties = { headers }
 
   await io.emit(exchange, message, properties)
 
-  const [, buffer, options] = events.publish.mock.calls[1]
+  const [, , options] = events.publish.mock.calls[1]
 
-  expect(buffer).toStrictEqual(Buffer.from(message))
-  expect(options.contentType).toStrictEqual(contentType)
+  expect(options.headers).toStrictEqual(headers)
 })
 
 /**

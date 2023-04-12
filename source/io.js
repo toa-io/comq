@@ -107,7 +107,7 @@ class IO {
       /** @type {comq.amqp.options.Publish} */
       const properties = {}
 
-      if (typeof encoding !== 'string') { // properties passed
+      if (typeof encoding === 'object') { // properties passed
         Object.assign(properties, encoding)
 
         encoding = /** @type {comq.encoding} */ properties.contentType
