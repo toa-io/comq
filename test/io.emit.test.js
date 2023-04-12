@@ -83,10 +83,35 @@ it('should publish Buffer with specified encoding format', async () => {
   const encoding = 'application/json'
 
   await io.emit(exchange, payload, encoding)
+
   const [, buffer, properties] = events.publish.mock.calls[1]
 
   expect(buffer).toStrictEqual(payload)
   expect(properties.contentType).toStrictEqual(encoding)
+})
+
+it('should publish a message with specified properties', async () => {
+  const payload = randomBytes(8)
+  const properties = { [generate()]: generate() }
+
+  await io.emit(exchange, payload, properties)
+
+  const [, , options] = events.publish.mock.calls[1]
+
+  expect(options).toStrictEqual(expect.objectContaining(properties))
+})
+
+it('should publish a message with specified properties.contentType', async () => {
+  const message = generate()
+  const contentType = 'text/plain'
+  const properties = { contentType }
+
+  await io.emit(exchange, message, properties)
+
+  const [, buffer, options] = events.publish.mock.calls[1]
+
+  expect(buffer).toStrictEqual(Buffer.from(message))
+  expect(options.contentType).toStrictEqual(contentType)
 })
 
 /**

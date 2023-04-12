@@ -1,6 +1,7 @@
 import * as _diagnostics from './diagnostic'
 import * as _encoding from './encoding'
-import * as _topology from './topology';
+import * as _topology from './topology'
+import * as amqplib from 'amqplib'
 
 declare namespace comq {
 
@@ -34,6 +35,8 @@ declare namespace comq {
     consume(exchange: string, consumer: consumer): Promise<void>
 
     emit(exchange: string, payload: any, encoding?: _encoding.encoding): Promise<void>
+
+    emit(exchange: string, payload: any, properties?: amqplib.Options.Publish): Promise<void>
 
     seal(): Promise<void>
 
