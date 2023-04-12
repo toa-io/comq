@@ -1,9 +1,11 @@
 'use strict'
 
 const { AssertionError } = require('node:assert')
+const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
 const { promex, timeout, random } = require('@toa.io/generic')
 const tomato = require('@toa.io/tomato')
+const { dump } = require('@toa.io/yaml')
 const { io } = require('./io.mock')
 const mock = { tomato }
 
@@ -47,7 +49,16 @@ describe('Given (that ){token} is consuming events from the {token} exchange', (
 
     await consumer(payload)
 
-    expect(context.consumed[group]).toStrictEqual(payload)
+    expect(context.consumed[group]).toStrictEqual(expect.objectContaining({ payload }))
+  })
+
+  it('should store event properties', async () => {
+    const payload = generate()
+    const properties = generate()
+
+    await consumer(payload, properties)
+
+    expect(context.consumed[group]).toStrictEqual({ payload, properties })
   })
 })
 
@@ -79,13 +90,13 @@ describe('When an event is emitted to the {token} exchange', () => {
   })
 
   it('should emit event', async () => {
-    expect(io.emit).toHaveBeenCalledWith(exchange, expect.anything())
+    expect(io.emit.mock.calls[0][0]).toStrictEqual(exchange)
   })
 
   it('should wait for context.expected', async () => {
     jest.clearAllMocks()
 
-    context.expected = promex()
+    context.consumptionPromise = promex()
 
     let resolved = false
 
@@ -93,7 +104,7 @@ describe('When an event is emitted to the {token} exchange', () => {
       expect(io.emit).not.toHaveBeenCalled()
 
       resolved = true
-      context.expected.resolve()
+      context.consumptionPromise.resolve()
     })
 
     await step.call(context, exchange)
@@ -103,20 +114,42 @@ describe('When an event is emitted to the {token} exchange', () => {
   })
 })
 
+describe('When an event is emitted to the {token} exchange with properties:', () => {
+  const step = tomato.steps.Wh('an event is emitted to the {token} exchange with properties:')
+
+  it('should be', async () => undefined)
+
+  const exchange = generate()
+  const properties = { [generate()]: generate() }
+  const yaml = dump(properties)
+
+  beforeEach(async () => {
+    await step.call(context, exchange, yaml)
+  })
+
+  it('should store event', async () => {
+    expect(context.published).toBeDefined()
+  })
+
+  it('should emit event', async () => {
+    expect(io.emit).toHaveBeenCalledWith(exchange, expect.anything(), properties)
+  })
+})
+
 describe('Then {token} receives the event', () => {
   const step = tomato.steps.Th('{token} receives the event')
 
-  const payload = generate()
+  const payload = randomBytes(8)
   const group = generate()
 
   beforeEach(() => {
-    context.consumed = { [group]: payload }
+    context.consumed = { [group]: { payload } }
   })
 
   it('should be', async () => undefined)
 
   it('should throw if not consumed', async () => {
-    context.published = generate()
+    context.published = randomBytes(8)
 
     await expect(step.call(context, group)).rejects.toThrow(AssertionError)
   })
@@ -128,20 +161,47 @@ describe('Then {token} receives the event', () => {
   })
 })
 
+describe('Then {token} receives the event with properties:', () => {
+  const step = tomato.steps.Th('{token} receives the event with properties:')
+
+  it('should be', async () => undefined)
+
+  const payload = randomBytes(8)
+  const properties = { headers: { [generate()]: generate() } }
+  const yaml = dump(properties)
+  const group = generate()
+
+  beforeEach(() => {
+    context.consumed = { [group]: { payload, properties } }
+    context.published = payload
+  })
+
+  it('should throw if does not match', async () => {
+    const properties = { headers: { [generate()]: generate() } }
+    const yaml = dump(properties)
+
+    await expect(step.call(context, group, yaml)).rejects.toThrow(AssertionError)
+  })
+
+  it('should pass if matches', async () => {
+    await expect(step.call(context, group, yaml)).resolves.not.toThrow()
+  })
+})
+
 describe('Then the event is received', () => {
   const step = tomato.steps.Th('the event is received')
 
-  const payload = generate()
+  const payload = randomBytes(8)
   const group = undefined
 
   beforeEach(() => {
-    context.consumed = { [group]: payload }
+    context.consumed = { [group]: { payload } }
   })
 
   it('should be', async () => undefined)
 
   it('should throw if not consumed', async () => {
-    context.published = generate()
+    context.published = randomBytes(8)
 
     await expect(step.call(context, group)).rejects.toThrow(AssertionError)
   })
@@ -172,11 +232,13 @@ describe('Given I\'m publishing {quantity}B events to the {token} exchange at {q
 
     step.call(context, bytesQ, exchange, frequencyQ)
 
-    await timeout(100 + 11)
+    await timeout(100 + 12)
 
-    expect(context.io.emit).toHaveBeenCalledTimes(10)
+    const callsAmountExpected = [10, 11]
+
+    expect(callsAmountExpected).toContain(context.io.emit.mock.calls.length)
     expect(context.publishing).toBeDefined()
-    expect(context.eventsPublishedCount).toStrictEqual(10)
+    expect(callsAmountExpected).toContain(context.eventsPublishedCount)
 
     clearInterval(context.publishing)
   })

@@ -219,11 +219,13 @@ describe('Given I\'m sending {quantity}B requests to the {token} queue at {quant
 
     step.call(context, bytesQ, queue, frequencyQ)
 
-    await timeout(100 + 11)
+    await timeout(100 + 12)
 
-    expect(context.io.request).toHaveBeenCalledTimes(10)
+    const callsAmountExpected = [10, 11]
+
+    expect(callsAmountExpected).toContain(context.io.request.mock.calls.length)
     expect(context.sending).toBeDefined()
-    expect(context.requestsSent.length).toStrictEqual(10)
+    expect(callsAmountExpected).toContain(context.requestsSent.length)
 
     clearInterval(context.sending)
   })

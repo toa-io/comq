@@ -10,6 +10,8 @@ jest.mock('@toa.io/command', () => mock.command)
 
 jest.setTimeout(10000)
 
+global.COMQ_TESTING_HEALTHCHECK_INTERVAL = 0
+
 require('../broker')
 
 const context = /** @type {comq.features.Context} */ {}

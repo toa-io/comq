@@ -83,10 +83,10 @@ The Reply message is encoded using the same encoding format as the Request messa
 `application/octet-stream` and the `producer` function returns something other than a `Buffer`, an
 exception will be thrown.
 
-> If the incoming message does not have a `replyTo` property, an exception is thrown without
-> calling `producer`.
-
 > The `replyTo` queue is not asserted, as it is expected to be done by the Consumer.
+
+> If the incoming message does not have a `replyTo` property, the result of the `producer` is
+> ignored.
 
 ### Example
 

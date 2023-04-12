@@ -1,5 +1,6 @@
 import * as _diagnostics from '../../../types/diagnostic'
 import * as _io from '../../../types/io'
+import * as _amqp from '../../../types/amqp'
 
 declare namespace comq.features {
 
@@ -9,14 +10,14 @@ declare namespace comq.features {
     connecting: Promise<any>
     requestsSent: Promise<any>[]
     reply?: Promise<any>
-    published?: any
+    published?: Buffer
     eventsPublishedCount: number
     eventsConsumedCount: number
-    consumed?: Record<string, any>
+    consumed?: Record<string, { payload: any, properties?: _amqp.Properties }>
     consumedCount: number
     events?: { [K in _diagnostics.event]?: boolean }
     exception?: Error
-    expected?: Promise<any>
+    consumptionPromise?: Promise<any>
     sharded: boolean
     shard: number
     sealing: Promise<any>

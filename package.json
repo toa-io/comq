@@ -1,6 +1,6 @@
 {
   "name": "comq",
-  "version": "0.5.2",
+  "version": "0.6.0-dev.2",
   "description": "ComQ",
   "author": {
     "name": "Artem Gurtovoi",
@@ -27,11 +27,10 @@
   "main": "source/index.js",
   "types": "types/index.d.ts",
   "devDependencies": {
-    "@cucumber/cucumber": "9.0.1",
-    "@toa.io/command": "0.3.0",
-    "@toa.io/mock": "0.3.0",
-    "@toa.io/tomato": "0.4.0-dev.2",
-    "@toa.io/yaml": "0.4.0-dev.2",
+    "@cucumber/cucumber": "9.1.0",
+    "@toa.io/command": "0.4.0",
+    "@toa.io/tomato": "0.4.0",
+    "@toa.io/yaml": "0.4.0",
     "@types/amqplib": "0.10.1",
     "@types/jest": "29.5.0",
     "husky": "8.0.3",
@@ -41,14 +40,14 @@
     "standard": "17.0.0"
   },
   "dependencies": {
-    "@toa.io/generic": "0.4.0-dev.5",
+    "@toa.io/generic": "0.4.0",
     "amqplib": "0.10.3",
     "msgpackr": "1.8.5"
   },
   "scripts": {
     "prepare": "husky install",
     "test": "standard && jest",
-    "test:features": "cucumber-js",
+    "features": "cucumber-js",
     "lint": "standard --fix --verbose | snazzy"
   },
   "standard": {

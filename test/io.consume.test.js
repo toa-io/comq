@@ -68,7 +68,20 @@ describe('group consumption', () => {
 
     await callback(message)
 
-    expect(consumer).toHaveBeenCalledWith(payload)
+    expect(consumer.mock.calls[0][0]).toStrictEqual(payload)
+  })
+
+  it('should pass properties', async () => {
+    const payload = generate()
+    const contentType = 'text/plain'
+    const content = encode(payload, contentType)
+    const properties = { contentType }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
+    const callback = events.subscribe.mock.calls[0][2]
+
+    await callback(message)
+
+    expect(consumer).toHaveBeenCalledWith(payload, properties)
   })
 })
 
@@ -94,7 +107,7 @@ describe.each(['omitted', 'undefined'])('exclusive consumption (group is %s)', (
 
     await emit(message)
 
-    expect(consumer).toHaveBeenCalledWith(message.content)
+    expect(consumer.mock.calls[0][0]).toStrictEqual(message.content)
   })
 })
 
