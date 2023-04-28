@@ -23,6 +23,9 @@ class Connection {
   /** @type {toa.generic.Promex} */
   #recovery = promex()
 
+  /** @type {boolean} */
+  #running = false
+
   #diagnostics = new EventEmitter()
 
   /**
@@ -34,6 +37,8 @@ class Connection {
 
   async open () {
     await retry(this.#open, RETRY)
+
+    this.#running = true
   }
 
   async close () {
@@ -70,11 +75,11 @@ class Connection {
     try {
       this.#connection = await amqp.connect(this.#url)
     } catch (exception) {
-      if (transient(exception)) return retry()
+      if (this.#transient(exception)) return retry()
       else throw exception
     }
 
-    // prevents process crash, 'close' will be emitted next
+    // prevents the process crash, 'close' will be emitted next
     // https://amqp-node.github.io/amqplib/channel_api.html#model_events
     this.#connection.on('error', noop)
 
@@ -101,19 +106,17 @@ class Connection {
   #recover () {
     return this.#recovery
   }
+
+  #transient (exception) {
+    const abruptly = exception.message === 'Socket closed abruptly during opening handshake'
+
+    return this.#running || abruptly
+  }
 }
 
 /** @type {toa.generic.retry.Options} */
 const RETRY = {
   retries: Infinity
-}
-
-/**
- * @param {Error} exception
- * @returns {boolean}
- */
-const transient = (exception) => {
-  return exception.message === 'Socket closed abruptly during opening handshake'
 }
 
 function noop () {}

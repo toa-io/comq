@@ -74,7 +74,7 @@ describe('reconnection', () => {
     expect(amqplib.connect).toHaveBeenCalledTimes(1)
 
     // const clear = jest.spyOn(conn, 'removeAllListeners')
-    const error = { message: generate() }
+    const error = { code: 'ECONNREFUSED' }
 
     conn.emit('close', error)
 

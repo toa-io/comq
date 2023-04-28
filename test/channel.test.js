@@ -577,7 +577,7 @@ describe('recovery', () => {
       if (sealed) await channel.seal()
     })
 
-    it('should re-assert queue after recovery', async () => {
+    it('should re-assert queue', async () => {
       chan.assertQueue.mockImplementation(async () => { throw new Error('Channel closed') })
 
       /** @type {comq.amqp.Connection} */
@@ -598,7 +598,7 @@ describe('recovery', () => {
       expect(repl.assertQueue).toHaveBeenCalled()
     })
 
-    it('should re-assert exchange after exception', async () => {
+    it('should re-assert exchange', async () => {
       chan.assertExchange.mockImplementation(async () => { throw new Error('Channel ended, no reply will be forthcoming') })
 
       /** @type {comq.amqp.Connection} */
@@ -619,7 +619,7 @@ describe('recovery', () => {
       expect(repl.assertExchange).toHaveBeenCalled()
     })
 
-    it('should re-bind queue after exception', async () => {
+    it('should re-bind queue', async () => {
       chan.bindQueue.mockImplementation(async () => { throw new Error('Channel ended, no reply will be forthcoming') })
 
       /** @type {comq.amqp.Connection} */
@@ -642,7 +642,7 @@ describe('recovery', () => {
       expect(repl.bindQueue).toHaveBeenCalled()
     })
 
-    it(`should${not} re-consume after recovery`, async () => {
+    it(`should${not} re-consume`, async () => {
       await channel.consume(queue, consumer)
 
       const replacement = await amqplib.connect()
@@ -655,7 +655,7 @@ describe('recovery', () => {
       else expect(chan.consume).toHaveBeenCalledWith(queue, expect.any(Function), expect.anything())
     })
 
-    it(`should${not} re-consume after exception `, async () => {
+    it(`should${not} re-consume`, async () => {
       chan.consume.mockImplementation(async () => { throw new Error('Channel ended, no reply will be forthcoming') })
 
       /** @type {comq.amqp.Connection} */
@@ -677,7 +677,7 @@ describe('recovery', () => {
       else expect(repl.consume).toHaveBeenCalled()
     })
 
-    it(`should${not} re-subscribe after recovery`, async () => {
+    it(`should${not} re-subscribe`, async () => {
       await channel.subscribe(exchange, queue, consumer)
 
       const replacement = await amqplib.connect()
@@ -690,7 +690,7 @@ describe('recovery', () => {
       else expect(repl.consume).toHaveBeenCalledWith(queue, expect.any(Function), expect.anything())
     })
 
-    it('should re-send after exception', async () => {
+    it('should re-send', async () => {
       const queue = generate()
       const buffer = Buffer.from(generate())
 
@@ -702,7 +702,6 @@ describe('recovery', () => {
       setImmediate(async () => {
         expect(chan.publish).toHaveBeenCalled()
 
-        chan.publish.mockImplementation(async () => {})
         replacement = await amqplib.connect()
 
         await channel.recover(replacement)
@@ -711,9 +710,6 @@ describe('recovery', () => {
       await channel.send(queue, buffer)
 
       const repl = await getCreatedChannel(replacement)
-
-      // await recovery effect
-      await timeout(5)
 
       expect(repl.publish).toHaveBeenCalled()
     })
@@ -757,7 +753,7 @@ describe('recovery', () => {
       )
     })
 
-    it('should unpause on recovery', async () => {
+    it('should unpause', async () => {
       jest.clearAllMocks()
 
       topology.confirms = false
