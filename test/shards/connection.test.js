@@ -1,7 +1,7 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { random, promex, sample } = require('@toa.io/generic')
+const { random, promex, immediate } = require('@toa.io/generic')
 
 const { Connection } = require('../../source/shards')
 
@@ -28,8 +28,8 @@ beforeEach(() => {
 })
 
 describe('open', () => {
-  it('should resolve when one of connections is established', async () => {
-    expect.assertions(1)
+  it('should resolve when all of the connections are established', async () => {
+    expect.assertions(2)
 
     /** @type {toa.generic.Promex[]} */
     const promises = []
@@ -41,19 +41,25 @@ describe('open', () => {
       promises.push(promise)
     }
 
-    let connected = false
+    let resolved = false
 
-    setImmediate(() => {
-      expect(connected).toStrictEqual(false)
+    setImmediate(async () => {
+      expect(resolved).toStrictEqual(false)
 
-      const any = sample(promises)
+      const first = promises.shift()
 
-      any.resolve()
+      first.resolve()
+
+      await immediate()
+
+      promises.forEach((promise) => promise.resolve())
+
+      resolved = true
     })
 
     await connection.open()
 
-    connected = true
+    expect(resolved).toStrictEqual(true)
   })
 })
 

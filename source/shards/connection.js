@@ -25,7 +25,7 @@ class Connection {
   async open () {
     const opening = this.#connections.map((connection) => connection.open())
 
-    await Promise.any(opening)
+    await Promise.all(opening)
   }
 
   async close () {
