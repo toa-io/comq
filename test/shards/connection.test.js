@@ -1,7 +1,7 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { random, promex, sample } = require('@toa.io/generic')
+const { random, promex, immediate } = require('@toa.io/generic')
 
 const { Connection } = require('../../source/shards')
 
@@ -16,7 +16,7 @@ it('should be', async () => {
 })
 
 /** @type {jest.MockedObject<comq.Connection>[]} */
-const connections = [mock.connection(), mock.connection()]
+let connections
 
 /** @type {comq.Connection} */
 let connection
@@ -24,12 +24,13 @@ let connection
 beforeEach(() => {
   jest.clearAllMocks()
 
+  connections = [mock.connection(), mock.connection()]
   connection = new Connection(connections)
 })
 
 describe('open', () => {
-  it('should resolve when one of connections is established', async () => {
-    expect.assertions(1)
+  it('should resolve when all of the connections are established', async () => {
+    expect.assertions(2)
 
     /** @type {toa.generic.Promex[]} */
     const promises = []
@@ -41,19 +42,45 @@ describe('open', () => {
       promises.push(promise)
     }
 
-    let connected = false
+    let resolved = false
 
-    setImmediate(() => {
-      expect(connected).toStrictEqual(false)
+    setImmediate(async () => {
+      expect(resolved).toStrictEqual(false)
 
-      const any = sample(promises)
+      const first = promises.shift()
 
-      any.resolve()
+      first.resolve()
+
+      await immediate()
+
+      promises.forEach((promise) => promise.resolve())
+
+      resolved = true
     })
 
     await connection.open()
 
-    connected = true
+    expect(resolved).toStrictEqual(true)
+  })
+
+  it('should close opened connection if one fails', async () => {
+    connections.push(mock.connection())
+
+    const [one, bad, two] = connections
+    const exception = new Error(generate())
+
+    one.open.mockImplementation(() => Promise.resolve())
+    two.open.mockImplementation(() => Promise.resolve())
+
+    bad.open.mockImplementation(async () => {
+      await immediate()
+      throw exception
+    })
+
+    await expect(connection.open()).rejects.toThrow(exception)
+
+    expect(one.close).toHaveBeenCalled()
+    expect(two.close).toHaveBeenCalled()
   })
 })
 
@@ -81,9 +108,9 @@ describe('createChannel', () => {
 
 describe.each(/** @type {comq.diagnostics.event[]} */ ['open', 'close'])('diagnose %s event',
   (event) => {
-    const index = random(connections.length)
-
     it('should re-emit event', async () => {
+      const index = random(connections.length)
+
       for (const conn of connections) {
         expect(conn.diagnose).toHaveBeenCalledWith(event, expect.any(Function))
       }

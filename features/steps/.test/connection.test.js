@@ -62,12 +62,6 @@ describe('Given an active sharded connection', () => {
   })
 })
 
-describe('Given the connection to both shards is established', () => {
-  tomato.steps.Gi('the connection to both shards is established')
-
-  it('should be', async () => undefined)
-})
-
 describe('When I attempt to connect to the broker for {number} second(s)', () => {
   const step = tomato.steps.Wh('I attempt to connect to the broker for {number} second(s)')
 

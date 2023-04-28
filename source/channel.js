@@ -1,7 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('node:events')
-const { lazy, recall, promex, failsafe, immediate } = require('@toa.io/generic')
+const { lazy, recall, promex, failsafe, timeout } = require('@toa.io/generic')
 
 /**
  * @implements {comq.Channel}
@@ -137,8 +137,7 @@ class Channel {
 
     for (const confirmation of this.#confirmations) confirmation.reject(INTERRUPTION)
 
-    // let unpause and confirmation interruptions be handled
-    await immediate()
+    await timeout(0) // let unpause and confirmation interruptions be handled
 
     this.#recovery.resolve()
     this.#recovery = promex()
