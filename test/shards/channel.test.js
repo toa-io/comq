@@ -374,20 +374,21 @@ it('should remove channel with back pressure from the pool', async () => {
   }
 
   await send()
+
   expect(chan.send).toHaveBeenCalled()
+
   chan.send.mockClear()
 
-  // emit 'flow'
-  for (const listener of flowListeners) listener()
+  for (const flow of flowListeners) flow()
 
   await send()
+
   expect(chan.send).not.toHaveBeenCalled()
-  chan.send.mockClear()
 
-  // emit 'drain'
-  for (const listener of drainListeners) listener()
+  for (const drain of drainListeners) drain()
 
   await send()
+
   expect(chan.send).toHaveBeenCalled()
 })
 
