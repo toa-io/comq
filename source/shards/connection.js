@@ -23,9 +23,13 @@ class Connection {
   }
 
   async open () {
-    const opening = this.#connections.map((connection) => connection.open())
+    const openings = this.#connections.map((connection) => connection.open())
 
-    await Promise.all(opening)
+    try {
+      await Promise.all(openings)
+    } catch (exception) {
+      await this.#cancel(openings, exception)
+    }
   }
 
   async close () {
@@ -50,6 +54,21 @@ class Connection {
     for (const event of events.connection) {
       connection.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, index))
     }
+  }
+
+  /**
+   * @param {Promise<any>[]} openings
+   * @param {Error} exception
+   */
+  async #cancel (openings, exception) {
+    const settled = await Promise.allSettled(openings)
+    const indexes = settled.map((result, index) => result.status === 'fulfilled' ? index : -1)
+    const opened = indexes.filter((index) => index !== -1)
+    const closings = opened.map((index) => this.#connections[index].close())
+
+    await Promise.all(closings)
+
+    throw exception
   }
 }
 

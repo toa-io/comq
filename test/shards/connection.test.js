@@ -16,7 +16,7 @@ it('should be', async () => {
 })
 
 /** @type {jest.MockedObject<comq.Connection>[]} */
-const connections = [mock.connection(), mock.connection()]
+let connections
 
 /** @type {comq.Connection} */
 let connection
@@ -24,6 +24,7 @@ let connection
 beforeEach(() => {
   jest.clearAllMocks()
 
+  connections = [mock.connection(), mock.connection()]
   connection = new Connection(connections)
 })
 
@@ -61,6 +62,26 @@ describe('open', () => {
 
     expect(resolved).toStrictEqual(true)
   })
+
+  it('should close opened connection if one fails', async () => {
+    connections.push(mock.connection())
+
+    const [one, bad, two] = connections
+    const exception = new Error(generate())
+
+    one.open.mockImplementation(() => Promise.resolve())
+    two.open.mockImplementation(() => Promise.resolve())
+
+    bad.open.mockImplementation(async () => {
+      await immediate()
+      throw exception
+    })
+
+    await expect(connection.open()).rejects.toThrow(exception)
+
+    expect(one.close).toHaveBeenCalled()
+    expect(two.close).toHaveBeenCalled()
+  })
 })
 
 describe('close', () => {
@@ -87,9 +108,9 @@ describe('createChannel', () => {
 
 describe.each(/** @type {comq.diagnostics.event[]} */ ['open', 'close'])('diagnose %s event',
   (event) => {
-    const index = random(connections.length)
-
     it('should re-emit event', async () => {
+      const index = random(connections.length)
+
       for (const conn of connections) {
         expect(conn.diagnose).toHaveBeenCalledWith(event, expect.any(Function))
       }
