@@ -30,12 +30,6 @@ beforeEach(() => {
   connection = new Connection(url)
 })
 
-/** @type {[string, Partial<Error>][]} */
-const TRANSIENT_ERRORS = [
-  ['ECONNREFUSED', { code: 'ECONNREFUSED' }],
-  ['Socket closed', { message: 'Socket closed abruptly during opening handshake' }]
-]
-
 // endregion
 
 describe('initial connection', () => {
@@ -45,7 +39,9 @@ describe('initial connection', () => {
     expect(amqplib.connect).toHaveBeenCalledWith(url)
   })
 
-  it.each(TRANSIENT_ERRORS)('should reconnect on %s',
+  it.each(/** @type {[string, Partial<Error>][]} */[
+    ['Socket closed', { message: 'Socket closed abruptly during opening handshake' }]
+  ])('should reconnect on %s',
     async (_, error) => {
       amqplib.connect.mockImplementationOnce(async () => { throw error })
 
@@ -54,12 +50,13 @@ describe('initial connection', () => {
       expect(amqplib.connect).toHaveBeenCalledTimes(2)
     })
 
-  it('should throw if error is permanent', async () => {
-    const error = new Error()
+  it.each(/** @type {[string, Partial<Error>][]} */[
+    ['ECONNREFUSED', { code: 'ECONNREFUSED' }],
+    ['any exception', new Error(generate())]
+  ])('should throw if error is %s', async (_, exception) => {
+    amqplib.connect.mockImplementationOnce(async () => { throw exception })
 
-    amqplib.connect.mockImplementationOnce(async () => { throw error })
-
-    await expect(connection.open()).rejects.toThrow(error)
+    await expect(connection.open()).rejects.toStrictEqual(exception)
   })
 })
 

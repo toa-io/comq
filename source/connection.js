@@ -113,10 +113,7 @@ const RETRY = {
  * @returns {boolean}
  */
 const transient = (exception) => {
-  const refused = exception.code === 'ECONNREFUSED'
-  const handshake = exception.message === 'Socket closed abruptly during opening handshake'
-
-  return refused || handshake
+  return exception.message === 'Socket closed abruptly during opening handshake'
 }
 
 function noop () {}
