@@ -182,13 +182,11 @@ the connection is restored.
 
 ## Connection Tolerance
 
-When initially connecting to the broker or if the established connection is lost, connection
-attempts will be repeated indefinitely with intervals increasing up to 30 seconds. Once reconnected,
-the topology will be recovered, and unanswered Requests and unconfirmed Events will be
+When the established connection is lost, it will be automatically restored.
+Reconnection attempts will be made indefinitely, with intervals increasing up to 30 seconds.
+If the broker rejects the connection, for example, due to access being denied, an exception will be thrown.
+Once reconnected, the topology will be recovered, and any unanswered requests and unconfirmed events will be
 retransmitted.
-
-If the broker rejects the connection (for example, due to access being denied), an exception will be
-thrown.
 
 ## Sharded Connection
 
@@ -198,11 +196,11 @@ A sharded connection is a mechanism that uses multiple connections simultaneousl
 balancing and mitigate failover scenarios, utilizing a set of broker instances that are **not**
 combined into a cluster.
 
-Outgoing messages are sent to a single connection chosen at random from the shard pool. Shards that
-lose their underlying connection or experience channel [back pressure](#flow-control) on
-corresponding channel are removed from the pool until the issue is resolved. Pending messages
-meeting these conditions are immediately routed among the remaining shards in the pool. If no shards
-are available, messages will wait until any shard's connection is re-established.
+Outgoing messages are sent to a single connection chosen at random from the shard pool. Shards that lose their
+underlying connection or experience channel [back pressure](#flow-control) on a corresponding channel are removed from
+the pool until the issue is resolved. Pending messages meeting these conditions are immediately routed among the
+remaining shards in the pool. If no shards are available, messages will wait until a shard's connection is
+re-established.
 
 Incoming messages are consumed from all shards.
 
