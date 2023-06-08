@@ -221,6 +221,19 @@ const io = await connect(shard0, shard1)
 await io.close()
 ```
 
+## Singleton Connection
+
+`async join(url: string): IO`
+
+Similar to [`connect`](#connect), but it utilizes shared underlying connections.
+
+The connection is established once per unique `url` among instances of `IO` created with `join`,
+and it will be closed when the last instance of `IO` using that connection is [disconnected](#disconnection).
+
+[Sharded connections](#sharded-connection) are also supported.
+
+`async join(...shards: string[]): IO`
+
 ## Topology
 
 Topology is designed to deliver maximum performance while ensuring that the **at least once**
