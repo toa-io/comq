@@ -2,40 +2,52 @@
 
 const { IO } = require('./io')
 const { Connection } = require('./connection')
+const { SingletonConnection } = require('./singleton')
 const shards = require('./shards')
 
 /** @type {comq.connect} */
 const connect = async (...urls) => {
-  const connection = create(urls)
+  return create(urls, connectionConstructor(Connection))
+}
+
+/** @type {comq.connect} */
+const join = async (...urls) => {
+  return create(urls, connectionConstructor(SingletonConnection))
+}
+
+/**
+ * @param {string[]} urls
+ * @param {(urls: string[]) => comq.Connection} constructor
+ * @return {Promise<IO>}
+ */
+const create = async (urls, constructor) => {
+  const connection = constructor(urls)
 
   await connection.open()
 
   return new IO(connection)
 }
 
-/**
- * @param {string[]} urls
- * @return {comq.Connection}
- */
-const create = (urls) => {
-  if (urls.length === 1) return single(urls[0])
-  else return sharded(urls)
-}
-
-/**
- * @param {string} url
- * @return {comq.Connection}
- */
-const single = (url) => new Connection(url)
+const connectionConstructor = (ConnectionClass) =>
+  /**
+   * @param {string[]} urls
+   * @return {comq.Connection}
+   */
+  (urls) => {
+    if (urls.length === 1) return new ConnectionClass(urls[0])
+    else return shardedConnection(urls, ConnectionClass)
+  }
 
 /**
  * @param {string[]} urls
+ * @param {function} ConnectionClass
  * @return {comq.Connection}
  */
-const sharded = (urls) => {
-  const connections = urls.map(single)
+const shardedConnection = (urls, ConnectionClass) => {
+  const connections = urls.map((url) => new ConnectionClass(url))
 
   return new shards.Connection(connections)
 }
 
 exports.connect = connect
+exports.join = join

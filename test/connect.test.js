@@ -2,12 +2,11 @@
 
 const { generate } = require('randomstring')
 
-const { connect } = require('../')
-
 jest.mock('../source/io')
 jest.mock('../source/connection')
 jest.mock('../source/shards/connection')
 
+const { connect } = require('../')
 const { IO } = require('../source/io')
 
 const {
