@@ -211,7 +211,6 @@ Returns an instance of `IO` once a successful connection to one of the shards is
 ### Example
 
 ```javascript
-
 const shard0 = 'amqp://developer:secret@localhost:5673'
 const shard1 = 'amqp://developer:secret@localhost:5674'
 
@@ -220,7 +219,6 @@ const io = await connect(shard0, shard1)
 // ...
 
 await io.close()
-
 ```
 
 ## Topology
