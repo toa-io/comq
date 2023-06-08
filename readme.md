@@ -173,14 +173,14 @@ The following encoding formats are supported:
 - `application/octet-stream`
 - `text/plain`
 
-## Flow Control
+## Flow control
 
 When [back pressure](https://www.rabbitmq.com/flow-control.html) is applied to a channel or the
 underlying broker connection is lost, any current and future outgoing messages will be paused.
 Corresponding returned promises will remain in a `pending` state until the pressure is removed or
 the connection is restored.
 
-## Connection Tolerance
+## Connection tolerance
 
 When the established connection is lost, it will be automatically restored.
 Reconnection attempts will be made indefinitely, with intervals increasing up to 30 seconds.
@@ -188,7 +188,7 @@ If the broker rejects the connection, for example, due to access being denied, a
 Once reconnected, the topology will be recovered, and any unanswered requests and unconfirmed events will be
 retransmitted.
 
-## Sharded Connection
+## Sharded connection
 
 *Send to one, receive from all.*
 
@@ -221,7 +221,7 @@ const io = await connect(shard0, shard1)
 await io.close()
 ```
 
-## Singleton Connection
+## Singleton connection
 
 `async join(url: string): IO`
 
@@ -267,7 +267,7 @@ when using a single channel or channel pool.
 [^1]: The maximum number of messages has been consumed while handlers of those messages have sent
 requests and are expecting replies.
 
-### Exchanges and Queues
+### Exchanges and queues
 
 - Exchanges and queues for Events, and queues for Requests
   are [durable](https://amqp-node.github.io/amqplib/channel_api.html#channel_assertQueue).
@@ -303,7 +303,7 @@ See:
 | Reply   | unlimited | no       | exclusive | automatic      | no         |
 | Event   | limited   | yes      | durable   | manual         | yes        |
 
-## Graceful Shutdown
+## Graceful shutdown
 
 ### Sealing
 
