@@ -253,4 +253,10 @@ describe('diagnostics', () => {
 
     expect(captured).toStrictEqual(error)
   })
+
+  it('should handle max listeners', async () => {
+    for (let i = 0; i < 100; i++) {
+      connection.diagnose('close', () => undefined)
+    }
+  })
 })

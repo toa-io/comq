@@ -26,7 +26,7 @@ class Connection {
   /** @type {boolean} */
   #running = false
 
-  #diagnostics = new EventEmitter()
+  #diagnostics = createEmitter()
 
   /**
    * @param {string} url
@@ -114,11 +114,19 @@ class Connection {
   }
 }
 
+function createEmitter () {
+  const emitter = new EventEmitter()
+
+  emitter.setMaxListeners(10000)
+
+  return emitter
+}
+
+function noop () {}
+
 /** @type {toa.generic.retry.Options} */
 const RETRY = {
   retries: Infinity
 }
-
-function noop () {}
 
 exports.Connection = Connection
