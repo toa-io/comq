@@ -49,7 +49,7 @@ jobs:
             git merge main
             git push --all origin --no-verify
           else
-            npx lerna@6.5.1 version --conventional-prerelease --preid dev --no-commit-hooks --no-changelog --yes --message "ci: %s" --git-tag-command "echo %s" --sign-git-commit
+            npx lerna@6.5.1 version --conventional-prerelease --preid dev --dist-tag dev --no-commit-hooks --no-changelog --yes --message "ci: %s" --git-tag-command "echo %s" --sign-git-commit
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.TOABOT_GITHUB_TOKEN }}
