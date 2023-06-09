@@ -1,7 +1,7 @@
 'use strict'
 
 const { World } = require('@cucumber/cucumber')
-const { connect } = require('../../')
+const { connect, assert } = require('../../')
 
 /**
  * @implements {comq.features.Context}
@@ -26,7 +26,13 @@ class Context extends World {
   async connect (user, password) {
     const urls = this.#urls(user, password)
 
-    await this.#connect(...urls)
+    await this.#connect(urls)
+  }
+
+  async assert (user, password) {
+    const urls = this.#urls(user, password)
+
+    await this.#connect(urls, assert)
   }
 
   async disconnect () {
@@ -40,13 +46,14 @@ class Context extends World {
   }
 
   /**
-   * @param {...string} urls
+   * @param {string[]} urls
+   * @param {comq.connect} [method]
    * @return {Promise<void>}
    */
-  async #connect (...urls) {
+  async #connect (urls, method = connect) {
     if (this.io !== undefined) await this.disconnect()
 
-    this.io = await connect(...urls)
+    this.io = await method(...urls)
     this.connected = true
 
     for (const event of EVENTS) this.io.diagnose(event, () => (this.events[event] = true))

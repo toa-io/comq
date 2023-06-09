@@ -25,6 +25,7 @@ declare namespace comq.features {
     publishing: any
 
     connect(user?: string, password?: string): Promise<void>
+    assert(user?: string, password?: string): Promise<void>
     disconnect(): Promise<void>
   }
 

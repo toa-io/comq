@@ -26,6 +26,27 @@ Given('an active sharded connection',
     await this.connecting
   })
 
+Given('an active singleton connection',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.connecting = this.assert()
+
+    await this.connecting
+  })
+
+Given('an active sharded singleton connection',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.sharded = true
+    this.connecting = this.assert()
+
+    await this.connecting
+  })
+
 When('I attempt to connect to the broker for {number} second(s)',
   /**
    * @param {number} interval

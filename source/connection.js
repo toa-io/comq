@@ -26,7 +26,7 @@ class Connection {
   /** @type {boolean} */
   #running = false
 
-  #diagnostics = new EventEmitter()
+  #diagnostics = createEmitter()
 
   /**
    * @param {string} url
@@ -79,7 +79,7 @@ class Connection {
       else throw exception
     }
 
-    // prevents the process crash, 'close' will be emitted next
+    // This prevents the process from crashing; 'close' will be emitted next.
     // https://amqp-node.github.io/amqplib/channel_api.html#model_events
     this.#connection.on('error', noop)
 
@@ -114,11 +114,19 @@ class Connection {
   }
 }
 
+function createEmitter () {
+  const emitter = new EventEmitter()
+
+  emitter.setMaxListeners(10000)
+
+  return emitter
+}
+
+function noop () {}
+
 /** @type {toa.generic.retry.Options} */
 const RETRY = {
   retries: Infinity
 }
-
-function noop () {}
 
 exports.Connection = Connection
