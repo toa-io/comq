@@ -65,6 +65,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          npm pkg delete scripts.prepare # husky
+          
           if [ ${{ github.base_ref }} = main ]; then
             npm publish
           else
