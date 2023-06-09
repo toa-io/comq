@@ -11,7 +11,7 @@ const connect = async (...urls) => {
 }
 
 /** @type {comq.connect} */
-const join = async (...urls) => {
+const assert = async (...urls) => {
   return create(urls, connectionConstructor(SingletonConnection))
 }
 
@@ -50,4 +50,4 @@ const shardedConnection = (urls, ConnectionClass) => {
 }
 
 exports.connect = connect
-exports.join = join
+exports.assert = assert

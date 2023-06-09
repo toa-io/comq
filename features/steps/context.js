@@ -1,7 +1,7 @@
 'use strict'
 
 const { World } = require('@cucumber/cucumber')
-const { connect, join } = require('../../')
+const { connect, assert } = require('../../')
 
 /**
  * @implements {comq.features.Context}
@@ -29,10 +29,10 @@ class Context extends World {
     await this.#connect(urls)
   }
 
-  async join (user, password) {
+  async assert (user, password) {
     const urls = this.#urls(user, password)
 
-    await this.#connect(urls, join)
+    await this.#connect(urls, assert)
   }
 
   async disconnect () {

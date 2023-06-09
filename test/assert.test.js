@@ -16,7 +16,7 @@ const {
 const shards = /** @type {{ Connection: jest.MockedClass<comq.Connection>}} */
   require('../source/shards')
 
-const { join } = require('../')
+const { assert } = require('../')
 
 const url = generate()
 
@@ -26,11 +26,11 @@ let io
 beforeEach(async () => {
   jest.clearAllMocks()
 
-  io = await join(url)
+  io = await assert(url)
 })
 
 it('should be', async () => {
-  expect(join).toBeInstanceOf(Function)
+  expect(assert).toBeInstanceOf(Function)
 })
 
 it('should return instance of IO', async () => {
@@ -48,7 +48,7 @@ it('should create sharded connection', async () => {
 
   const urls = [generate(), generate()]
 
-  io = await join(...urls)
+  io = await assert(...urls)
 
   for (const url of urls) expect(SingletonConnection).toHaveBeenCalledWith(url)
 

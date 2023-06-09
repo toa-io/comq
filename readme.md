@@ -223,16 +223,16 @@ await io.close()
 
 ## Singleton connection
 
-`async join(url: string): IO`
+`async assert(url: string): IO`
 
 Similar to [`connect`](#connect), but it utilizes shared underlying connections.
 
-The connection is established once per unique `url` among instances of `IO` created with `join`,
+The connection is established once per unique `url` among instances of `IO` created with `assert`,
 and it will be closed when the last instance of `IO` using that connection is [disconnected](#disconnection).
 
 [Sharded connections](#sharded-connection) are also supported.
 
-`async join(...shards: string[]): IO`
+`async assert(...shards: string[]): IO`
 
 ## Topology
 

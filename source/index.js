@@ -1,6 +1,6 @@
 'use strict'
 
-const { connect, join } = require('./connect')
+const { connect, assert } = require('./connect')
 
 exports.connect = connect
-exports.join = join
+exports.assert = assert

@@ -31,7 +31,7 @@ Given('an active singleton connection',
    * @this {comq.features.Context}
    */
   async function () {
-    this.connecting = this.join()
+    this.connecting = this.assert()
 
     await this.connecting
   })
@@ -42,7 +42,7 @@ Given('an active sharded singleton connection',
    */
   async function () {
     this.sharded = true
-    this.connecting = this.join()
+    this.connecting = this.assert()
 
     await this.connecting
   })
