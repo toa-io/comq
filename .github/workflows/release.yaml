@@ -11,6 +11,9 @@ on:
       - 'types/**'
       - 'package-lock.json'
 
+env:
+  CI: 1
+
 jobs:
   publish:
     if: github.event.pull_request.merged == true
