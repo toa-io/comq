@@ -14,9 +14,10 @@ Node.js.
 7. [Poison message handling](#messages)
 8. [Connection tolerance](#connection-tolerance) and broker restart resilience
 9. [Sharded connection](#sharded-connection)
-10. [Graceful shutdown](#graceful-shutdown)
+10. [Singleton connection](#singleton-connection)
+11. [Graceful shutdown](#graceful-shutdown)
 
-> CommonJS, ECMAScript and TypeScript compatible (types included).
+> CommonJS, ECMAScript, and TypeScript compatible (types included).
 
 ## TL;DR
 
