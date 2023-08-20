@@ -28,7 +28,7 @@ describe.each(['request', 'reply', 'event'])('%s channel events',
    * @param {comq.topology.type} type
    */
   (type) => {
-    it.each(['flow', 'drain', 'recover', 'discard'])('should re-emit %s',
+    it.each(['flow', 'drain', 'recover', 'discard', 'pause', 'resume'])('should re-emit %s',
       /**
        * @param {comq.diagnostics.event} event
        */

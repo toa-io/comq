@@ -5,17 +5,18 @@ Node.js.
 
 ## Features
 
-1. [Dynamic topology](#topology)
-2. [Request](#request)-[reply](#reply) (RPC)
-3. Events ([pub](#emission)/[sub](#consumption))
-4. [Content encoding](#encoding)
-5. [Flow control](#flow-control) and back pressure handling
-6. [Consumer acknowledgments](#messages) and [publisher confirms](#channels)
-7. [Poison message handling](#messages)
-8. [Connection tolerance](#connection-tolerance) and broker restart resilience
-9. [Sharded connection](#sharded-connection)
-10. [Singleton connection](#singleton-connection)
-11. [Graceful shutdown](#graceful-shutdown)
+- [Dynamic topology](#topology)
+- [Request](#request)-[reply](#reply) (RPC)
+- Events ([pub](#emission)/[sub](#consumption))
+- [Content encoding](#encoding)
+- [Flow control](#flow-control) and back pressure handling
+- [Pipelines](#pipelines)
+- [Consumer acknowledgments](#messages) and [publisher confirms](#channels)
+- [Poison message handling](#messages)
+- [Connection tolerance](#connection-tolerance) and broker restart resilience
+- [Sharded connection](#sharded-connection)
+- [Singleton connection](#singleton-connection)
+- [Graceful shutdown](#graceful-shutdown)
 
 > CommonJS, ECMAScript, and TypeScript compatible (types included).
 
@@ -193,13 +194,13 @@ Returns a readable stream of replies.
 
 ```javascript
 async function * generate () {
-  yield { a: 1, b: 2 };
-  yield { a: 3, b: 4 };
+  yield { a: 1, b: 2 }
+  yield { a: 3, b: 4 }
 }
 
 const requests = Readable.from(generate())
 
-for await (const reply of io.pipe.requests('add_numbers', requests))
+for await (const reply of io.request('add_numbers', requests))
   console.log(reply)
 ```
 
@@ -213,7 +214,7 @@ async function * generate () {
 
 const events = Readable.from(generate())
 
-await io.pipe.emit('numbers_added', events)
+await io.emit('numbers_added', events)
 ```
 
 ## Connection tolerance
@@ -398,12 +399,16 @@ Subscribe to one of the diagnostic events:
   exceptions. Channel type,
   raw [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_consume)
   and the exception are passed as arguments.
+- `pause`: channel is paused. Channel type is passed.
+- `resume`: channel is resumed. Channel type is passed.
 
 In the case of a [sharded connection](#sharded-connection), an additional argument specifying the
 shard number will be passed to listeners.
+This is applicable except for the `pause` and `resume` events,
+which are emitted when the associated channels are paused or resumed across all shards.
 The shard number corresponds to the position of the argument used in the `connect` function call.
 
-[^3]: As [`connect`](#connect) function returns an instance of `IO` *after* the connection has been
+[^3]: As the [`connect`](#connect) function returns an instance of `IO` *after* the connection has been
 established, there is no way to capture the initial `open` event.
 
 ### Example
