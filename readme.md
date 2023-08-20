@@ -181,6 +181,41 @@ underlying broker connection is lost, any current and future outgoing messages w
 Corresponding returned promises will remain in a `pending` state until the pressure is removed or
 the connection is restored.
 
+### Pipelines
+
+Payloads for Requests and Events can be passed as a readable stream
+in [object mode](https://nodejs.org/api/stream.html#object-mode), enabling the handling of large amounts of data with
+the benefits of RabbitMQ back pressure and flow control.
+
+`async IO.request(queue: string, payload: Readable, [encoding: string]): Readable`
+
+Returns a readable stream of replies.
+
+```javascript
+async function * generate () {
+  yield { a: 1, b: 2 };
+  yield { a: 3, b: 4 };
+}
+
+const requests = Readable.from(generate())
+
+for await (const reply of io.pipe.requests('add_numbers', requests))
+  console.log(reply)
+```
+
+`async IO.emit(exchange: string, payload: Readable, [encoding: string]): void`
+
+```javascript
+async function * generate () {
+  yield { a: 1, b: 2 };
+  yield { a: 3, b: 4 };
+}
+
+const events = Readable.from(generate())
+
+await io.pipe.emit('numbers_added', events)
+```
+
 ## Connection tolerance
 
 When the established connection is lost, it will be automatically restored.
@@ -365,8 +400,8 @@ Subscribe to one of the diagnostic events:
   and the exception are passed as arguments.
 
 In the case of a [sharded connection](#sharded-connection), an additional argument specifying the
-shard number will be passed to listeners. The shard number corresponds to the number of the argument
-used in the `connect` function call.
+shard number will be passed to listeners.
+The shard number corresponds to the position of the argument used in the `connect` function call.
 
 [^3]: As [`connect`](#connect) function returns an instance of `IO` *after* the connection has been
 established, there is no way to capture the initial `open` event.
