@@ -192,22 +192,11 @@ the benefits of RabbitMQ back pressure and flow control.
 
 Returns a readable stream of replies.
 
-```javascript
-async function * generate () {
-  yield { a: 1, b: 2 }
-  yield { a: 3, b: 4 }
-}
-
-const requests = Readable.from(generate())
-
-for await (const reply of io.request('add_numbers', requests))
-  console.log(reply)
-```
 
 `async IO.emit(exchange: string, payload: Readable, [encoding: string]): void`
 
 ```javascript
-async function * generate () {
+function * generate () {
   yield { a: 1, b: 2 };
   yield { a: 3, b: 4 };
 }
@@ -215,6 +204,11 @@ async function * generate () {
 const events = Readable.from(generate())
 
 await io.emit('numbers_added', events)
+
+const requests = Readable.from(generate())
+
+for await (const reply of io.request('add_numbers', requests))
+  console.log(reply)
 ```
 
 ## Connection tolerance
