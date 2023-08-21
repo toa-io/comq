@@ -7,7 +7,7 @@ const { lazy, track, failsafe, promex } = require('@toa.io/generic')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
-const { pipeline } = require('./pipeline')
+const { pipeline, transform } = require('./pipeline')
 const events = require('./events')
 const io = require('./.io')
 
@@ -114,6 +114,14 @@ class IO {
      * @returns {Promise<void>}
      */
     async (exchange, payload, encoding) => {
+      if (payload instanceof stream.Readable) {
+        return transform(
+          payload,
+          (payload) => this.emit(exchange, payload, encoding),
+          this.#events
+        )
+      }
+
       /** @type {comq.amqp.options.Publish} */
       const properties = {}
 

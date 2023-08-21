@@ -192,7 +192,6 @@ the benefits of RabbitMQ back pressure and flow control.
 
 Returns a readable stream of replies.
 
-
 `async IO.emit(exchange: string, payload: Readable, [encoding: string]): void`
 
 ```javascript

@@ -2,7 +2,7 @@
 
 const { EventEmitter } = require('node:events')
 const stream = require('node:stream')
-const { pipeline } = require('../source/pipeline')
+const { pipeline, transform } = require('../source/pipeline')
 const { timeout } = require('@toa.io/generic')
 
 /** @type {Channel} */
@@ -49,6 +49,29 @@ it('should control source', async () => {
   await timeout(0)
 
   expect(input.isPaused()).toBe(false)
+})
+
+it('should wait for end', async () => {
+  async function * generate () {
+    for (let i = 1; i < 4; i++) {
+      await timeout(1)
+
+      yield i
+    }
+  }
+
+  let finished = 0
+
+  const fn = jest.fn(async () => {
+    await timeout(1)
+    finished++
+  })
+  const input = stream.Readable.from(generate())
+
+  await transform(input, fn, channel)
+
+  expect(fn).toHaveBeenCalledTimes(3)
+  expect(finished).toBe(3)
 })
 
 class Channel extends EventEmitter {

@@ -15,6 +15,13 @@ function pipeline (source, transform, channel) {
   return destination
 }
 
+async function transform (source, transform, channel) {
+  const readable = pipeline(source, transform, channel)
+
+  // eslint-disable-next-line no-void, no-unused-vars
+  for await (const _ of readable) void 0
+}
+
 class Pipeline extends Transform {
   #transform
 
@@ -33,3 +40,4 @@ class Pipeline extends Transform {
 }
 
 exports.pipeline = pipeline
+exports.transform = transform
