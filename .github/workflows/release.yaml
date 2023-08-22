@@ -31,8 +31,8 @@ jobs:
         with:
           fetch-depth: 0
 
-#      - name: Run tests
-#        run: npm i && npm test
+      - name: Run tests
+        run: npm ci --omit=dev --ignore-scripts && npm test
 
       - name: Import GPG key
         id: gpg
