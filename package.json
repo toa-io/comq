@@ -45,7 +45,7 @@
     "msgpackr": "^1.9.5"
   },
   "scripts": {
-    "prepare": "husky install",
+    "prepare": "echo run: husky install",
     "test": "standard && jest",
     "features": "cucumber-js",
     "lint": "standard --fix --verbose | snazzy"
