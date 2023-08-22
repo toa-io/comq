@@ -2,6 +2,7 @@
 
 // region setup
 
+const stream = require('node:stream')
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
 const { immediate } = require('@toa.io/generic')
@@ -160,6 +161,33 @@ describe('send', () => {
     expect(properties.contentType).toStrictEqual(encoding)
   })
 
+  it('should send stream of requests', async () => {
+    requests.send.mockClear()
+
+    function * generate () {
+      for (let i = 0; i < 10; i++) yield i
+    }
+
+    const encoding = 'application/json'
+    const replyFormatter = (queue) => queue
+
+    setTimeout(replyAll, 10) // read the stream to end
+
+    const input = stream.Readable.from(generate())
+
+    /** @type {Readable} */
+    const output = await io.request(queue, input, encoding, replyFormatter)
+
+    expect(output).toBeInstanceOf(stream.Readable)
+
+    const replies = []
+
+    for await (const reply of output) replies.push(reply)
+
+    expect(replies.length).toStrictEqual(10)
+    expect(requests.send).toHaveBeenCalledTimes(10)
+  })
+
   it('should resend unanswered Requests', async () => {
     expect(requests.diagnose).toHaveBeenCalledWith('recover', expect.any(Function))
 
@@ -237,6 +265,19 @@ const reply = async (content = randomBytes(8), contentType = undefined) => {
   const message = /** @type {comq.amqp.Message} */ { content, properties }
 
   await callback(message)
+}
+
+async function replyAll () {
+  const callback = replies.consume.mock.calls[0][1]
+
+  for (let i = 0; i < requests.send.mock.calls.length; i++) {
+    const call = requests.send.mock.calls[i]
+    const correlationId = call[2].correlationId
+    const properties = { correlationId }
+    const message = /** @type {comq.amqp.Message} */ { content: randomBytes(8), properties }
+
+    await callback(message)
+  }
 }
 
 /**

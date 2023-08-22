@@ -1,5 +1,6 @@
 'use strict'
 
+const stream = require('node:stream')
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
 
@@ -18,6 +19,9 @@ let connection
 /** @type {jest.MockedObject<comq.Channel>} */
 let events
 
+const exchange = generate()
+const payload = generate()
+
 beforeEach(async () => {
   jest.clearAllMocks()
 
@@ -33,9 +37,6 @@ it('should be', async () => {
   expect(io.emit).toBeDefined()
 })
 
-const exchange = generate()
-const payload = generate()
-
 it('should create events channel', async () => {
   expect(connection.createChannel).toHaveBeenCalledWith('event')
   expect(events).toBeDefined()
@@ -47,6 +48,20 @@ it('should publish to an exchange', async () => {
   const args = events.publish.mock.calls[0]
 
   expect(args[0]).toStrictEqual(exchange)
+})
+
+it('should publish stream of events', async () => {
+  jest.clearAllMocks()
+
+  function * generate () {
+    for (let i = 0; i < 10; i++) yield i
+  }
+
+  const input = stream.Readable.from(generate())
+
+  await io.emit(exchange, input)
+
+  expect(events.publish).toHaveBeenCalledTimes(10)
 })
 
 it('should encode message as msgpack by default', async () => {

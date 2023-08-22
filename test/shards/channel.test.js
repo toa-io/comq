@@ -187,7 +187,7 @@ describe.each(/** @type {string[]} */['send', 'publish', 'fire'])('%s', (method)
 
     const last = label + i
 
-    // now channel has thrown an exception
+    // now the channel has thrown an exception
     expect(broken[method]).toHaveBeenCalledWith(last, buffer, options)
 
     const r = (b + 1) % 2
@@ -202,7 +202,7 @@ describe.each(/** @type {string[]} */['send', 'publish', 'fire'])('%s', (method)
     /** @type {jest.MockedObject<comq.Channel>} */
     let recovered
 
-    // both shards rejects and will be removed from the pool
+    // both shards reject and will be removed from the pool
     channels[0][method].mockImplementationOnce(reject)
     channels[1][method].mockImplementationOnce(reject)
 
@@ -337,6 +337,42 @@ describe('diagnose', () => {
     while (!thrown) await channel.send(queue, buffer)
 
     expect(listener).toHaveBeenCalledWith(expect.any(Number))
+  })
+
+  it('should emit `pause` and `unpause` events', async () => {
+    const queue = generate()
+    const buffer = randomBytes(8)
+    const pause = /** @type {jest.MockedFunction} */ jest.fn()
+    const resume = /** @type {jest.MockedFunction} */ jest.fn()
+
+    channel.diagnose('pause', pause)
+    channel.diagnose('resume', resume)
+
+    for (const chan of channels) {
+      chan.send.mockImplementationOnce(() => {
+        expect(pause).not.toHaveBeenCalled()
+        throw new Error()
+      })
+    }
+
+    // recover
+    setImmediate(() => {
+      for (const chan of channels) {
+        // subscriptions to the 'recover' event
+        const calls = chan.diagnose.mock.calls.filter(
+          (call) => call[0] === 'recover')
+
+        expect(calls.length).toBeGreaterThan(0)
+
+        // emit 'recover' event to return shard to the pool
+        for (const call of calls) call[1]()
+      }
+    })
+
+    await channel.send(queue, buffer)
+
+    expect(pause).toHaveBeenCalledTimes(1)
+    expect(resume).toHaveBeenCalledTimes(1)
   })
 })
 

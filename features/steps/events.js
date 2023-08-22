@@ -1,5 +1,6 @@
 'use strict'
 
+const stream = require('node:stream')
 const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
 const { timeout, quantity, match } = require('@toa.io/generic')
@@ -61,6 +62,23 @@ When('an event is emitted to the {token} exchange with properties:',
     await emit.call(this, exchange, message, properties)
   })
 
+When('a stream of {quantity} events is emitted to the {token} exchange',
+  /**
+   * @param {string} exchange
+   * @this {comq.features.Context}
+   */
+  async function (amountQ, exchange) {
+    const amount = quantity(amountQ)
+
+    function * generate () {
+      for (let i = 0; i < amount; i++) yield randomBytes(8)
+    }
+
+    const events = stream.Readable.from(generate())
+
+    await emit.call(this, exchange, events)
+  })
+
 Then('{token} receives the event',
   /**
    * @param {string} group
@@ -91,6 +109,17 @@ Then('the event is received',
    */
   async function () {
     await consumed.call(this)
+  })
+
+Then('{quantity} events is received',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function (expectedQ) {
+    const expected = quantity(expectedQ)
+
+    await timeout(100) // let it consume
+    assert.equal(this.eventsConsumedCount, expected, 'Not all events have been consumed')
   })
 
 Given('I\'m publishing {quantity}B events to the {token} exchange at {quantity}Hz',

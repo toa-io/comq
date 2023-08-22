@@ -221,7 +221,7 @@ describe('Given I\'m sending {quantity}B requests to the {token} queue at {quant
 
     await timeout(100 + 12)
 
-    const callsAmountExpected = [10, 11]
+    const callsAmountExpected = [9, 10, 11, 12]
 
     expect(callsAmountExpected).toContain(context.io.request.mock.calls.length)
     expect(context.sending).toBeDefined()

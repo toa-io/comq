@@ -120,7 +120,7 @@ class Channel {
    */
   #add (channel) {
     this.#channels.add(channel)
-    this.#pool = Array.from(this.#channels)
+    this.#update()
   }
 
   /**
@@ -131,8 +131,21 @@ class Channel {
 
     this.#bench.set(channel, promex())
     this.#channels.delete(channel)
-    this.#pool = Array.from(this.#channels)
+    this.#update()
     this.#diagnostics.emit('remove', channel.index)
+  }
+
+  #update () {
+    const from = this.#pool?.length
+    const to = this.#channels.size
+
+    this.#pool = Array.from(this.#channels)
+
+    if (from === undefined) return
+
+    if (from !== 0 && to === 0) { this.#diagnostics.emit('pause') }
+
+    if (from === 0 && to !== 0) { this.#diagnostics.emit('resume') }
   }
 
   /**
