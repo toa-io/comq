@@ -1,5 +1,6 @@
 'use strict'
 
+const stream = require('node:stream')
 const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
 const { parse } = require('@toa.io/yaml')
@@ -104,6 +105,43 @@ Then('the consumer does not receive the reply',
     await Promise.any([get(), gap()])
 
     assert.equal(reply, undefined, 'The reply was received')
+  })
+
+When('the consumer sends {quantity} requests to the {token} queue as a stream',
+  /**
+   * @param {string} queue
+   * @this {comq.features.Context}
+   */
+  async function (amountQ, queue) {
+    const amount = quantity(amountQ)
+
+    function * generate () {
+      for (let i = 0; i < amount; i++) {
+        yield randomBytes(8)
+      }
+    }
+
+    const input = stream.Readable.from(generate())
+
+    await send.call(this, queue, input)
+  })
+
+Then('the consumer receives {quantity} replies as a stream',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function (amountQ) {
+    const expected = quantity(amountQ)
+    const output = await this.reply
+
+    let actual = 0
+
+    // eslint-disable-next-line no-unused-vars
+    for await (const _ of output) {
+      actual++
+    }
+
+    assert.equal(actual, expected, 'The amount of replies mismatches')
   })
 
 Given('I\'m sending {quantity}B requests to the {token} queue at {quantity}Hz',

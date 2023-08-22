@@ -281,6 +281,7 @@ class Channel {
     this.#paused = promex()
     this.#channel.once('drain', this.#unpause)
     this.#diagnostics.emit('flow')
+    this.#diagnostics.emit('pause')
   }
 
   /**
@@ -294,6 +295,7 @@ class Channel {
 
     this.#paused = undefined
     this.#diagnostics.emit('drain')
+    this.#diagnostics.emit('resume')
   }
 
   async #unpaused () {

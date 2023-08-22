@@ -98,9 +98,6 @@ Feature: Request-Reply Topology Recovery
     And `someone` receives the event
 
   Scenario: Start consuming events while broker is down
-
-  First consume will assert queue, so error will happen while calling AMQP.consume()
-
     Given that `first` is consuming events from the `numbers_added` exchange
     And `second` consuming events from the `numbers_added` exchange is expected
     When the broker has crashed

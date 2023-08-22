@@ -1,11 +1,13 @@
 'use strict'
 
+const stream = require('node:stream')
 const { EventEmitter } = require('node:events')
 const { randomBytes } = require('node:crypto')
 const { lazy, track, failsafe, promex } = require('@toa.io/generic')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
+const { pipeline, transform } = require('./pipeline')
 const events = require('./events')
 const io = require('./.io')
 
@@ -61,12 +63,20 @@ class IO {
     failsafe(this, this.#recover,
       /**
        * @param {string} queue
-       * @param {any} payload
+       * @param {any | Readable} payload
        * @param {comq.encoding} [encoding]
        * @param {comq.ReplyToPropertyFormatter} [replyToFormatter]
-       * @returns {Promise<void>}
+       * @returns {Promise<any | Readable>}
        */
       async (queue, payload, encoding, replyToFormatter) => {
+        if (payload instanceof stream.Readable) {
+          return pipeline(
+            payload,
+            (payload) => this.request(queue, payload, encoding, replyToFormatter),
+            this.#requests
+          )
+        }
+
         const [buffer, contentType] = this.#encode(payload, encoding)
         const emitter = this.#emitters.get(queue)
         const reply = this.#createReply()
@@ -84,7 +94,7 @@ class IO {
 
   consume = lazy(this, this.#createEventChannel,
     async (exchange, group, callback) => {
-      if (callback === undefined) { // 2 arguments passed
+      if (callback === undefined) { // two arguments passed
         callback = group
         group = undefined
       }
@@ -104,6 +114,14 @@ class IO {
      * @returns {Promise<void>}
      */
     async (exchange, payload, encoding) => {
+      if (payload instanceof stream.Readable) {
+        return transform(
+          payload,
+          (payload) => this.emit(exchange, payload, encoding),
+          this.#events
+        )
+      }
+
       /** @type {comq.amqp.options.Publish} */
       const properties = {}
 

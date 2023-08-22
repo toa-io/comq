@@ -823,17 +823,23 @@ describe('diagnostics', () => {
 
     let flowed = false
     let drained = false
+    let paused = false
+    let resumed = false
 
     channel.diagnose('flow', () => (flowed = true))
     channel.diagnose('drain', () => (drained = true))
+    channel.diagnose('pause', () => (paused = true))
+    channel.diagnose('resume', () => (resumed = true))
 
     await channel.publish(exchange, buffer)
 
     expect(flowed).toStrictEqual(true)
+    expect(paused).toStrictEqual(true)
 
     chan.emit('drain')
 
     expect(drained).toStrictEqual(true)
+    expect(resumed).toStrictEqual(true)
   })
 
   it.each(/** @type {[string, boolean][]} */ [
