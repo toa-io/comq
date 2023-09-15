@@ -7,6 +7,7 @@ Node.js.
 
 - [Dynamic topology](#topology)
 - [Request](#request)-[reply](#reply) (RPC)
+- Reply generators
 - Events ([pub](#emission)/[sub](#consumption))
 - [Content encoding](#encoding)
 - [Flow control](#flow-control) and back pressure handling
@@ -174,6 +175,10 @@ The following encoding formats are supported:
 - `application/json`
 - `application/octet-stream`
 - `text/plain`
+
+## Reply generator
+
+
 
 ## Flow control
 

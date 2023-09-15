@@ -285,7 +285,7 @@ class IO {
   /**
    * @param {any} payload
    * @param {comq.encoding} [contentType]
-   * @returns [Buffer, comq.encoding]
+   * @returns {[Buffer, comq.encoding]}
    */
   #encode (payload, contentType) {
     const raw = Buffer.isBuffer(payload)
