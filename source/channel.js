@@ -24,8 +24,8 @@ class Channel {
   /** @type {string[]} */
   #tags = []
 
-  /** @type {toa.generic.Promex} */
-  #paused
+  /** @type {toa.generic.Promex | null} */
+  #paused = null
 
   /** @type {boolean} */
   #sealed = false
@@ -56,6 +56,8 @@ class Channel {
   async create () {
     if (this.#topology.confirms) this.#channel = await this.#connection.createConfirmChannel()
     else this.#channel = await this.#connection.createChannel()
+
+    this.#channel.on('drain', this.#unpause)
   }
 
   consume = recall(this,
@@ -197,7 +199,7 @@ class Channel {
    * @param {comq.amqp.options.Publish} options
    */
   async #publish (exchange, queue, buffer, options) {
-    if (this.#paused !== undefined) await this.#unpaused()
+    if (this.#paused !== null) await this.#unpaused()
 
     options = Object.assign({ persistent: this.#topology.persistent }, options)
 
@@ -276,10 +278,9 @@ class Channel {
   }
 
   #pause () {
-    if (this.#paused !== undefined) return
+    if (this.#paused !== null) return
 
     this.#paused = promex()
-    this.#channel.once('drain', this.#unpause)
     this.#diagnostics.emit('flow')
     this.#diagnostics.emit('pause')
   }
@@ -288,12 +289,12 @@ class Channel {
    * @param {Error} [exception]
    */
   #unpause = (exception) => {
-    if (this.#paused === undefined) return
+    if (this.#paused === null) return
 
     if (exception === undefined) this.#paused.resolve()
     else this.#paused.reject(exception)
 
-    this.#paused = undefined
+    this.#paused = null
     this.#diagnostics.emit('drain')
     this.#diagnostics.emit('resume')
   }

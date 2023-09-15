@@ -23,7 +23,8 @@ for distributed, eventually consistent systems running on Node.js.
 
 ## TL;DR
 
-[Code examples](examples)
+- [Code examples](examples)
+- [Scenarios](features)
 
 ## Installation
 
@@ -196,7 +197,7 @@ await io.reply('get_numbers', function * ({ amount }) {
 ```
 
 The Reply stream may be consumed by `IO.fetch`,
-which has a signature similar to `IO.request`
+which has a signature similar to [`IO.request`](#request)
 and returns a readable stream in [object mode](https://nodejs.org/api/stream.html#object-mode).
 
 `async IO.fetch(queue: string, payload: any, [encoding: string]): streams.Readable`
