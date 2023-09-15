@@ -1,21 +1,21 @@
 # ComQ
 
-Distributed system communications over [AMQP](https://github.com/amqp-node/amqplib) for
-Node.js.
+Production-grade communication via [AMQP](https://github.com/amqp-node/amqplib)
+for distributed, eventually consistent systems running on Node.js.
 
 ## Features
 
 - [Dynamic topology](#topology)
 - [Request](#request)-[reply](#reply) (RPC)
-- Reply generators
 - Events ([pub](#emission)/[sub](#consumption))
+- [Reply streams](#reply-streams)
+- [Pipelines](#pipelines)
 - [Content encoding](#encoding)
 - [Flow control](#flow-control) and back pressure handling
-- [Pipelines](#pipelines)
 - [Consumer acknowledgments](#messages) and [publisher confirms](#channels)
 - [Poison message handling](#messages)
 - [Connection tolerance](#connection-tolerance) and broker restart resilience
-- [Sharded connection](#sharded-connection)
+- [Sharded connection](#sharded-connection) :rocket:
 - [Singleton connection](#singleton-connection)
 - [Graceful shutdown](#graceful-shutdown)
 
@@ -154,6 +154,46 @@ asserted.
 await io.emit('numbers_added', { a: 1, b: 2 })
 ```
 
+## Reply streams
+
+The `producer` argument of [`IO.reply`](#reply) can be a generator function.
+In this case, yielded values will be sent to the `replyTo` queue until the generator is exhausted,
+or the `replyTo` queue is deleted.
+
+```javascript
+await io.reply('get_numbers', function * ({ amount }) {
+  for (let i = 0; i < amount; i++)
+    yield i
+})
+```
+
+The Reply stream may be consumed by `IO.fetch`,
+which has a signature similar to `IO.request`
+and returns a readable stream in [object mode](https://nodejs.org/api/stream.html#object-mode).
+
+`async IO.fetch(queue: string, payload: any, [encoding: string]): streams.Readable`
+
+Each call will assert an exclusive queue for replies.
+This queue is deleted once all values of the generator are consumed
+or if the returned readable stream is [destroyed](https://nodejs.org/api/stream.html#readabledestroyerror).
+
+The [reply topology](#cheatsheet) guarantees
+that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering). 
+
+```javascript
+const stream = await io.fetch('get_numbers', { amount: 10 })
+
+for await (const number of stream)
+  console.log(number)
+```
+
+### Reply stream heartbeat
+
+A heartbeat message is sent to the `replyTo` queue whenever a generator function idles for 10 seconds.
+If the consumer of the reply stream doesn't receive a reply or a heartbeat message for 15 seconds,
+the stream returned by `IO.fetch` is destroyed.
+These intervals are not configurable.x
+
 ## Encoding
 
 By default, outgoing message contents are encoded with [msgpack](https://msgpack.org) and
@@ -175,10 +215,6 @@ The following encoding formats are supported:
 - `application/json`
 - `application/octet-stream`
 - `text/plain`
-
-## Reply generator
-
-
 
 ## Flow control
 
@@ -317,7 +353,7 @@ requests and are expecting replies.
   manual [acknowledgment mode](https://www.rabbitmq.com/confirms.html#acknowledgment-modes),
   and Replies are consumed using automatic mode.
 
-If incoming message causes an exception, then it is "negative acknowledged" and requeued. If it
+If an incoming message causes an exception, then it is "negatively acknowledged" and requeued. If it
 causes an exception again, it will be discarded.
 
 > It is highly recommended to set up a dead letter exchange policy to analyse messages that caused
