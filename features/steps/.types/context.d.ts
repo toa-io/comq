@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import * as _diagnostics from '../../../types/diagnostic'
 import * as _io from '../../../types/io'
 import * as _amqp from '../../../types/amqp'
@@ -23,6 +24,7 @@ declare namespace comq.features {
     sealing: Promise<any>
     sending: any
     publishing: any
+    stream: Readable
 
     connect(user?: string, password?: string): Promise<void>
     assert(user?: string, password?: string): Promise<void>

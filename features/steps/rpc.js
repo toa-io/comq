@@ -6,6 +6,7 @@ const { randomBytes } = require('node:crypto')
 const { parse } = require('@toa.io/yaml')
 const { match, timeout, quantity } = require('@toa.io/generic')
 const { Given, When, Then } = require('@cucumber/cucumber')
+const { Readable } = require('node:stream')
 
 Given('function replying {token} queue:',
   /**
@@ -16,6 +17,23 @@ Given('function replying {token} queue:',
   async function (queue, javascript) {
     // eslint-disable-next-line no-new-func
     const producer = new Function('return ' + javascript)()
+
+    await this.io.reply(queue, producer)
+  })
+
+Given('a generator replying {token} queue:',
+  /**
+   * @param {string} queue
+   * @param {string} javascript
+   * @this {comq.features.Context}
+   */
+  async function (queue, javascript) {
+    // eslint-disable-next-line no-new-func
+    const generator = new Function('return ' + javascript)()
+
+    function producer (input) {
+      return Readable.from(generator(input))
+    }
 
     await this.io.reply(queue, producer)
   })
@@ -71,6 +89,18 @@ When('the consumer sends a request to the {token} queue',
     await send.call(this, queue, payload)
   })
 
+When('the consumer fetches a stream with the following request to the {token} queue:',
+  /**
+   * @param {string} queue
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (queue, yaml) {
+    const payload = parse(yaml)
+
+    await fetch.call(this, queue, payload)
+  })
+
 Then('the consumer receives the reply:',
   /**
    * @param {string} yaml
@@ -107,8 +137,25 @@ Then('the consumer does not receive the reply',
     assert.equal(reply, undefined, 'The reply was received')
   })
 
+Then('the consumer receives the stream:',
+  /**
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (yaml) {
+    const values = parse(yaml)
+    const replies = []
+
+    for await (const reply of this.stream) replies.push(reply)
+
+    const matches = match(replies, values)
+
+    assert.equal(matches, true, 'Stream values mismatch')
+  })
+
 When('the consumer sends {quantity} requests to the {token} queue as a stream',
   /**
+   * @param {string} amountQ
    * @param {string} queue
    * @this {comq.features.Context}
    */
@@ -182,4 +229,8 @@ async function send (queue, payload) {
   if (this.expected) await this.expected
 
   this.reply = this.io.request(queue, payload)
+}
+
+async function fetch (queue, payload) {
+  this.stream = await this.io.fetch(queue, payload)
 }

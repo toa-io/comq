@@ -4,7 +4,7 @@ Feature: Reply streams
     Given an active connection to the broker
 
   Scenario: Fetching a stream
-    Given function replying `get_numbers` queue:
+    Given a generator replying `get_numbers` queue:
       """
       function * ({ amount }) {
         for (let i = 0; i < amount; i++) yield i

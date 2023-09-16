@@ -92,6 +92,32 @@ class IO {
         return reply
       }))
 
+  fetch = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
+    failsafe(this, this.#recover,
+    /**
+     * @param {string} queue
+     * @param {any} payload
+     * @param {comq.encoding} [encoding]
+     * @returns {Promise<Readable>}
+     */
+      async (queue, payload, encoding) => {
+        const [buffer, contentType] = this.#encode(payload, encoding)
+        const emitter = this.#emitters.get(queue)
+        const confirmation = this.#createReply()
+
+        /** @type {comq.amqp.Properties} */
+        const properties = { contentType, correlationId: io.streamCorrelationId }
+
+        properties.replyTo = emitter.queue
+
+        const reply = new io.ReplyStream(emitter, confirmation)
+
+        await this.#requests.send(queue, buffer, properties)
+        await confirmation
+
+        return reply
+      }))
+
   consume = lazy(this, this.#createEventChannel,
     async (exchange, group, callback) => {
       if (callback === undefined) { // two arguments passed
@@ -211,18 +237,35 @@ class IO {
         const payload = decode(request)
         const reply = await producer(payload)
 
-        if ('replyTo' in request.properties) await this.#reply(request, reply)
+        if (request.properties.replyTo === undefined) return
+
+        // eslint-disable-next-line no-void
+        if (reply instanceof stream.Readable) void this.#stream(request, reply)
+        else await this.#reply(request, reply)
       })
 
   /**
    * @param {comq.amqp.Message} request
+   * @param {stream.Readable} stream
+   * @return {Promise<void>}
+   */
+  async #stream (request, stream) {
+    await io.pipe(stream,
+      (message, properties) => this.#reply(request, message, properties))
+  }
+
+  /**
+   * @param {comq.amqp.Message} request
    * @param {any} reply
+   * @param {comq.amqp.Properties} [overrideProperties]
    * @returns {Promise<void>}
    */
-  async #reply (request, reply) {
+  async #reply (request, reply, overrideProperties) {
     if (reply === undefined) throw new Error('The `producer` function must return a value')
 
-    let { replyTo, correlationId, contentType } = request.properties
+    const reqProperties = Object.assign({}, request.properties, overrideProperties)
+
+    let { replyTo, correlationId, contentType } = reqProperties
 
     if (Buffer.isBuffer(reply)) contentType = OCTETS
     if (contentType === undefined) throw new Error('Reply to a Request without the `contentType` property must be of type `Buffer`')
