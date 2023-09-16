@@ -194,7 +194,7 @@ await io.reply('get_numbers', function ({ amount }) {
   function * generate () {
     for (let i = 0; i < amount; i++) yield i
   }
-  
+
   return Readable.from(generate())
 })
 ```
@@ -210,7 +210,7 @@ This queue is deleted once all values yielded by the iterator are consumed
 or if the returned readable stream is [destroyed](https://nodejs.org/api/stream.html#readabledestroyerror).
 
 The [reply topology](#cheatsheet) guarantees
-that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering). 
+that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering).
 
 ```javascript
 const stream = await io.fetch('get_numbers', { amount: 10 })
@@ -219,12 +219,18 @@ for await (const number of stream)
   console.log(number)
 ```
 
-### Reply stream heartbeat
+### Reply stream control
 
-A heartbeat message is sent to the `replyTo` queue whenever an iterator idles for 10 seconds.
-If the consumer of the reply stream doesn't receive a reply or a heartbeat message for 15 seconds,
-the stream returned by `IO.fetch` is destroyed.
+When an `IO.fetch` request is received by the Producer, a confirmation message is sent to the replyTo queue. If the
+underlying connection is lost before the Consumer receives the confirmation message, the request will be retransmitted
+upon reconnection.
+
+A heartbeat message is sent to the `replyTo` queue whenever a Reply stream idles for 10 seconds.
+If the Consumer of the reply stream doesn't receive a reply or a heartbeat message for 15 seconds, the stream returned
+by `IO.fetch` is destroyed.
 These intervals are not configurable.
+
+An "end stream" message is sent to the `replyTo` queue when the Reply stream is completed.
 
 ## Encoding
 
