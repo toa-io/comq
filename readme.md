@@ -219,18 +219,27 @@ for await (const number of stream)
   console.log(number)
 ```
 
+### Loss of tail
+
+:warning:
+
+If the broker connection is lost or if the Consumer crashes while consuming the Reply stream, some of the values yielded
+by the Reply stream may be lost.
+
+To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not change the state.
+
 ### Reply stream control
 
-When an `IO.fetch` request is received by the Producer, a confirmation message is sent to the replyTo queue. If the
-underlying connection is lost before the Consumer receives the confirmation message, the request will be retransmitted
-upon reconnection.
+When an `IO.fetch` request is received by the Producer, a confirmation message is sent to the `replyTo` queue.
+If the underlying connection is lost before the Consumer receives the confirmation message, the request will be
+retransmitted upon reconnection.
 
 A heartbeat message is sent to the `replyTo` queue whenever a Reply stream idles for 10 seconds.
 If the Consumer of the reply stream doesn't receive a reply or a heartbeat message for 15 seconds, the stream returned
 by `IO.fetch` is destroyed.
 These intervals are not configurable.
 
-An "end stream" message is sent to the `replyTo` queue when the Reply stream is completed.
+An "end stream" message is sent to the `replyTo` queue when the Reply stream is finished.
 
 ## Encoding
 
