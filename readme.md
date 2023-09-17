@@ -213,8 +213,8 @@ for await (const number of stream)
 ```
 
 Each call will assert an exclusive queue for replies.
-This queue is deleted once all values yielded by the iterator are consumed
-or if the returned readable stream is [destroyed](https://nodejs.org/api/stream.html#readabledestroyerror).
+This queue is deleted once the stream returned by `IO.fetch` is finished
+or [destroyed](https://nodejs.org/api/stream.html#readabledestroyerror).
 
 The [reply topology](#cheatsheet) guarantees
 that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering),
@@ -240,7 +240,7 @@ An "end stream" message is sent to the `replyTo` queue when the Reply stream is 
 :warning:
 
 While consuming the Reply stream if the broker connection is lost,
-or if the Consumer crashes or destroys the stream returned by `IO.fetch`, 
+or if the Consumer crashes or destroys the stream returned by `IO.fetch`,
 some of the values yielded by the Reply stream may be lost.
 
 To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not
