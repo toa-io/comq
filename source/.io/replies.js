@@ -87,7 +87,7 @@ class ReplyStream extends Readable {
         this.push(null)
         break
       default:
-        throw new Error(`Unknown stream control message: '${message}'`)
+        throw new Error(`Unknown reply stream control message: '${message}'`)
     }
   }
 

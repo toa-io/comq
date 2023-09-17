@@ -106,7 +106,7 @@ class IO {
         const confirmation = this.#createReply()
 
         /** @type {comq.amqp.Properties} */
-        const properties = { contentType, correlationId: io.streamCorrelationId }
+        const properties = { contentType }
 
         properties.replyTo = emitter.queue
 
@@ -241,7 +241,7 @@ class IO {
 
         if (reply instanceof stream.Readable) {
           // eslint-disable-next-line no-void
-          void io.pipe(request, reply, this.#replies,
+          void io.pipe(request, /** @type {stream.Readable} */ reply, this.#replies,
             (message, properties) => this.#reply(request, message, properties))
         } else {
           await this.#reply(request, reply)

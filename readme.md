@@ -218,7 +218,7 @@ or if the returned readable stream is [destroyed](https://nodejs.org/api/stream.
 
 The [reply topology](#cheatsheet) guarantees
 that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering),
-unless the [Sharded connection](#sharded-connection) is used.
+unless the [Sharded connection](#sharded-connection) is used [#72](https://github.com/toa-io/comq/issues/72).
 
 ### Stream control
 

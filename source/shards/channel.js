@@ -68,6 +68,10 @@ class Channel {
     return await this.#one((channel) => channel.fire(queue, buffer, options))
   }
 
+  async cancel (tag) {
+    await this.#all((channel) => channel.cancel(tag))
+  }
+
   async seal () {
     await this.#all((channel) => channel.seal())
   }

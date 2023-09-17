@@ -228,6 +228,10 @@ Then('the consumer has received the stream:',
 
     assert.equal(values.length, this.streamValues.length,
       `Stream values count mismatch: expected ${values.length}, received ${this.streamValues.length}`)
+
+    for (let i = 0; i < values.length; i++) {
+      assert.equal(values[i], this.streamValues[i], `Stream value mismatch at index ${i}`)
+    }
   })
 
 Then('the consumer interrupts the stream after {number} replies',
