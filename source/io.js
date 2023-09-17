@@ -251,8 +251,8 @@ class IO {
   /**
    * @param {comq.amqp.Message} request
    * @param {any} reply
-   * @param {comq.amqp.Properties} [overrideProperties]
-   * @returns {Promise<void>}
+   * @param {comq.amqp.options.Publish} [overrideProperties]
+   * @returns {Promise<boolean>}
    */
   async #reply (request, reply, overrideProperties) {
     if (reply === undefined) throw new Error('The `producer` function must return a value')
@@ -267,7 +267,7 @@ class IO {
     const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
     const properties = { contentType, correlationId, mandatory }
 
-    await this.#replies.fire(replyTo, buffer, properties)
+    return await this.#replies.fire(replyTo, buffer, properties)
   }
 
   /**

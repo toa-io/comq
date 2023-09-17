@@ -23,7 +23,7 @@ declare namespace comq {
 
     publish (exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
-    fire (queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+    fire (queue: string, buffer: Buffer, options?: Options.Publish): Promise<boolean>
 
     cancel (consumerTag: string): Promise<void>
 

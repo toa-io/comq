@@ -110,9 +110,13 @@ class Channel {
   async fire (queue, buffer, options) {
     try {
       await this.#publish(DEFAULT, queue, buffer, options)
+
+      return true
     } catch (exception) {
       if (this.#failfast) throw exception
       // ignore otherwise
+
+      return false
     }
   }
 

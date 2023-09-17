@@ -25,6 +25,8 @@ declare namespace comq.features {
     sending: any
     publishing: any
     stream: Readable
+    streamValues: any[]
+    streamEnded: boolean
     generatorDestroyed: boolean
 
     connect(user?: string, password?: string): Promise<void>

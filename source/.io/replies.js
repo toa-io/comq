@@ -106,40 +106,52 @@ class ReplyStream extends Readable {
  * @return {Promise<void>}
  */
 async function pipe (request, stream, channel, send) {
-  let stop = false
+  let interrupt = false
 
   const heartbeatInterval = global['COMQ_TESTING_HEARTBEAT_INTERVAL'] || HEARTBEAT_INTERVAL
 
   channel.diagnose('return', (message) => {
     if (message.fields.routingKey === request.properties.replyTo)
-      stop = true
+      interrupt = true
   })
 
-  await send(control.ok, properties.control)
+  async function transmit (data, properties) {
+    const ok = await send(data, properties)
 
-  /** @type {ReturnType<setInterval>} */
+    if (!ok) cancel()
+  }
+
+  function cancel () {
+    interrupt = true
+    stream.destroy()
+  }
+
+  /** @type {ReturnType<setInterval> | null} */
   let interval = null
 
   function heartbeat () {
     if (interval !== null) clearInterval(interval)
 
     interval = setInterval(
-      () => send(control.heartbeat, properties.control),
+      () => transmit(control.heartbeat, properties.control),
       heartbeatInterval
     )
   }
 
+  await transmit(control.ok, properties.control)
+
   heartbeat()
 
   for await (const chunk of stream) {
-    await send(chunk, properties.chunk)
+    await transmit(chunk, properties.chunk)
+
     heartbeat()
 
-    if (stop) stream.destroy()
+    if (interrupt) break
   }
 
   clearInterval(interval)
-  await send(control.end, properties.control)
+  if (!interrupt) await send(control.end, properties.control)
 }
 
 const streamCorrelationId = 'chunk'

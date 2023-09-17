@@ -67,7 +67,9 @@ describe('consume', () => {
   it('should assert queue', async () => {
     await channel.consume(queue, consumer)
 
-    const options = topology.durable ? { durable: true } : { exclusive: true }
+    const options = topology.durable
+      ? { durable: true }
+      : { exclusive: true, autoDelete: true }
 
     expect(chan.assertQueue).toHaveBeenCalledWith(queue, options)
   })

@@ -23,6 +23,8 @@ class Context extends World {
   shard
   sealing
   stream
+  streamValues = []
+  streamEnded = false
   generatorDestroyed = false
 
   async connect (user, password) {

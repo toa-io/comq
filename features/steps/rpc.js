@@ -55,7 +55,7 @@ Given('a number generator with {number}ms increasing delay replying {token} queu
       }
 
       async _read (size) {
-        await timeout(delay * (1 + this.#count / 10))
+        await timeout(delay * (1 + this.#count / 5))
         this.push(this.#count++)
       }
 
@@ -205,6 +205,29 @@ Then('the consumer receives the stream:',
     for await (const reply of this.stream) replies.push(reply)
 
     assert.equal(values.length, replies.length, `Stream values count mismatch: expected ${values.length}, received ${replies.length}`)
+  })
+
+Then('the consumer receives the stream',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.stream.on('data', (data) => this.streamValues.push(data))
+    this.stream.on('end', () => (this.streamEnded = true))
+  })
+
+Then('the consumer has received the stream:',
+  /**
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (yaml) {
+    const values = parse(yaml)
+
+    assert.equal(this.streamEnded, true, 'The stream was not closed')
+
+    assert.equal(values.length, this.streamValues.length,
+      `Stream values count mismatch: expected ${values.length}, received ${this.streamValues.length}`)
   })
 
 Then('the consumer interrupts the stream after {number} replies',

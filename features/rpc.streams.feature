@@ -31,13 +31,13 @@ Feature: Reply streams
 
   Scenario: Reply stream idle timeout
     Given heartbeat interval is set to 300ms
-    And a number generator with 120ms increasing delay replying `get_numbers` queue
+    And a number generator with 100ms increasing delay replying `get_numbers` queue
     When the consumer fetches a stream with request to the `get_numbers` queue
     Then the consumer receives the stream:
       """yaml
       [0, 1, 3]
       """
-    And after 1000ms
+    And after 500ms
     Then the generator is destroyed
 
   Scenario: Reply stream heartbeat
@@ -47,3 +47,19 @@ Feature: Reply streams
     Then the consumer interrupts the stream after 5 replies
     And after 200ms
     Then the generator is destroyed
+
+  Scenario: Broker crashes while streaming reply
+    Given a number generator with 90ms increasing delay replying `get_numbers` queue
+    When the consumer fetches a stream with request to the `get_numbers` queue
+    Then the consumer receives the stream
+    And after 300ms
+    Then the broker has crashed
+    # idle timeout
+    Then after 150ms
+    Then the consumer has received the stream:
+      """yaml
+      [0, 1, 2]
+      """
+    Then after 200ms
+    Then the broker is up
+    And the generator is destroyed
