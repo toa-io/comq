@@ -185,7 +185,7 @@ for await (const reply of io.request('add_numbers', requests))
 
 ## Reply streams
 
-The `producer` function of [`IO.reply`](#reply) may return a Readable stream in object mode.
+The `producer` function of [`IO.reply`](#reply) may return a Readable stream.
 In this case, the values yielded by it will be sent to the `replyTo` queue until the stream is finished,
 or the `replyTo` queue is deleted.
 
@@ -201,7 +201,7 @@ await io.reply('get_numbers', function ({ amount }) {
 
 The Reply stream may be consumed by `IO.fetch`,
 which has a signature similar to [`IO.request`](#request)
-and returns a readable stream in object mode.
+and returns a Readable stream.
 
 `async IO.fetch(queue: string, payload: any, [encoding: string]): Readable`
 
