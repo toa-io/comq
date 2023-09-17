@@ -29,7 +29,7 @@
   "devDependencies": {
     "@cucumber/cucumber": "^9.1.2",
     "@toa.io/command": "^0.4.0",
-    "@toa.io/tomato": "^0.4.0",
+    "@toa.io/tomato": "^0.7.4",
     "@toa.io/yaml": "^0.4.0",
     "@types/amqplib": "^0.10.1",
     "@types/jest": "^29.5.2",
