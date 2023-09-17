@@ -115,6 +115,8 @@ class IO {
         await this.#requests.send(queue, buffer, properties)
         await confirmation
 
+        reply.on('close', () => this.#replies.cancel(emitter.tag))
+
         return reply
       }))
 
@@ -198,7 +200,7 @@ class IO {
 
     this.#emitters.set(queue, emitter)
 
-    await this.#replies.consume(emitter.queue, consumer)
+    emitter.tag = await this.#replies.consume(emitter.queue, consumer)
   }
 
   // endregion
@@ -239,20 +241,14 @@ class IO {
 
         if (request.properties.replyTo === undefined) return
 
-        // eslint-disable-next-line no-void
-        if (reply instanceof stream.Readable) void this.#stream(request, reply)
-        else await this.#reply(request, reply)
+        if (reply instanceof stream.Readable) {
+          // eslint-disable-next-line no-void
+          void io.pipe(request, reply, this.#replies,
+            (message, properties) => this.#reply(request, message, properties))
+        } else {
+          await this.#reply(request, reply)
+        }
       })
-
-  /**
-   * @param {comq.amqp.Message} request
-   * @param {stream.Readable} stream
-   * @return {Promise<void>}
-   */
-  async #stream (request, stream) {
-    await io.pipe(stream,
-      (message, properties) => this.#reply(request, message, properties))
-  }
 
   /**
    * @param {comq.amqp.Message} request
@@ -265,13 +261,13 @@ class IO {
 
     const reqProperties = Object.assign({}, request.properties, overrideProperties)
 
-    let { replyTo, correlationId, contentType } = reqProperties
+    let { replyTo, correlationId, contentType, mandatory } = reqProperties
 
     if (Buffer.isBuffer(reply)) contentType = OCTETS
     if (contentType === undefined) throw new Error('Reply to a Request without the `contentType` property must be of type `Buffer`')
 
     const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
-    const properties = { contentType, correlationId }
+    const properties = { contentType, correlationId, mandatory }
 
     await this.#replies.fire(replyTo, buffer, properties)
   }

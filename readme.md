@@ -201,7 +201,7 @@ await io.reply('get_numbers', function ({ amount }) {
 
 The Reply stream may be consumed by `IO.fetch`,
 which has a signature similar to [`IO.request`](#request)
-and returns a readable stream in [object mode](https://nodejs.org/api/stream.html#object-mode).
+and returns a readable stream in object mode.
 
 `async IO.fetch(queue: string, payload: any, [encoding: string]): Readable`
 
@@ -219,16 +219,7 @@ for await (const number of stream)
   console.log(number)
 ```
 
-### Loss of tail
-
-:warning:
-
-If the broker connection is lost or if the Consumer crashes while consuming the Reply stream, some of the values yielded
-by the Reply stream may be lost.
-
-To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not change the state.
-
-### Reply stream control
+### Stream control
 
 When an `IO.fetch` request is received by the Producer, a confirmation message is sent to the `replyTo` queue.
 If the underlying connection is lost before the Consumer receives the confirmation message, the request will be
@@ -240,6 +231,17 @@ by `IO.fetch` is destroyed.
 These intervals are not configurable.
 
 An "end stream" message is sent to the `replyTo` queue when the Reply stream is finished.
+
+> Control messages are sent with `correlationId` set to `control`.
+
+### Loss of tail
+
+:warning:
+
+If the broker connection is lost or if the Consumer crashes while consuming the Reply stream, some of the values yielded
+by the Reply stream may be lost.
+
+To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not change the state.
 
 ## Encoding
 

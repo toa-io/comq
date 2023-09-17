@@ -48,7 +48,7 @@ class Channel {
   }
 
   async consume (queue, consumer) {
-    await this.#any((channel) => channel.consume(queue, consumer))
+    return await this.#any((channel) => channel.consume(queue, consumer))
   }
 
   async subscribe (queue, group, consumer) {
@@ -64,7 +64,8 @@ class Channel {
   }
 
   async fire (queue, buffer, options) {
-    await this.#one((channel) => channel.fire(queue, buffer, options))
+    // noinspection  JSValidateTypes
+    return await this.#one((channel) => channel.fire(queue, buffer, options))
   }
 
   async seal () {
@@ -167,12 +168,11 @@ class Channel {
 
   /**
    * @param {(channel: comq.Channel) => void} fn
-   * @return {Promise<void>}
    */
   async #any (fn) {
     const promises = this.#apply(fn)
 
-    await Promise.any(promises)
+    return await Promise.any(promises)
   }
 
   /**
@@ -201,7 +201,6 @@ class Channel {
 
   /**
    * @param {(channel: comq.Channel) => void} fn
-   * @return {Promise<void>}
    */
   async #one (fn) {
     if (this.#pool.length === 0) await this.#recovery
@@ -209,11 +208,11 @@ class Channel {
     const channel = sample(this.#pool)
 
     try {
-      await fn(channel)
+      return await fn(channel)
     } catch {
       this.#remove(channel)
 
-      await this.#one(fn)
+      return await this.#one(fn)
     }
   }
 }

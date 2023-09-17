@@ -58,6 +58,7 @@ class Channel {
     else this.#channel = await this.#connection.createChannel()
 
     this.#channel.on('drain', this.#unpause)
+    this.#channel.on('return', (message) => this.#diagnostics.emit('return', message))
   }
 
   consume = recall(this,
@@ -68,7 +69,7 @@ class Channel {
          * @param {comq.channels.consumer} callback
          */
         async (queue, callback) => {
-          if (!this.#sealed) await this.#consume(queue, callback)
+          if (!this.#sealed) return await this.#consume(queue, callback)
         })))
 
   subscribe = recall(this,
@@ -114,6 +115,19 @@ class Channel {
       // ignore otherwise
     }
   }
+
+  cancel = failsafe(this, this.#recover,
+    /**
+     * @param {string} tag
+     * @return {Promise<void>}
+     */
+    async (tag) => {
+      const index = this.#tags.indexOf(tag)
+
+      if (index !== -1) this.#tags.splice(index, 1)
+
+      await this.#channel.cancel(tag)
+    })
 
   async seal () {
     this.#sealed = true
@@ -229,7 +243,7 @@ class Channel {
   /**
    * @param {string} queue
    * @param {comq.channels.consumer} consumer
-   * @returns {Promise<void>}
+   * @returns {Promise<string>}
    */
   async #consume (queue, consumer) {
     /** @type {comq.amqp.options.Consume} */
@@ -241,6 +255,8 @@ class Channel {
     const response = await this.#channel.consume(queue, consumer, options)
 
     this.#tags.push(response.consumerTag)
+
+    return response.consumerTag
   }
 
   /**
@@ -341,7 +357,7 @@ const DEFAULT = ''
 const DURABLE = { durable: true }
 
 /** @type {comq.amqp.options.Queue} */
-const EXCLUSIVE = { exclusive: true }
+const EXCLUSIVE = { exclusive: true, autoDelete: true }
 
 const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 

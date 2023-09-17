@@ -13,23 +13,25 @@ declare namespace comq {
     index?: number
     sharded?: boolean
 
-    create(): Promise<void>
+    create (): Promise<void>
 
-    consume(queue: string, consumer: channels.consumer): Promise<void>
+    consume (queue: string, consumer: channels.consumer): Promise<string>
 
-    subscribe(exchange: string, queue: string, consumer: channels.consumer): Promise<void>
+    subscribe (exchange: string, queue: string, consumer: channels.consumer): Promise<void>
 
-    send(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+    send (queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
-    publish(exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+    publish (exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
-    fire(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+    fire (queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
-    seal(): Promise<void>
+    cancel (consumerTag: string): Promise<void>
 
-    diagnose(event: _diagnostics.event, listener: Function): void
+    seal (): Promise<void>
 
-    recover(connection: Connection): Promise<void>
+    diagnose (event: _diagnostics.event, listener: Function): void
+
+    recover (connection: Connection): Promise<void>
   }
 
 }

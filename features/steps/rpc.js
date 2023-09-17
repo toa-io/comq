@@ -32,7 +32,41 @@ Given('a generator replying {token} queue:',
     const generator = new Function('return ' + javascript)()
 
     function producer (input) {
-      return Readable.from(generator(input))
+      return stream.Readable.from(generator(input))
+    }
+
+    await this.io.reply(queue, producer)
+  })
+
+Given('a number generator with {number}ms delay replying {token} queue',
+  /**
+   * @param {number} delay
+   * @param {string} queue
+   * @this {comq.features.Context}
+   */
+  async function (delay, queue) {
+    const that = this
+    class Stream extends Readable {
+      #count = 0
+
+      constructor () {
+        super({ objectMode: true })
+      }
+
+      async _read (size) {
+        await timeout(delay)
+        this.push(this.#count++)
+      }
+
+      _destroy (error, callback) {
+        this.push(null)
+        super._destroy(error, callback)
+        that.generatorDestroyed = true
+      }
+    }
+
+    function producer () {
+      return new Stream()
     }
 
     await this.io.reply(queue, producer)
@@ -151,6 +185,25 @@ Then('the consumer receives the stream:',
     const matches = match(replies, values)
 
     assert.equal(matches, true, 'Stream values mismatch')
+  })
+
+Then('the consumer interrupts the stream after {number} replies',
+  /**
+   * @param {number} replies
+   * @this {comq.features.Context}
+   */
+  async function (replies) {
+    // eslint-disable-next-line no-unused-vars
+    for await (const _ of this.stream) {
+      if (--replies === 0) break
+    }
+
+    this.stream.destroy()
+  })
+
+Then('the generator is destroyed',
+  async function () {
+    assert.equal(this.generatorDestroyed, true, 'The generator was not destroyed')
   })
 
 When('the consumer sends {quantity} requests to the {token} queue as a stream',

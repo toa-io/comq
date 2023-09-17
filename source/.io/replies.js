@@ -50,6 +50,8 @@ class ReplyStream extends Readable {
     super._destroy(error, callback)
   }
 
+  _read (_) {}
+
   _control (message) {
     switch (message) {
       case control.ok:
@@ -65,18 +67,29 @@ class ReplyStream extends Readable {
 }
 
 /**
+ * @param {comq.amqp.Message} request
  * @param {stream.Readable} stream
+ * @param {comq.Channel} channel
  * @param {(message: any, properties?: comq.amqp.Properties) => Promise<void>} send
  * @return {Promise<void>}
  */
-async function pipe (stream, send) {
-  await send(control.ok, { correlationId: streamControlCorrelationId })
+async function pipe (request, stream, channel, send) {
+  let stop = false
+
+  channel.diagnose('return', (message) => {
+    if (message.fields.routingKey === request.properties.replyTo)
+      stop = true
+  })
+
+  await send(control.ok, properties.control)
 
   for await (const chunk of stream) {
-    await send(chunk, { correlationId: streamCorrelationId })
+    await send(chunk, properties.chunk)
+
+    if (stop) stream.destroy()
   }
 
-  await send(control.end, { correlationId: streamControlCorrelationId })
+  await send(control.end, properties.control)
 }
 
 const streamCorrelationId = 'chunk'
@@ -88,8 +101,12 @@ const control = {
   end: 'end'
 }
 
+/** @type {Record<string, comq.amqp.options.Publish>} */
+const properties = {
+  chunk: { correlationId: streamCorrelationId, mandatory: true },
+  control: { correlationId: streamControlCorrelationId, mandatory: true }
+}
+
 exports.createReplyEmitter = createReplyEmitter
 exports.ReplyStream = ReplyStream
 exports.pipe = pipe
-exports.streamCorrelationId = streamCorrelationId
-exports.streamControlCorrelationId = streamControlCorrelationId

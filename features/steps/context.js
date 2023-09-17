@@ -22,6 +22,8 @@ class Context extends World {
   sharded
   shard
   sealing
+  stream
+  generatorDestroyed = false
 
   async connect (user, password) {
     const urls = this.#urls(user, password)

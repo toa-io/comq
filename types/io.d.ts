@@ -10,7 +10,9 @@ declare namespace comq {
   type consumer = (message: any, headers?: _amqp.Properties) => void | Promise<void>
 
   interface ReplyEmitter {
-    queue: string
+    readonly queue: string
+
+    tag?: string
 
     on (name: string, callback: Function): void
 
