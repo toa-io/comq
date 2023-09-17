@@ -27,35 +27,61 @@ function createReplyEmitter (label) {
 class ReplyStream extends Readable {
   #confirmation
 
+  /** @type {ReturnType<setTimeout> | null} */
+  #timeout = null
+
+  /** @type {comq.Channel} */
+  #channel
+
   /** @type {comq.ReplyEmitter} */
   #emitter
+
+  #idleInterval
 
   /**
    * @param {comq.ReplyEmitter} emitter
    * @param confirmation
+   * @param {comq.Channel} channel
    */
-  constructor (emitter, confirmation) {
+  constructor (emitter, confirmation, channel) {
     super({ objectMode: true })
 
     this.#confirmation = confirmation
     this.#emitter = emitter
+    this.#channel = channel
 
-    emitter.on(streamCorrelationId, (value) => this.push(value))
+    this.#idleInterval = global['COMQ_TESTING_IDLE_INTERVAL'] || IDLE_INTERVAL
+
+    emitter.on(streamCorrelationId, (value) => this._chunk(value))
     emitter.on('control', (message) => this._control(message))
   }
 
-  _destroy (error, callback) {
+  async _destroy (error, callback) {
+    clearTimeout(this.#timeout)
+
     this.#emitter.clear()
+    this.push(null)
+
+    await this.#channel.cancel(this.#emitter.tag)
 
     super._destroy(error, callback)
   }
 
   _read (_) {}
 
+  _chunk (chunk) {
+    this.push(chunk)
+    this._heartbeat()
+  }
+
   _control (message) {
     switch (message) {
       case control.ok:
         this.#confirmation.resolve()
+        this._heartbeat()
+        break
+      case control.heartbeat:
+        this._heartbeat()
         break
       case control.end:
         this.push(null)
@@ -64,17 +90,25 @@ class ReplyStream extends Readable {
         throw new Error(`Unknown stream control message: '${message}'`)
     }
   }
+
+  _heartbeat () {
+    if (this.#timeout !== null) clearTimeout(this.#timeout)
+
+    this.#timeout = setTimeout(() => this.destroy(), this.#idleInterval)
+  }
 }
 
 /**
  * @param {comq.amqp.Message} request
  * @param {stream.Readable} stream
  * @param {comq.Channel} channel
- * @param {(message: any, properties?: comq.amqp.Properties) => Promise<void>} send
+ * @param {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} send
  * @return {Promise<void>}
  */
 async function pipe (request, stream, channel, send) {
   let stop = false
+
+  const heartbeatInterval = global['COMQ_TESTING_HEARTBEAT_INTERVAL'] || HEARTBEAT_INTERVAL
 
   channel.diagnose('return', (message) => {
     if (message.fields.routingKey === request.properties.replyTo)
@@ -83,12 +117,28 @@ async function pipe (request, stream, channel, send) {
 
   await send(control.ok, properties.control)
 
+  /** @type {ReturnType<setInterval>} */
+  let interval = null
+
+  function heartbeat () {
+    if (interval !== null) clearInterval(interval)
+
+    interval = setInterval(
+      () => send(control.heartbeat, properties.control),
+      heartbeatInterval
+    )
+  }
+
+  heartbeat()
+
   for await (const chunk of stream) {
     await send(chunk, properties.chunk)
+    heartbeat()
 
     if (stop) stream.destroy()
   }
 
+  clearInterval(interval)
   await send(control.end, properties.control)
 }
 
@@ -106,6 +156,9 @@ const properties = {
   chunk: { correlationId: streamCorrelationId, mandatory: true },
   control: { correlationId: streamControlCorrelationId, mandatory: true }
 }
+
+const HEARTBEAT_INTERVAL = 10_000
+const IDLE_INTERVAL = HEARTBEAT_INTERVAL * 1.5
 
 exports.createReplyEmitter = createReplyEmitter
 exports.ReplyStream = ReplyStream

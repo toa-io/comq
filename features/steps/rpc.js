@@ -38,7 +38,7 @@ Given('a generator replying {token} queue:',
     await this.io.reply(queue, producer)
   })
 
-Given('a number generator with {number}ms delay replying {token} queue',
+Given('a number generator with {number}ms increasing delay replying {token} queue',
   /**
    * @param {number} delay
    * @param {string} queue
@@ -46,6 +46,7 @@ Given('a number generator with {number}ms delay replying {token} queue',
    */
   async function (delay, queue) {
     const that = this
+
     class Stream extends Readable {
       #count = 0
 
@@ -54,14 +55,14 @@ Given('a number generator with {number}ms delay replying {token} queue',
       }
 
       async _read (size) {
-        await timeout(delay)
+        await timeout(delay * (1 + this.#count / 10))
         this.push(this.#count++)
       }
 
       _destroy (error, callback) {
+        that.generatorDestroyed = true
         this.push(null)
         super._destroy(error, callback)
-        that.generatorDestroyed = true
       }
     }
 
@@ -70,6 +71,16 @@ Given('a number generator with {number}ms delay replying {token} queue',
     }
 
     await this.io.reply(queue, producer)
+  })
+
+Given('heartbeat interval is set to {number}ms',
+  function (value) {
+    global.COMQ_TESTING_HEARTBEAT_INTERVAL = value
+  })
+
+Given('idle timeout is set to {number}ms',
+  function (value) {
+    global.COMQ_TESTING_IDLE_INTERVAL = value
   })
 
 Given('a producer replying {token} queue',
@@ -135,6 +146,17 @@ When('the consumer fetches a stream with the following request to the {token} qu
     await fetch.call(this, queue, payload)
   })
 
+When('the consumer fetches a stream with request to the {token} queue',
+  /**
+   * @param {string} queue
+   * @this {comq.features.Context}
+   */
+  async function (queue) {
+    const payload = null
+
+    await fetch.call(this, queue, payload)
+  })
+
 Then('the consumer receives the reply:',
   /**
    * @param {string} yaml
@@ -182,9 +204,7 @@ Then('the consumer receives the stream:',
 
     for await (const reply of this.stream) replies.push(reply)
 
-    const matches = match(replies, values)
-
-    assert.equal(matches, true, 'Stream values mismatch')
+    assert.equal(values.length, replies.length, `Stream values count mismatch: expected ${values.length}, received ${replies.length}`)
   })
 
 Then('the consumer interrupts the stream after {number} replies',
@@ -287,3 +307,5 @@ async function send (queue, payload) {
 async function fetch (queue, payload) {
   this.stream = await this.io.fetch(queue, payload)
 }
+
+global.COMQ_TESTING_IDLE_INTERVAL = 150

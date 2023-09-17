@@ -205,19 +205,20 @@ and returns a readable stream in object mode.
 
 `async IO.fetch(queue: string, payload: any, [encoding: string]): Readable`
 
-Each call will assert an exclusive queue for replies.
-This queue is deleted once all values yielded by the iterator are consumed
-or if the returned readable stream is [destroyed](https://nodejs.org/api/stream.html#readabledestroyerror).
-
-The [reply topology](#cheatsheet) guarantees
-that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering).
-
 ```javascript
 const stream = await io.fetch('get_numbers', { amount: 10 })
 
 for await (const number of stream)
   console.log(number)
 ```
+
+Each call will assert an exclusive queue for replies.
+This queue is deleted once all values yielded by the iterator are consumed
+or if the returned readable stream is [destroyed](https://nodejs.org/api/stream.html#readabledestroyerror).
+
+The [reply topology](#cheatsheet) guarantees
+that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering),
+unless the [Sharded connection](#sharded-connection) is used.
 
 ### Stream control
 
@@ -238,10 +239,12 @@ An "end stream" message is sent to the `replyTo` queue when the Reply stream is 
 
 :warning:
 
-If the broker connection is lost or if the Consumer crashes while consuming the Reply stream, some of the values yielded
-by the Reply stream may be lost.
+While consuming the Reply stream if the broker connection is lost,
+or if the Consumer crashes or destroys the stream returned by `IO.fetch`, 
+some of the values yielded by the Reply stream may be lost.
 
-To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not change the state.
+To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not
+change the application state.
 
 ## Encoding
 

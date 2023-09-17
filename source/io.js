@@ -110,12 +110,10 @@ class IO {
 
         properties.replyTo = emitter.queue
 
-        const reply = new io.ReplyStream(emitter, confirmation)
+        const reply = new io.ReplyStream(emitter, confirmation, this.#replies)
 
         await this.#requests.send(queue, buffer, properties)
         await confirmation
-
-        reply.on('close', () => this.#replies.cancel(emitter.tag))
 
         return reply
       }))
