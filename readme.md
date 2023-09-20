@@ -100,7 +100,7 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 ## Request
 
-`async IO.request(queue: string, payload: any, [encoding: string]): any`
+`async IO.request(queue: string, payload: any, encoding?: string): any`
 
 Send encoded Request message with `replyTo` and `correlationId` properties set and
 return decoded Reply content.
@@ -115,7 +115,7 @@ const sum = await io.request('add_numbers', { a: 1, b: 2 })
 
 ## Consumption
 
-`async IO.consume(exchange: string, [group: string], consumer): void`
+`async IO.consume(exchange: string, group?: string, consumer): void`
 
 `consumer` function's signature is `async? (payload: any): void`
 
@@ -131,17 +131,27 @@ Event message is delivered to a single Consumer within *each group*.
 If the `group` is `undefined` or omitted, a queue for the Consumer is asserted as exclusive with
 auto-generated name.
 
+Events may be consumed as an infinite Readable stream if the `consumer` argument is omitted.
+
+`async IO.consume(exchange: string, group?: string): Readable`
+
 ### Example
 
 ```javascript
-await io.consume('numbers_added', 'logger', ({ a, b }) => {
+// with a consumer function
+await io.consume('numbers_added', 'logger',
+  ({ a, b }) => console.log(`${a} was added to ${b}`))
+
+// as a stream
+const events = await io.consume('numbers_added', 'logger')
+
+for await (const { a, b } of events)
   console.log(`${a} was added to ${b}`)
-})
 ```
 
 ## Emission
 
-`async IO.emit(exchange: string, payload: any, [encoding: string]): void`
+`async IO.emit(exchange: string, payload: any, encoding?: string): void`
 
 Publish encoded Event to the `exchange`.
 
@@ -161,11 +171,11 @@ Payloads for Requests and Events can be passed as a readable stream
 in [object mode](https://nodejs.org/api/stream.html#object-mode), enabling the handling of large amounts of data with
 the benefits of RabbitMQ back pressure and flow control.
 
-`async IO.request(queue: string, stream: Readable, [encoding: string]): Readable`
+`async IO.request(queue: string, stream: Readable, encoding?: string): Readable`
 
 Returns a readable stream of replies.
 
-`async IO.emit(exchange: string, stream: Readable, [encoding: string]): void`
+`async IO.emit(exchange: string, stream: Readable, encoding?: string): void`
 
 ```javascript
 function * generate () {
@@ -187,7 +197,7 @@ for await (const reply of io.request('add_numbers', requests))
 
 The `producer` function of [`IO.reply`](#reply) may return a Readable stream.
 In this case, the values yielded by it will be sent to the `replyTo` queue until the stream is finished,
-or the `replyTo` queue is deleted.
+or a [cancellation message](#stream-control) is received, or the `replyTo` queue is deleted.
 
 ```javascript
 await io.reply('get_numbers', function ({ amount }) {
@@ -199,11 +209,9 @@ await io.reply('get_numbers', function ({ amount }) {
 })
 ```
 
-The Reply stream may be consumed by `IO.fetch`,
-which has a signature similar to [`IO.request`](#request)
-and returns a Readable stream.
+The Reply stream may be consumed by using the `IO.fetch` function:
 
-`async IO.fetch(queue: string, payload: any, [encoding: string]): Readable`
+`async IO.fetch(queue: string, payload: any, encoding?: string): Readable`
 
 ```javascript
 const stream = await io.fetch('get_numbers', { amount: 10 })
@@ -212,19 +220,27 @@ for await (const number of stream)
   console.log(number)
 ```
 
-Each call will assert an exclusive queue for replies.
-This queue is deleted once the stream returned by `IO.fetch` is finished
-or [destroyed](https://nodejs.org/api/stream.html#readabledestroyerror).
+### Stream topology
 
-The [reply topology](#cheatsheet) guarantees
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/reply-stream-topology-dark.jpg">
+  <img alt="Reply topology" width="600" height="428" src="./docs/reply-stream-topology-light.jpg">
+</picture>
+
+On the first call of the `IO.fetch` for each request queue, an exclusive queue for replies is asserted (a stream queue).
+
+When the producer function of `IO.reply` returns a stream for the first time across all request queues,
+a control queue is asserted on the [Reply channel](#channels) using the [reply topology](#exchanges-and-queues).
+
+The reply topology guarantees
 that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering),
 unless the [Sharded connection](#sharded-connection) is used [#72](https://github.com/toa-io/comq/issues/72).
 
 ### Stream control
 
-When an `IO.fetch` request is received by the Producer, a confirmation message is sent to the `replyTo` queue.
-If the underlying connection is lost before the Consumer receives the confirmation message, the request will be
-retransmitted upon reconnection.
+Upon receiving a request, the Producer sends a confirmation message to the `replyTo` queue.
+If the underlying connection is lost before the Consumer receives the confirmation message,
+the request will be retransmitted upon reconnection.
 
 A heartbeat message is sent to the `replyTo` queue whenever a Reply stream idles for 10 seconds.
 If the Consumer of the reply stream doesn't receive a reply or a heartbeat message for 15 seconds, the stream returned
@@ -233,7 +249,14 @@ These intervals are not configurable.
 
 An "end stream" message is sent to the `replyTo` queue when the Reply stream is finished.
 
-> Control messages are sent with `correlationId` set to `control`.
+When the Consumer destroys the Reply stream, a stream cancellation message is sent to the Producer's control queue.
+
+### Stream cancellation on shutdown
+
+All current Reply streams of the corresponding Producer or Consumer instance are destroyed when:
+
+- the `IO.seal` function is called on the Consumer.
+- the `IO.close` function is called on the Producer.
 
 ### Loss of tail
 
@@ -365,8 +388,10 @@ requests and are expecting replies.
 ### Exchanges and queues
 
 - Exchanges and queues for Events, and queues for Requests
-  are [durable](https://amqp-node.github.io/amqplib/channel_api.html#channel_assertQueue).
-- Queues for Replies are *exclusive*.
+  are _durable_.
+- Queues for Replies are _exclusive_ and _auto deleted_.
+
+See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.html#channel_assertQueue).
 
 ### Messages
 
@@ -380,13 +405,13 @@ requests and are expecting replies.
 If an incoming message causes an exception, then it is "negatively acknowledged" and requeued. If it
 causes an exception again, it will be discarded.
 
-> It is highly recommended to set up a dead letter exchange policy to analyse messages that caused
+> It is highly recommended to set up a dead letter exchange policy to analyze messages that caused
 > exceptions. Note that in some cases, if the problematic message is a Request, a Consumer will
 > never receive a Reply, and this can result in a prefetch deadlock of a Consumer.
 
 See:
 
-- [Consumer Acknowledgments and Publisher Confirms](https://www.rabbitmq.com/confirms.html).
+- [Consumer Acknowledgments and Publisher Confirms](https://www.rabbitmq.com/confirms.html)
 - [Negative Acknowledgment and Requeuing of Deliveries](https://www.rabbitmq.com/confirms.html#consumer-nacks-requeue)
 - [Dead Letter Exchanges](https://www.rabbitmq.com/dlx.html)
 
