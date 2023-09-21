@@ -220,21 +220,21 @@ for await (const number of stream)
   console.log(number)
 ```
 
+The reply topology guarantees
+that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering),
+unless the [Sharded connection](#sharded-connection) is used [#72](https://github.com/toa-io/comq/issues/72).
+
 ### Stream topology
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/reply-stream-topology-dark.jpg">
-  <img alt="Reply topology" width="600" height="428" src="./docs/reply-stream-topology-light.jpg">
+  <img alt="Reply topology" width="500" height="411" src="./docs/reply-stream-topology-light.jpg">
 </picture>
 
-On the first call of the `IO.fetch` for each request queue, an exclusive queue for replies is asserted (a stream queue).
+On the first call of the `IO.fetch` (with any queue), an exclusive queue for replies is asserted (a stream queue).
 
 When the producer function of `IO.reply` returns a stream for the first time across all request queues,
 a control queue is asserted on the [Reply channel](#channels) using the [reply topology](#exchanges-and-queues).
-
-The reply topology guarantees
-that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering),
-unless the [Sharded connection](#sharded-connection) is used [#72](https://github.com/toa-io/comq/issues/72).
 
 ### Stream control
 
