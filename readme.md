@@ -234,7 +234,8 @@ unless the [Sharded connection](#sharded-connection) is used [#72](https://githu
 On the first call of the `IO.fetch` (with any queue), an exclusive queue for replies is asserted (a stream queue).
 
 When the producer function of `IO.reply` returns a stream for the first time across all request queues,
-a control queue is asserted on the [Reply channel](#channels) using the [reply topology](#exchanges-and-queues).
+a control queue is asserted on the [Reply channel](#channels)
+using the [reply topology](#exchanges-and-queues).
 
 ### Stream control
 
@@ -251,12 +252,7 @@ An "end stream" message is sent to the `replyTo` queue when the Reply stream is 
 
 When the Consumer destroys the Reply stream, a stream cancellation message is sent to the Producer's control queue.
 
-### Stream cancellation on shutdown
-
-All current Reply streams of the corresponding Producer or Consumer instance are destroyed when:
-
-- the `IO.seal` function is called on the Consumer.
-- the `IO.close` function is called on the Producer.
+See also [Reply stream shutdown](#reply-stream-shutdown).
 
 ### Loss of tail
 
@@ -460,6 +456,13 @@ scenarios:
 In these or other similar scenarios, it is recommended to call `IO.seal()` to stop receiving new
 messages, ensure that any code execution that may send outgoing messages is completed before
 calling `IO.close()`.
+
+### Reply stream shutdown
+
+All current [Reply streams](#reply-streams) of the corresponding Producer or Consumer instance are destroyed when:
+
+- the `IO.seal` function is called on the Consumer
+- the `IO.close` function is called on the Producer
 
 ## Diagnostics
 
