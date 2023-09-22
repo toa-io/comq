@@ -212,10 +212,7 @@ Then('the consumer receives the stream:',
     const values = parse(yaml)
     const replies = []
 
-    for await (const reply of this.stream) {
-      console.log('received', reply)
-      replies.push(reply)
-    }
+    for await (const reply of this.stream) replies.push(reply)
 
     assert.equal(values.length, replies.length, `Stream values count mismatch: expected ${values.length}, received ${replies.length}`)
   })

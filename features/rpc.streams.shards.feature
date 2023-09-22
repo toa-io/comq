@@ -2,8 +2,8 @@ Feature: Reply streams over shards
 
   Background:
     Given an active sharded connection
-    And heartbeat interval is set to 1000ms
-    And idle timeout is set to 1500ms
+    And heartbeat interval is set to 100ms
+    And idle timeout is set to 150ms
 
   Scenario: Fetching a stream using sharded connection
     Given a generator replying `get_numbers` queue:

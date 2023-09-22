@@ -38,7 +38,8 @@ class Stream extends Readable {
     this.#correlationId = correlationId
     this.#idleInterval = global['COMQ_TESTING_IDLE_INTERVAL'] || IDLE_INTERVAL
 
-    emitter.on(correlationId, this._accept.bind(this))
+    emitter.on(correlationId, this._arrange.bind(this))
+    confirmation.catch(this._clear.bind(this))
   }
 
   _destroy (error, callback) {
@@ -55,9 +56,7 @@ class Stream extends Readable {
    * @param {comq.amqp.Properties} properties
    * @private
    */
-  _accept (payload, properties) {
-    this._heartbeat()
-
+  _arrange (payload, properties) {
     if (properties.headers.index !== this.#index) {
       this._enqueue(payload, properties)
 
@@ -84,6 +83,7 @@ class Stream extends Readable {
    * @private
    */
   _add (payload, properties) {
+    this._heartbeat()
     this.#index++
 
     if (properties.type === 'control')
