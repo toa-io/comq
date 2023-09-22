@@ -157,7 +157,7 @@ class Channel {
 
     for (const confirmation of this.#confirmations) confirmation.reject(INTERRUPTION)
 
-    await timeout(0) // let unpause and confirmation interruptions be handled
+    await timeout(0) // handle interruptions
 
     this.#recovery.resolve()
     this.#recovery = promex()
