@@ -217,15 +217,6 @@ for await (const number of stream)
   console.log(number)
 ```
 
-The reply topology guarantees
-that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering).
-
-> When using the [Sharded connection](#sharded-connection), the order of yielded values is maintained through buffering. 
-> However, there is a scenario in which some of the yielded values may be lost if a broker crashes.
-> In this case, the Reply stream will be destroyed once the buffer's maximum size is exceeded.
-> 
-> Buffered control messages can result in [stream idling](#stream-control).  
-
 ### Stream topology
 
 <picture>
@@ -266,6 +257,19 @@ some of the values yielded by the Reply stream may be lost.
 
 To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not
 change the application state.
+
+### Stream guarantees
+
+:warning:
+
+The reply topology guarantees
+that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering).
+At the same time, there is no guarantee that the stream will be transmitted to the end.
+
+> When using the [Sharded connection](#sharded-connection), the order of yielded values is maintained through buffering.
+> However, there is a scenario in which some of the yielded values may be lost if a broker crashes.
+> In this case, the Reply stream will be destroyed once the buffer's maximum size is exceeded.
+> Also, buffered control messages can result in [stream idling](#stream-control).
 
 ## Encoding
 

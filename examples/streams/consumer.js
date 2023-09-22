@@ -17,9 +17,9 @@ async function run () {
 }
 
 async function fetch () {
-  const limit = Math.round(Math.random() * 9 + 1)
+  const limit = Math.round(Math.random() * 8 + 2)
 
-  console.log(`Fetching a stream with ${limit} numbers`)
+  console.log(`Fetching stream with ${limit} numbers`)
 
   const stream = await io.fetch('get_numbers', { limit })
   const numbers = []
