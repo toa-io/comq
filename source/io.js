@@ -225,9 +225,17 @@ class IO {
 
         if (request.properties.replyTo === undefined) return
 
-        if (reply instanceof stream.Readable) {
+        const iterator = typeof reply === 'object' &&
+          (
+            Symbol.asyncIterator in reply ||
+            (Symbol.iterator in reply && !Array.isArray(reply) && !Buffer.isBuffer(reply))
+          )
+
+        if (iterator) {
+          const readable = reply instanceof stream.Readable ? reply : stream.Readable.from(reply)
+
           // eslint-disable-next-line no-void
-          void io.replies.pipe(request, /** @type {stream.Readable} */ reply, this.#replies,
+          void io.replies.pipe(request, readable, this.#replies,
             (message, properties) => this.#reply(request, message, properties))
         } else {
           await this.#reply(request, reply)

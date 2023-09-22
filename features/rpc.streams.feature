@@ -6,7 +6,7 @@ Feature: Reply streams
     And idle timeout is set to 150ms
 
   Scenario: Fetching a stream
-    Given a generator replying `get_numbers` queue:
+    Given function replying `get_numbers` queue:
       """
       function * ({ amount }) {
         for (let i = 0; i < amount; i++) yield i
