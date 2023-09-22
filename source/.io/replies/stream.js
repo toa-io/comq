@@ -20,7 +20,7 @@ class Stream extends Readable {
 
   #index = 0
 
-  #buffering = false
+  #buffered = 0
 
   /** @type {Record<number, unknown>} */
   #queue = {}
@@ -66,7 +66,7 @@ class Stream extends Readable {
 
     this._add(payload, properties)
 
-    if (this.#buffering) {
+    if (this.#buffered > 0) {
       let message
 
       while ((message = this.#queue[this.#index])) {
@@ -74,7 +74,7 @@ class Stream extends Readable {
         this._add(message.payload, message.properties)
       }
 
-      this.#buffering = Object.keys(this.#queue).length > 0
+      this.#buffered = Object.keys(this.#queue).length
     }
   }
 
@@ -93,7 +93,9 @@ class Stream extends Readable {
   }
 
   _enqueue (payload, properties) {
-    this.#buffering = true
+    if (this.#buffered > MAX_BUFFER_SIZE) this.destroy()
+
+    this.#buffered++
     this.#queue[properties.headers.index] = { payload, properties }
   }
 
@@ -124,5 +126,7 @@ class Stream extends Readable {
     this.#emitter.removeAllListeners(this.#correlationId)
   }
 }
+
+const MAX_BUFFER_SIZE = 1000
 
 exports.Stream = Stream

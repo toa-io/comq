@@ -220,6 +220,10 @@ for await (const number of stream)
 The reply topology guarantees
 that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering).
 
+> When using the [Sharded connection](#sharded-connection), the order of yielded values is maintained through buffering. 
+> However, there is a scenario in which some of the yielded values may be lost if a broker crashes.
+> In such cases, the Reply stream will be destroyed once the buffer's maximum size is exceeded.
+
 ### Stream topology
 
 <picture>
