@@ -195,17 +195,14 @@ for await (const reply of io.request('add_numbers', requests))
 
 ## Reply streams
 
-The `producer` function of [`IO.reply`](#reply) may return a Readable stream.
-In this case, the values yielded by it will be sent to the `replyTo` queue until the stream is finished,
+The `producer` function of [`IO.reply`](#reply) may return a non-array
+(Async)[Iterator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Iteration_protocols).
+In this case, the yielded values will be sent to the `replyTo` queue until the iterator is finished,
 or a [cancellation message](#stream-control) is received, or the `replyTo` queue is deleted.
 
 ```javascript
-await io.reply('get_numbers', function ({ amount }) {
-  function * generate () {
-    for (let i = 0; i < amount; i++) yield i
-  }
-
-  return Readable.from(generate())
+await io.reply('get_numbers', function * ({ amount }) {
+  for (let i = 0; i < amount; i++) yield i
 })
 ```
 
@@ -221,8 +218,7 @@ for await (const number of stream)
 ```
 
 The reply topology guarantees
-that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering),
-unless the [Sharded connection](#sharded-connection) is used [#72](https://github.com/toa-io/comq/issues/72).
+that the order of yielded values is [preserved](https://www.rabbitmq.com/queues.html#message-ordering).
 
 ### Stream topology
 
@@ -231,9 +227,9 @@ unless the [Sharded connection](#sharded-connection) is used [#72](https://githu
   <img alt="Reply topology" width="500" height="411" src="./docs/reply-stream-topology-light.jpg">
 </picture>
 
-On the first call of the `IO.fetch` (with any queue), an exclusive queue for replies is asserted (a stream queue).
+On the first call of the `IO.fetch` for each request queue, an exclusive queue for replies is asserted (a stream queue).
 
-When the producer function of `IO.reply` returns a stream for the first time across all request queues,
+When the producer function of `IO.reply` returns an Iterator for the first time across all request queues,
 a control queue is asserted on the [Reply channel](#channels)
 using the [reply topology](#exchanges-and-queues).
 

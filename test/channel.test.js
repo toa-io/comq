@@ -69,7 +69,7 @@ describe('consume', () => {
 
     const options = topology.durable
       ? { durable: true }
-      : { exclusive: true, autoDelete: true }
+      : { exclusive: true }
 
     expect(chan.assertQueue).toHaveBeenCalledWith(queue, options)
   })

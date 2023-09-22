@@ -361,7 +361,7 @@ const DEFAULT = ''
 const DURABLE = { durable: true }
 
 /** @type {comq.amqp.options.Queue} */
-const EXCLUSIVE = { exclusive: true, autoDelete: true }
+const EXCLUSIVE = { exclusive: true }
 
 const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 

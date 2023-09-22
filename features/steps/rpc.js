@@ -48,6 +48,7 @@ Given('a number generator with {number}ms increasing delay replying {token} queu
     const that = this
 
     class Stream extends Readable {
+      #MAX = 10
       #count = 0
 
       constructor () {
@@ -56,7 +57,8 @@ Given('a number generator with {number}ms increasing delay replying {token} queu
 
       async _read (size) {
         await timeout(delay * (1 + this.#count / 5))
-        this.push(this.#count++)
+
+        if (this.#count === this.#MAX) { this.push(null) } else this.push(this.#count++)
       }
 
       _destroy (error, callback) {
@@ -152,9 +154,17 @@ When('the consumer fetches a stream with request to the {token} queue',
    * @this {comq.features.Context}
    */
   async function (queue) {
-    const payload = null
+    await fetch.call(this, queue, null)
+  })
 
-    await fetch.call(this, queue, payload)
+When('the consumer{number} fetches a stream with request to the {token} queue',
+  /**
+   * @param {number} number
+   * @param {string} queue
+   * @this {comq.features.Context}
+   */
+  async function (number, queue) {
+    await fetch.call(this, queue, null, number)
   })
 
 Then('the consumer receives the reply:',
@@ -202,7 +212,10 @@ Then('the consumer receives the stream:',
     const values = parse(yaml)
     const replies = []
 
-    for await (const reply of this.stream) replies.push(reply)
+    for await (const reply of this.stream) {
+      console.log('received', reply)
+      replies.push(reply)
+    }
 
     assert.equal(values.length, replies.length, `Stream values count mismatch: expected ${values.length}, received ${replies.length}`)
   })
@@ -214,6 +227,16 @@ Then('the consumer receives the stream',
   async function () {
     this.stream.on('data', (data) => this.streamValues.push(data))
     this.stream.on('end', () => (this.streamEnded = true))
+  })
+
+Then('the consumer{number} receives the stream',
+  /**
+   * @param {number} number
+   * @this {comq.features.Context}
+   */
+  async function (number) {
+    this.streams[number].on('data', (data) => this.streamsValues[number].push(data))
+    this.streams[number].on('end', () => (this.streamsEnded[number] = true))
   })
 
 Then('the consumer has received the stream:',
@@ -234,6 +257,45 @@ Then('the consumer has received the stream:',
     }
   })
 
+Then('the consumer{number} has received the stream:',
+  /**
+   * @param {number} number
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (number, yaml) {
+    const expected = parse(yaml)
+    const values = this.streamsValues[number]
+
+    assert.equal(this.streamsEnded[number], true, 'The stream was not closed')
+
+    assert.equal(expected.length, values.length,
+      `Stream values count mismatch: expected ${expected.length}, received ${values.length}`)
+
+    for (let i = 0; i < expected.length; i++) {
+      assert.equal(expected[i], values[i], `Stream value mismatch at index ${i}`)
+    }
+  })
+
+Then('the consumer has received the stream containing:',
+  /**
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (yaml) {
+    const values = parse(yaml)
+
+    assert.equal(this.streamEnded, true, 'The stream was not closed')
+
+    assert.equal(values.length <= this.streamValues.length, true,
+      `Received less values: expected ${values.length}, received ${this.streamValues.length}`)
+
+    for (const value of values) {
+      assert.notEqual(this.streamValues.indexOf(value), -1,
+        `Received values does not contain ${value}`)
+    }
+  })
+
 Then('the consumer interrupts the stream after {number} replies',
   /**
    * @param {number} replies
@@ -246,6 +308,15 @@ Then('the consumer interrupts the stream after {number} replies',
     }
 
     this.stream.destroy()
+  })
+
+Then('the consumer interrupts the stream',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    this.stream.destroy()
+    await timeout(0)
   })
 
 Then('the generator is destroyed',
@@ -331,8 +402,20 @@ async function send (queue, payload) {
   this.reply = this.io.request(queue, payload)
 }
 
-async function fetch (queue, payload) {
-  this.stream = await this.io.fetch(queue, payload)
+/**
+ * @param {string} queue
+ * @param {any} payload
+ * @param {number} number
+ * @this {comq.features.Context}
+ * @return {Promise<void>}
+ */
+async function fetch (queue, payload, number) {
+  if (number === undefined) { this.stream = await this.io.fetch(queue, payload) } else {
+    this.streams[number] = await this.io.fetch(queue, payload)
+    this.streamsValues[number] = []
+    this.streamsEnded[number] = false
+  }
 }
 
 global.COMQ_TESTING_IDLE_INTERVAL = 150
+global.COMQ_TESTING_HEARTBEAT_INTERVAL = 100

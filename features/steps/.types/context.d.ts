@@ -27,6 +27,9 @@ declare namespace comq.features {
     stream: Readable
     streamValues: any[]
     streamEnded: boolean
+    streams: Record<number, Readable>
+    streamsValues: Record<number, any[]>
+    streamsEnded: Record<number, boolean>
     generatorDestroyed: boolean
 
     connect(user?: string, password?: string): Promise<void>

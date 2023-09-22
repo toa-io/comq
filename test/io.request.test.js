@@ -89,25 +89,6 @@ describe('send', () => {
     expect(properties.replyTo).toMatch(rx)
   })
 
-  it('should set replyTo using specified formatter', async () => {
-    jest.clearAllMocks()
-
-    /** @type {comq.encoding} */
-    const prefix = generate()
-    const encoding = 'application/json'
-    const formatter = (replyTo) => prefix + replyTo
-
-    promise = io.request(queue, payload, encoding, formatter)
-
-    await immediate()
-
-    call = requests.send.mock.calls[0]
-
-    const properties = requests.send.mock.calls[0][2]
-
-    expect(properties.replyTo).toMatch(new RegExp(`${prefix}${queue}..[a-z0-9]+`))
-  })
-
   it('should consume replyTo', async () => {
     const properties = call[2]
     const queue = replies.consume.mock.calls[0][0]

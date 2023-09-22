@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream'
+import type { EventEmitter } from 'node:events'
 import * as _diagnostics from './diagnostic'
 import * as _encoding from './encoding'
 import * as _topology from './topology'
@@ -9,38 +10,27 @@ declare namespace comq {
   type producer = (message: any) => any | Promise<any>
   type consumer = (message: any, headers?: _amqp.Properties) => void | Promise<void>
 
-  interface ReplyEmitter {
+  interface ReplyEmitter extends EventEmitter {
     readonly queue: string
 
     tag?: string
-
-    on (name: string, callback: Function): void
-
-    once (name: string, callback: Function): void
-
-    emit (name: string, value: any): void
-
-    clear (): void
   }
 
-  type ReplyToPropertyFormatter = (queue: string) => string
+  interface Request {
+    buffer: Buffer
+    emitter: ReplyEmitter
+    properties: _amqp.Properties
+    reply: any
+  }
 
   interface IO extends _diagnostics.Diagnosable {
     reply (queue: string, produce: producer): Promise<void>
 
-    request (
-      queue: string,
-      payload: any,
-      encoding?: _encoding.encoding,
-      replyToFormatter?: ReplyToPropertyFormatter)
-      : Promise<any>
+    request (queue: string, payload: any, encoding?: _encoding.encoding): Promise<any>
 
-    request (
-      queue: string,
-      stream: Readable,
-      encoding?: _encoding.encoding,
-      replyToFormatter?: ReplyToPropertyFormatter)
-      : Promise<Readable>
+    request (queue: string, stream: Readable, encoding?: _encoding.encoding): Promise<Readable>
+
+    fetch (queue: string, payload: any, encoding?: _encoding.encoding): Promise<Readable>
 
     consume (exchange: string, group: string, consumer: consumer): Promise<void>
 

@@ -25,6 +25,9 @@ class Context extends World {
   stream
   streamValues = []
   streamEnded = false
+  streams = {}
+  streamsValues = {}
+  streamsEnded = {}
   generatorDestroyed = false
 
   async connect (user, password) {
