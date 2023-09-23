@@ -26,20 +26,18 @@ class Stream extends Readable {
   #queue = {}
 
   /**
-   * @param {comq.ReplyEmitter} emitter
-   * @param {string} correlationId
-   * @param confirmation
+   * @param {comq.Request} request
    */
-  constructor (emitter, correlationId, confirmation) {
+  constructor (request) {
     super({ objectMode: true })
 
-    this.#confirmation = confirmation
-    this.#emitter = emitter
-    this.#correlationId = correlationId
+    this.#confirmation = request.reply
+    this.#emitter = request.emitter
+    this.#correlationId = request.properties.correlationId
     this.#idleInterval = global['COMQ_TESTING_IDLE_INTERVAL'] || IDLE_INTERVAL
 
-    emitter.on(correlationId, this._arrange.bind(this))
-    confirmation.catch(this._clear.bind(this))
+    this.#emitter.on(this.#correlationId, this._arrange.bind(this))
+    this.#confirmation.catch(this._clear.bind(this))
   }
 
   _destroy (error, callback) {

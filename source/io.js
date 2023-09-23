@@ -94,12 +94,11 @@ class IO {
        * @returns {Promise<Readable>}
        */
       async (queue, payload, encoding) => {
-        const { buffer, properties, emitter, reply } = this.#createRequest(queue, payload, encoding)
+        const request = this.#createRequest(queue, payload, encoding)
+        const stream = new io.replies.Stream(request)
 
-        const stream = new io.replies.Stream(emitter, properties.correlationId, reply)
-
-        await this.#requests.send(queue, buffer, properties)
-        await reply
+        await this.#requests.send(queue, request.buffer, request.properties)
+        await request.reply // wait for the confirmation
 
         return stream
       }))
