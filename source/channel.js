@@ -120,19 +120,6 @@ class Channel {
     }
   }
 
-  cancel = failsafe(this, this.#recover,
-    /**
-     * @param {string} tag
-     * @return {Promise<void>}
-     */
-    async (tag) => {
-      const index = this.#tags.indexOf(tag)
-
-      if (index !== -1) this.#tags.splice(index, 1)
-
-      await this.#channel.cancel(tag)
-    })
-
   async seal () {
     this.#sealed = true
 

@@ -25,8 +25,6 @@ declare namespace comq {
 
     fire (queue: string, buffer: Buffer, options?: Options.Publish): Promise<boolean>
 
-    cancel (consumerTag: string): Promise<void>
-
     seal (): Promise<void>
 
     diagnose (event: _diagnostics.Event, listener: Function): void

@@ -184,7 +184,7 @@ class IO {
 
     this.#emitters.set(queue, emitter)
 
-    emitter.tag = await this.#replies.consume(emitter.queue, consumer)
+    await this.#replies.consume(emitter.queue, consumer)
   }
 
   // endregion

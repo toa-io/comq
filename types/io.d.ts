@@ -12,8 +12,6 @@ declare namespace comq {
 
   interface ReplyEmitter extends EventEmitter {
     readonly queue: string
-
-    tag?: string
   }
 
   interface Request {
