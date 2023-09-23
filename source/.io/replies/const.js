@@ -6,5 +6,5 @@ exports.control = {
   end: 'end'
 }
 
-exports.HEARTBEAT_INTERVAL = 10_000
-exports.IDLE_INTERVAL = exports.HEARTBEAT_INTERVAL * 1.5
+exports.HEARTBEAT_INTERVAL = 5_000
+exports.IDLE_INTERVAL = 12_000

@@ -232,8 +232,8 @@ Upon receiving a request, the Producer sends a confirmation message to the `repl
 If the underlying connection is lost before the Consumer receives the confirmation message,
 the request will be retransmitted upon reconnection.
 
-A heartbeat message is sent to the `replyTo` queue whenever a Reply stream idles for 10 seconds.
-If the Consumer of the reply stream doesn't receive a reply or a heartbeat message for 15 seconds, the stream returned
+A heartbeat message is sent to the `replyTo` queue whenever a Reply stream idles for 5 seconds.
+If the Consumer of the reply stream doesn't receive a reply or a heartbeat message for 12 seconds, the stream returned
 by `IO.fetch` is destroyed.
 These intervals are not configurable.
 
