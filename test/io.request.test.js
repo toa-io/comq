@@ -97,7 +97,7 @@ describe('send', () => {
   })
 
   it('should encode message with msgpack by default', async () => {
-    /** @type {comq.encoding} */
+    /** @type {comq.Encoding} */
     const contentType = 'application/msgpack'
     const buffer = encode(payload, contentType)
 
@@ -106,7 +106,7 @@ describe('send', () => {
   })
 
   it('should throw if encoding is not supported', async () => {
-    const encoding = /** @type {comq.encoding} */ 'wtf/' + generate()
+    const encoding = /** @type {comq.Encoding} */ 'wtf/' + generate()
 
     await expect(io.request(queue, payload, encoding)).rejects.toThrow('is not supported')
   })
@@ -134,7 +134,7 @@ describe('send', () => {
 
     setImmediate(reply)
 
-    await io.request(queue, payload, /** @type {comq.encoding} */ encoding)
+    await io.request(queue, payload, /** @type {comq.Encoding} */ encoding)
 
     const [, buffer, properties] = requests.send.mock.calls[0]
 
@@ -225,7 +225,7 @@ describe('reply', () => {
 
   it.each(encodings)('should decode %s',
     /**
-     * @param {comq.encoding}contentType
+     * @param {comq.Encoding}contentType
      */
     async (contentType) => {
       const value = generate()

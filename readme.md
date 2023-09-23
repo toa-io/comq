@@ -131,10 +131,6 @@ Event message is delivered to a single Consumer within *each group*.
 If the `group` is `undefined` or omitted, a queue for the Consumer is asserted as exclusive with
 auto-generated name.
 
-Events may be consumed as an infinite Readable stream if the `consumer` argument is omitted.
-
-`async IO.consume(exchange: string, group?: string): Readable`
-
 ### Example
 
 ```javascript

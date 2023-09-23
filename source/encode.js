@@ -4,7 +4,7 @@ const encoders = require('./encoders')
 
 /**
  * @param {any} payload
- * @param {comq.encoding} encoding
+ * @param {comq.Encoding} encoding
  * @returns {Buffer}
  */
 const encode = (payload, encoding) => {

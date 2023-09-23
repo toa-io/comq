@@ -1,8 +1,8 @@
 'use strict'
 
-const { EventEmitter } = require('node:events')
 const { promex, sample } = require('@toa.io/generic')
 const events = require('../events')
+const emitter = require('../emitter')
 
 /**
  * @implements {comq.Channel}
@@ -30,7 +30,7 @@ class Channel {
 
   #recovery = promex()
 
-  #diagnostics = new EventEmitter()
+  #diagnostics = emitter.create()
 
   /**
    * @param {comq.Connection[]} connections
@@ -76,8 +76,12 @@ class Channel {
     await this.#all((channel) => channel.seal())
   }
 
-  async diagnose (event, listener) {
+  diagnose (event, listener) {
     this.#diagnostics.on(event, listener)
+  }
+
+  forget (event, listener) {
+    this.#diagnostics.off(event, listener)
   }
 
   /**

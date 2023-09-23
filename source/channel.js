@@ -1,7 +1,7 @@
 'use strict'
 
-const { EventEmitter } = require('node:events')
 const { lazy, recall, promex, failsafe, timeout } = require('@toa.io/generic')
+const emitter = require('./emitter')
 
 /**
  * @implements {comq.Channel}
@@ -36,7 +36,7 @@ class Channel {
   /** @type {Set<toa.generic.Promex>} */
   #confirmations = new Set()
 
-  #diagnostics = new EventEmitter()
+  #diagnostics = emitter.create()
 
   /**
    * @param {comq.amqp.Connection} connection
@@ -143,6 +143,10 @@ class Channel {
 
   diagnose (event, listener) {
     this.#diagnostics.on(event, listener)
+  }
+
+  forget (event, listener) {
+    this.#diagnostics.off(event, listener)
   }
 
   async recover (connection) {

@@ -49,7 +49,7 @@ class IO {
   reply = lazy(this, this.#createRequestReplyChannels,
     /**
      * @param {string} queue
-     * @param {comq.producer} callback
+     * @param {comq.Producer} callback
      * @returns {Promise<void>}
      */
     async (queue, callback) => {
@@ -64,7 +64,7 @@ class IO {
       /**
        * @param {string} queue
        * @param {any | Readable} payload
-       * @param {comq.encoding} [encoding]
+       * @param {comq.Encoding} [encoding]
        * @returns {Promise<any | Readable>}
        */
       async (queue, payload, encoding) => {
@@ -90,7 +90,7 @@ class IO {
       /**
        * @param {string} queue
        * @param {any} payload
-       * @param {comq.encoding} [encoding]
+       * @param {comq.Encoding} [encoding]
        * @returns {Promise<Readable>}
        */
       async (queue, payload, encoding) => {
@@ -122,7 +122,7 @@ class IO {
     /**
      * @param {string} exchange
      * @param {any} payload
-     * @param {comq.encoding | comq.amqp.options.Publish} [encoding]
+     * @param {comq.Encoding | comq.amqp.options.Publish} [encoding]
      * @returns {Promise<void>}
      */
     async (exchange, payload, encoding) => {
@@ -140,7 +140,7 @@ class IO {
       if (typeof encoding === 'object') { // properties passed
         Object.assign(properties, encoding)
 
-        encoding = /** @type {comq.encoding} */ properties.contentType
+        encoding = /** @type {comq.Encoding} */ properties.contentType
       }
 
       const [buffer, contentType] = this.#encode(payload, encoding)
@@ -210,7 +210,7 @@ class IO {
   }
 
   /**
-   * @param {comq.producer} producer
+   * @param {comq.Producer} producer
    * @returns {comq.channels.consumer}
    */
   #getRequestConsumer = (producer) =>
@@ -275,7 +275,7 @@ class IO {
     }
 
   /**
-   * @param {comq.consumer} callback
+   * @param {comq.Consumer} callback
    * @returns {comq.channels.consumer}
    */
   #getEventConsumer = (callback) =>
@@ -288,7 +288,7 @@ class IO {
   /**
    * @param {string} queue
    * @param {any} payload
-   * @param {comq.encoding} [encoding]
+   * @param {comq.Encoding} [encoding]
    * @return {comq.Request}
    */
   #createRequest (queue, payload, encoding) {
@@ -331,8 +331,8 @@ class IO {
 
   /**
    * @param {any} payload
-   * @param {comq.encoding} [contentType]
-   * @returns {[Buffer, comq.encoding]}
+   * @param {comq.Encoding} [contentType]
+   * @returns {[Buffer, comq.Encoding]}
    */
   #encode (payload, contentType) {
     const raw = Buffer.isBuffer(payload)
@@ -345,10 +345,10 @@ class IO {
   }
 }
 
-/** @type {comq.encoding} */
+/** @type {comq.Encoding} */
 const OCTETS = 'application/octet-stream'
 
-/** @type {comq.encoding} */
+/** @type {comq.Encoding} */
 const DEFAULT = 'application/msgpack'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')

@@ -31,6 +31,8 @@ declare namespace comq {
 
     diagnose (event: _diagnostics.event, listener: Function): void
 
+    forget (event: _diagnostics.event, listener: Function): void
+
     recover (connection: Connection): Promise<void>
   }
 

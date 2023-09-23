@@ -1,6 +1,6 @@
 declare namespace comq {
 
-  type encoding =
+  type Encoding =
     'application/msgpack'
     | 'application/json'
     | 'application/octet-stream'
@@ -8,4 +8,4 @@ declare namespace comq {
 
 }
 
-export type encoding = comq.encoding
+export type Encoding = comq.Encoding
