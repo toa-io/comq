@@ -66,7 +66,7 @@ class Channel {
       lazy(this, this.#assertQueue,
         /**
          * @param {string} queue
-         * @param {comq.channels.consumer} callback
+         * @param {comq.channels.Consumer} callback
          */
         async (queue, callback) => {
           if (!this.#sealed) return await this.#consume(queue, callback)
@@ -78,7 +78,7 @@ class Channel {
         /**
          * @param {string} exchange
          * @param {string} queue
-         * @param {comq.channels.consumer} callback
+         * @param {comq.channels.Consumer} callback
          * @returns {Promise<void>}
          */
         async (exchange, queue, callback) => {
@@ -250,7 +250,7 @@ class Channel {
 
   /**
    * @param {string} queue
-   * @param {comq.channels.consumer} consumer
+   * @param {comq.channels.Consumer} consumer
    * @returns {Promise<string>}
    */
   async #consume (queue, consumer) {
@@ -268,8 +268,8 @@ class Channel {
   }
 
   /**
-   * @param {comq.channels.consumer} consumer
-   * @returns {comq.channels.consumer}
+   * @param {comq.channels.Consumer} consumer
+   * @returns {comq.channels.Consumer}
    */
   #getAcknowledgingConsumer = (consumer) =>
     async (message) => {

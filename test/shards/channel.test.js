@@ -289,7 +289,7 @@ describe('seal', () => {
 })
 
 describe('diagnose', () => {
-  const events = /** @type {comq.diagnostics.event[]} */ ['flow', 'drain', 'recover', 'discard']
+  const events = /** @type {comq.diagnostics.Event[]} */ ['flow', 'drain', 'recover', 'discard']
 
   /** @type {jest.MockedObject<comq.Channel>[]} */
   let channels

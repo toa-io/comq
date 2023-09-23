@@ -16,7 +16,7 @@ declare namespace comq.features {
     eventsConsumedCount: number
     consumed?: Record<string, { payload: any, properties?: _amqp.Properties }>
     consumedCount: number
-    events?: { [K in _diagnostics.event]?: boolean }
+    events?: { [K in _diagnostics.Event]?: boolean }
     exception?: Error
     consumptionPromise?: Promise<any>
     sharded: boolean

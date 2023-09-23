@@ -59,7 +59,7 @@ describe.each([false, true])('connect (shards: %s)', (sharded) => {
 
   it.each(['open', 'close', 'flow', 'discard'])('should store %s event',
     /**
-     * @param {comq.diagnostics.event} event
+     * @param {comq.diagnostics.Event} event
      */
     async (event) => {
       expect(io.diagnose).toHaveBeenCalledWith(event, expect.any(Function))

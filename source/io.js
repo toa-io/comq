@@ -211,7 +211,7 @@ class IO {
 
   /**
    * @param {comq.Producer} producer
-   * @returns {comq.channels.consumer}
+   * @returns {comq.channels.Consumer}
    */
   #getRequestConsumer = (producer) =>
     track(this,
@@ -265,7 +265,7 @@ class IO {
   /**
    * @param {string} queue
    * @param {comq.ReplyEmitter} emitter
-   * @returns {comq.channels.consumer}
+   * @returns {comq.channels.Consumer}
    */
   #getReplyConsumer = (queue, emitter) =>
     (message) => {
@@ -276,7 +276,7 @@ class IO {
 
   /**
    * @param {comq.Consumer} callback
-   * @returns {comq.channels.consumer}
+   * @returns {comq.channels.Consumer}
    */
   #getEventConsumer = (callback) =>
     track(this, async (message) => {

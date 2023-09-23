@@ -64,6 +64,6 @@ declare namespace comq {
   }
 }
 
-export type producer = comq.Producer
-export type consumer = comq.Consumer
+export type Producer = comq.Producer
+export type Consumer = comq.Consumer
 export type IO = comq.IO

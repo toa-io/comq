@@ -94,7 +94,7 @@ const SHARDS = ['localhost:5673', 'localhost:5674']
 const USER = 'developer'
 const PASSWORD = 'secret'
 
-/** @type {comq.diagnostics.event[]} */
+/** @type {comq.diagnostics.Event[]} */
 const EVENTS = ['open', 'close', 'flow', 'discard']
 
 exports.Context = Context

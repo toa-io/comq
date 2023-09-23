@@ -106,7 +106,7 @@ describe('createChannel', () => {
   })
 })
 
-describe.each(/** @type {comq.diagnostics.event[]} */ ['open', 'close'])('diagnose %s event',
+describe.each(/** @type {comq.diagnostics.Event[]} */ ['open', 'close'])('diagnose %s event',
   (event) => {
     it('should re-emit event', async () => {
       const index = random(connections.length)
