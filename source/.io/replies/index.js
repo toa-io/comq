@@ -1,7 +1,7 @@
 'use strict'
 
 const { Stream } = require('./stream')
-const { pipe } = require('./pipe')
+const { Pipe } = require('./pipe')
 
 exports.Stream = Stream
-exports.pipe = pipe
+exports.Pipe = Pipe

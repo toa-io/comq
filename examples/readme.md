@@ -7,13 +7,13 @@ To run the examples, please start RabbitMQ server with `docker compose up -d` in
 Run in two terminals:
 
 ```shell
-$ node exampels/rpc/producer
+$ node examples/rpc/producer
 ```
 
 [source](rpc/producer.js)
 
 ```shell
-$ node exampels/rpc/consumer
+$ node examples/rpc/consumer
 ```
 
 [source](rpc/consumer.js)
@@ -47,13 +47,19 @@ $ node examples/events/producer
 Run in two terminals:
 
 ```shell
-$ node exampels/streams/producer
+$ node examples/streams/producer
 ```
 
 [source](streams/producer.js)
 
 ```shell
-$ node exampels/streams/consumer
+$ node examples/streams/consumer
+```
+
+Optionally, you can specify the number of messages to consume:
+
+```shell
+$ node examples/streams/consumer 10 
 ```
 
 [source](streams/consumer.js)

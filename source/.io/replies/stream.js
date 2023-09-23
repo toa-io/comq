@@ -16,6 +16,10 @@ class Stream extends Readable {
   /** @type {string} */
   #correlationId
 
+  #control
+
+  #reply
+
   #idleInterval
 
   #index = 0
@@ -27,14 +31,16 @@ class Stream extends Readable {
 
   /**
    * @param {comq.Request} request
+   * @param {any} reply
    */
-  constructor (request) {
+  constructor (request, reply) {
     super({ objectMode: true })
 
     this.#confirmation = request.reply
     this.#emitter = request.emitter
     this.#correlationId = request.properties.correlationId
     this.#idleInterval = global['COMQ_TESTING_IDLE_INTERVAL'] || IDLE_INTERVAL
+    this.#reply = reply
 
     this.#emitter.on(this.#correlationId, this._arrange.bind(this))
     this.#confirmation.catch(this._clear.bind(this))
@@ -85,7 +91,7 @@ class Stream extends Readable {
     this.#index++
 
     if (properties.type === 'control')
-      this._control(payload)
+      this._control(payload, properties)
     else
       this.push(payload)
   }
@@ -97,9 +103,15 @@ class Stream extends Readable {
     this.#queue[properties.headers.index] = { payload, properties }
   }
 
-  _control (message) {
+  /**
+   * @param {string} message
+   * @param {comq.amqp.Properties} properties
+   * @private
+   */
+  _control (message, properties) {
     switch (message) {
       case control.ok:
+        this.#control = { properties }
         this.#confirmation.resolve()
         break
       case control.heartbeat:
@@ -120,8 +132,13 @@ class Stream extends Readable {
 
   _clear () {
     clearTimeout(this.#timeout)
-
     this.#emitter.removeAllListeners(this.#correlationId)
+
+    try {
+      void this.#reply(this.#control, control.end)
+    } catch {
+      console.log('close error')
+    }
   }
 }
 

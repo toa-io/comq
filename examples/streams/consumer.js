@@ -1,40 +1,36 @@
 import { connect } from 'comq'
 import { url } from '../const.js'
 
-let io
-let interval
+const limit = Number(process.argv[2]) || Math.round(Math.random() * 8 + 2)
 
-const INTERVAL = 1000
+let io
+let stream
 
 async function run () {
   io = await connect(url)
 
   console.log('Connected')
-
-  interval = setInterval(fetch, INTERVAL)
-
   process.on('SIGINT', exit)
+
+  await fetch()
+  await io.close()
+
+  console.log('Disconnected')
 }
 
 async function fetch () {
-  const limit = Math.round(Math.random() * 8 + 2)
-
   console.log(`Fetching stream with ${limit} numbers`)
 
-  const stream = await io.fetch('get_numbers', { limit })
-  const numbers = []
+  stream = await io.fetch('get_numbers', { limit })
 
-  for await (const number of stream) numbers.push(number)
+  for await (const number of stream) console.log('Received:', number)
 
-  console.log(`Stream received: ${numbers.join(', ')}`)
+  console.log('Stream finished')
 }
 
-async function exit () {
-  clearInterval(interval)
-
-  await io.close()
-
-  console.log('\nDisconnected')
+function exit () {
+  console.log()
+  stream?.destroy()
 }
 
 await run()

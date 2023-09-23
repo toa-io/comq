@@ -24,6 +24,9 @@ class Pipe {
   /** @type {comq.Channel} */
   #channel
 
+  /** @type {comq.ReplyEmitter} */
+  #controls
+
   /** @type {Reply} */
   #reply
 
@@ -31,22 +34,25 @@ class Pipe {
    * @param {comq.amqp.Message} request
    * @param {stream.Readable} stream
    * @param {comq.Channel} channel
+   * @param {comq.ReplyEmitter} control
    * @param {Reply} reply
    */
-  constructor (request, stream, channel, reply) {
+  constructor (request, stream, channel, control, reply) {
     const { correlationId, replyTo } = request.properties
 
     this.#stream = stream
     this.#channel = channel
+    this.#controls = control
     this.#reply = reply
     this.#replyTo = replyTo
 
     this.#properties = {
-      chunk: { correlationId, mandatory: true },
-      control: { correlationId, type: 'control', mandatory: true }
+      chunk: { correlationId, ...CHUNK },
+      control: { correlationId, replyTo: control.queue, ...CONTROL }
     }
 
     channel.diagnose('return', this.#onReturn)
+    control.on(correlationId, this.#control)
   }
 
   async pipe () {
@@ -92,26 +98,45 @@ class Pipe {
 
   #clear () {
     clearInterval(this.#interval)
+
     this.#channel.forget('return', this.#onReturn)
+    this.#controls.off(this.#properties.control.correlationId, this.#control)
   }
 
   #onReturn = (message) => {
     if (message.fields.routingKey === this.#replyTo)
       this.#interrupt = true
   }
+
+  #control = (message) => {
+    switch (message) {
+      case control.end:
+        this.#interrupt = true
+        break
+      default:
+        throw new Error(`Unknown control message: ${message}`)
+    }
+  }
+
+  /**
+   * @param {comq.amqp.Message} request
+   * @param {stream.Readable} stream
+   * @param {comq.Channel} channel
+   * @param {comq.ReplyEmitter} control
+   * @param {Reply} reply
+   * @return {Promise<void>}
+   */
+  static async create (request, stream, channel, control, reply) {
+    const pipe = new Pipe(request, stream, channel, control, reply)
+
+    await pipe.pipe()
+  }
 }
 
-/**
- * @param {comq.amqp.Message} request
- * @param {stream.Readable} stream
- * @param {comq.Channel} channel
- * @param {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} send
- * @return {Promise<void>}
- */
-async function pipe (request, stream, channel, send) {
-  const pipe = new Pipe(request, stream, channel, send)
+/** @type {comq.amqp.options.Publish} */
+const CHUNK = { mandatory: true }
 
-  await pipe.pipe()
-}
+/** @type {comq.amqp.options.Publish} */
+const CONTROL = { type: 'control', mandatory: true }
 
-exports.pipe = pipe
+exports.Pipe = Pipe

@@ -18,7 +18,15 @@ async function run () {
 async function * produce ({ limit }) {
   console.log('Request received with limit:', limit)
 
-  for (let i = 0; i < limit; i++) yield i
+  for (let i = 0; i < limit; i++) {
+    yield i
+
+    const timeout = Math.round(Math.random() * 1000)
+
+    await new Promise((resolve) => setTimeout(resolve, timeout))
+  }
+
+  console.log('Stream finished')
 }
 
 async function exit () {

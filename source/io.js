@@ -30,6 +30,9 @@ class IO {
   /** @type {Map<string, comq.ReplyEmitter>} */
   #emitters = new Map()
 
+  /** @type {comq.ReplyEmitter | null} */
+  #control = null
+
   /** @type {Set<toa.generic.Promex>} */
   #pendingReplies = new Set()
 
@@ -95,7 +98,7 @@ class IO {
        */
       async (queue, payload, encoding) => {
         const request = this.#createRequest(queue, payload, encoding)
-        const stream = new io.replies.Stream(request)
+        const stream = new io.replies.Stream(request, this.#reply.bind(this))
 
         await this.#requests.send(queue, request.buffer, request.properties)
         await request.reply // wait for the confirmation
@@ -231,35 +234,15 @@ class IO {
         if (iterator) {
           const readable = reply instanceof stream.Readable ? reply : stream.Readable.from(reply)
 
+          this.#control ??= await this.#createControl()
+
           // eslint-disable-next-line no-void
-          void io.replies.pipe(request, readable, this.#replies,
+          void io.replies.Pipe.create(request, readable, this.#replies, this.#control,
             (message, properties) => this.#reply(request, message, properties))
         } else {
           await this.#reply(request, reply)
         }
       })
-
-  /**
-   * @param {comq.amqp.Message} request
-   * @param {any} reply
-   * @param {comq.amqp.options.Publish} [properties]
-   * @returns {Promise<boolean>}
-   */
-  async #reply (request, reply, properties = {}) {
-    if (reply === undefined) throw new Error('The `producer` function must return a value')
-
-    let { replyTo, contentType } = request.properties
-
-    if (Buffer.isBuffer(reply)) contentType = OCTETS
-    if (contentType === undefined) throw new Error('Reply to a Request without the `contentType` property must be of type `Buffer`')
-
-    const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
-
-    properties.contentType = contentType
-    properties.correlationId = request.properties.correlationId
-
-    return await this.#replies.fire(replyTo, buffer, properties)
-  }
 
   /**
    * @param {string} queue
@@ -315,6 +298,39 @@ class IO {
       .finally(() => this.#pendingReplies.delete(reply))
 
     return reply
+  }
+
+  /**
+   * @return {Promise<comq.ReplyEmitter>}
+   */
+  async #createControl () {
+    const queue = 'control'
+
+    await this.#consumeReplies(queue)
+
+    return this.#emitters.get(queue)
+  }
+
+  /**
+   * @param {Pick<comq.amqp.Message, 'properties'>} request
+   * @param {any} reply
+   * @param {comq.amqp.options.Publish} [properties]
+   * @returns {Promise<boolean>}
+   */
+  async #reply (request, reply, properties = {}) {
+    if (reply === undefined) throw new Error('The `producer` function must return a value')
+
+    let { replyTo, contentType } = request.properties
+
+    if (Buffer.isBuffer(reply)) contentType = OCTETS
+    if (contentType === undefined) throw new Error('Reply to a Request without the `contentType` property must be of type `Buffer`')
+
+    const buffer = contentType === OCTETS ? reply : encode(reply, contentType)
+
+    properties.contentType = contentType
+    properties.correlationId = request.properties.correlationId
+
+    return await this.#replies.fire(replyTo, buffer, properties)
   }
 
   #recover (exception) {
