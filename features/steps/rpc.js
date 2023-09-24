@@ -214,7 +214,7 @@ Then('the consumer receives the stream:',
 
     for await (const reply of this.stream) replies.push(reply)
 
-    assert.equal(values.length, replies.length, `Stream values count mismatch: expected ${values.length}, received ${replies.length}`)
+    assert.equal(values.length, replies.length, `Stream length mismatch: expected ${values.length}, received ${replies.length}`)
   })
 
 Then('the consumer receives the stream',

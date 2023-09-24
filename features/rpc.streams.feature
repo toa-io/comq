@@ -8,13 +8,13 @@ Feature: Reply streams
   Scenario: Fetching a stream
     Given function replying `get_numbers` queue:
       """
-      function * ({ amount }) {
-        for (let i = 0; i < amount; i++) yield i
+      function * ({ limit }) {
+        for (let i = 0; i < limit; i++) { console.log(':', i); yield i }
       }
       """
     When the consumer fetches a stream with the following request to the `get_numbers` queue:
       """yaml
-      amount: 5
+      limit: 5
       """
     Then the consumer receives the stream:
       """yaml
