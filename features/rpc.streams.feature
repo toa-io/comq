@@ -41,8 +41,8 @@ Feature: Reply streams
     Given a number generator with 20ms increasing delay replying `get_numbers` queue
     When the consumer fetches a stream with request to the `get_numbers` queue
     And the consumer interrupts the stream after 3 replies
-    # RabbitMQ takes some time to delete the queue
-    And after 100ms
+    # feedback message must be delivered
+    And after 10ms
     Then the generator is destroyed
 
   Scenario: Reply stream idle timeout

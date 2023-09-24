@@ -17,8 +17,8 @@ declare namespace comq {
     diagnose(event: _diagnostics.Event, listener: Function): void
   }
 
-  type connect = (...urls: string[]) => Promise<_io.IO>
+  type Connect = (...urls: string[]) => Promise<_io.IO>
 
 }
 
-export type connect = comq.connect
+export type Connect = comq.Connect

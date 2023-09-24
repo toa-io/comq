@@ -6,7 +6,7 @@ const { control, HEARTBEAT_INTERVAL } = require('./const')
 
 class Pipe {
   #index = -1
-  #interrupt = false
+  #interrupted = false
   #heartbeatInterval = global['COMQ_TESTING_HEARTBEAT_INTERVAL'] || HEARTBEAT_INTERVAL
 
   /** @type {ReturnType<setInterval> | null} */
@@ -25,7 +25,7 @@ class Pipe {
   #channel
 
   /** @type {comq.ReplyEmitter} */
-  #controls
+  #feedback
 
   /** @type {Reply} */
   #reply
@@ -34,43 +34,33 @@ class Pipe {
    * @param {comq.amqp.Message} request
    * @param {stream.Readable} stream
    * @param {comq.Channel} channel
-   * @param {comq.ReplyEmitter} control
+   * @param {comq.ReplyEmitter} feedback
    * @param {Reply} reply
    */
-  constructor (request, stream, channel, control, reply) {
+  constructor (request, stream, channel, feedback, reply) {
     const { correlationId, replyTo } = request.properties
 
     this.#stream = stream
     this.#channel = channel
-    this.#controls = control
+    this.#feedback = feedback
     this.#reply = reply
     this.#replyTo = replyTo
 
     this.#properties = {
       chunk: { correlationId, ...CHUNK },
-      control: { correlationId, replyTo: control.queue, ...CONTROL }
+      control: { correlationId, replyTo: feedback.queue, ...CONTROL }
     }
 
     channel.diagnose('return', this.#onReturn)
-    control.on(correlationId, this.#control)
+    feedback.on(correlationId, this.#control)
   }
 
   async pipe () {
     await this.#transmit(control.ok, this.#properties.control)
 
+    this.#stream.on('data', this.#onData)
+    this.#stream.on('close', this.#onClose)
     this.#heartbeat()
-
-    for await (const chunk of this.#stream) {
-      await this.#transmit(chunk, this.#properties.chunk)
-
-      this.#heartbeat()
-
-      if (this.#interrupt) break
-    }
-
-    this.#clear()
-
-    if (!this.#interrupt) await this.#transmit(control.end, this.#properties.control)
   }
 
   async #transmit (data, properties) {
@@ -79,7 +69,7 @@ class Pipe {
     const ok = await this.#reply(data,
       { ...properties, headers: { index: this.#index } })
 
-    if (!ok) this.#cancel()
+    if (!ok) this.#interrupt()
   }
 
   #heartbeat () {
@@ -91,8 +81,8 @@ class Pipe {
     )
   }
 
-  #cancel () {
-    this.#interrupt = true
+  #interrupt () {
+    this.#interrupted = true
     this.#stream.destroy()
   }
 
@@ -100,18 +90,30 @@ class Pipe {
     clearInterval(this.#interval)
 
     this.#channel.forget('return', this.#onReturn)
-    this.#controls.off(this.#properties.control.correlationId, this.#control)
+    this.#feedback.off(this.#properties.control.correlationId, this.#control)
+  }
+
+  #onData = async (chunk) => {
+    await this.#transmit(chunk, this.#properties.chunk)
+
+    this.#heartbeat()
+  }
+
+  #onClose = async () => {
+    this.#clear()
+
+    if (!this.#interrupted) await this.#transmit(control.end, this.#properties.control)
   }
 
   #onReturn = (message) => {
     if (message.fields.routingKey === this.#replyTo)
-      this.#interrupt = true
+      this.#interrupt()
   }
 
   #control = (message) => {
     switch (message) {
       case control.end:
-        this.#interrupt = true
+        this.#interrupt()
         break
       default:
         throw new Error(`Unknown control message: ${message}`)

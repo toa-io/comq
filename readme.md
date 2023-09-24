@@ -223,8 +223,9 @@ for await (const number of stream)
 On the first call of the `IO.fetch` for each request queue, an exclusive queue for replies is asserted (a stream queue).
 
 When the producer function of `IO.reply` returns an Iterator for the first time across all request queues,
-a control queue is asserted on the [Reply channel](#channels)
+a feedback queue is asserted on the [Reply channel](#channels)
 using the [reply topology](#exchanges-and-queues).
+When the Consumer destroys the Reply stream, a stream cancellation message is sent to the Producer's feedback queue.
 
 ### Stream control
 
@@ -238,8 +239,6 @@ by `IO.fetch` is destroyed.
 These intervals are not configurable.
 
 An "end stream" message is sent to the `replyTo` queue when the Reply stream is finished.
-
-When the Consumer destroys the Reply stream, a stream cancellation message is sent to the Producer's control queue.
 
 See also [Reply stream shutdown](#reply-stream-shutdown).
 

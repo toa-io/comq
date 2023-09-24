@@ -50,6 +50,7 @@ class Stream extends Readable {
     this._clear()
     this.push(null)
 
+    void this.#reply(this.#control, control.end)
     super._destroy(error, callback)
   }
 
@@ -62,7 +63,7 @@ class Stream extends Readable {
    */
   _arrange (payload, properties) {
     if (properties.headers.index !== this.#index) {
-      this._enqueue(payload, properties)
+      this._buffer(payload, properties)
 
       return
     }
@@ -92,11 +93,12 @@ class Stream extends Readable {
 
     if (properties.type === 'control')
       this._control(payload, properties)
-    else
-      this.push(payload)
+    else if (!this.push(payload))
+      this._clear()
+
   }
 
-  _enqueue (payload, properties) {
+  _buffer (payload, properties) {
     if (this.#buffered > MAX_BUFFER_SIZE) this.destroy()
 
     this.#buffered++
@@ -133,12 +135,6 @@ class Stream extends Readable {
   _clear () {
     clearTimeout(this.#timeout)
     this.#emitter.removeAllListeners(this.#correlationId)
-
-    try {
-      void this.#reply(this.#control, control.end)
-    } catch {
-      console.log('close error')
-    }
   }
 }
 

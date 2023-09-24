@@ -28,9 +28,9 @@ async function fetch () {
   console.log('Stream finished')
 }
 
-function exit () {
+async function exit () {
   console.log()
-  stream?.destroy()
+  await io.close()
 }
 
 await run()

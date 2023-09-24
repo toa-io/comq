@@ -54,7 +54,7 @@ class Context extends World {
 
   /**
    * @param {string[]} urls
-   * @param {comq.connect} [method]
+   * @param {comq.Connect} [method]
    * @return {Promise<void>}
    */
   async #connect (urls, method = connect) {

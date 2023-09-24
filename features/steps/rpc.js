@@ -301,10 +301,10 @@ Then('the consumer interrupts the stream after {number} replies',
   async function (replies) {
     // eslint-disable-next-line no-unused-vars
     for await (const _ of this.stream) {
-      if (--replies === 0) break
+      if (--replies === 0) break // this destroys the stream
     }
 
-    this.stream.destroy()
+    assert.equal(replies, 0, 'Stream was prematurely interrupted')
   })
 
 Then('the consumer interrupts the stream',
@@ -407,7 +407,9 @@ async function send (queue, payload) {
  * @return {Promise<void>}
  */
 async function fetch (queue, payload, number) {
-  if (number === undefined) { this.stream = await this.io.fetch(queue, payload) } else {
+  if (number === undefined) {
+    this.stream = await this.io.fetch(queue, payload)
+  } else {
     this.streams[number] = await this.io.fetch(queue, payload)
     this.streamsValues[number] = []
     this.streamsEnded[number] = false

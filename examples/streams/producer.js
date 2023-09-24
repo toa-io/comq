@@ -21,12 +21,18 @@ async function * produce ({ limit }) {
   for (let i = 0; i < limit; i++) {
     yield i
 
-    const timeout = Math.round(Math.random() * 1000)
+    console.log('Yielded:', i)
 
-    await new Promise((resolve) => setTimeout(resolve, timeout))
+    await timeout()
   }
 
-  console.log('Stream finished')
+  console.log('Stream ended')
+}
+
+async function timeout () {
+  const ms = Math.round(Math.random() * 500)
+
+  await new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function exit () {

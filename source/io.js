@@ -3,7 +3,7 @@
 const stream = require('node:stream')
 const { EventEmitter } = require('node:events')
 const { randomBytes } = require('node:crypto')
-const { lazy, track, failsafe, promex } = require('@toa.io/generic')
+const { lazy, track, failsafe, promex, timeout } = require('@toa.io/generic')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
@@ -31,12 +31,18 @@ class IO {
   #emitters = new Map()
 
   /** @type {comq.ReplyEmitter | null} */
-  #control = null
+  #feedback = null
 
   /** @type {Set<toa.generic.Promex>} */
   #pendingReplies = new Set()
 
+  /** @type {Set<stream.Readable>} */
+  #replyStreams = new Set()
+
   #diagnostics = new EventEmitter()
+
+  #sealing = null
+  #closing = null
 
   /**
    * @param {comq.Connection} connection
@@ -100,6 +106,8 @@ class IO {
         const request = this.#createRequest(queue, payload, encoding)
         const stream = new io.replies.Stream(request, this.#reply.bind(this))
 
+        this.#addReplyStream(stream)
+
         await this.#requests.send(queue, request.buffer, request.properties)
         await request.reply // wait for the confirmation
 
@@ -153,14 +161,25 @@ class IO {
     })
 
   async seal () {
+    if (this.#sealing !== null) return this.#sealing
+    else this.#sealing = promex()
+
     await this.#requests?.seal()
     await this.#events?.seal()
+    await this.#destroyStreams(this.#replyStreams)
+
+    this.#sealing.resolve()
   }
 
   async close () {
+    if (this.#closing !== null) return this.#closing
+    else this.#closing = promex()
+
     await this.seal()
     await track(this)
     await this.#connection.close()
+
+    this.#closing.resolve()
   }
 
   diagnose (event, listener) {
@@ -234,10 +253,10 @@ class IO {
         if (iterator) {
           const readable = reply instanceof stream.Readable ? reply : stream.Readable.from(reply)
 
-          this.#control ??= await this.#createControl()
+          this.#feedback ??= await this.#createFeedback()
 
           // eslint-disable-next-line no-void
-          void io.replies.Pipe.create(request, readable, this.#replies, this.#control,
+          void io.replies.Pipe.create(request, readable, this.#replies, this.#feedback,
             (message, properties) => this.#reply(request, message, properties))
         } else {
           await this.#reply(request, reply)
@@ -303,12 +322,47 @@ class IO {
   /**
    * @return {Promise<comq.ReplyEmitter>}
    */
-  async #createControl () {
-    const queue = 'control'
+  async #createFeedback () {
+    const queue = 'feedback'
 
     await this.#consumeReplies(queue)
 
     return this.#emitters.get(queue)
+  }
+
+  /**
+   * @param {stream.Readable} stream
+   */
+  #addReplyStream (stream) {
+    this.#addStream(stream, this.#replyStreams)
+  }
+
+  /**
+   * @param {stream.Readable} stream
+   * @param {Set<stream.Readable>} streams
+   */
+  #addStream (stream, streams) {
+    streams.add(stream)
+    stream.on('close', () => streams.delete(stream))
+  }
+
+  /**
+   * @param {Set<stream.Readable>} streams
+   * @return {Promise<void>}
+   */
+  async #destroyStreams (streams) {
+    if (streams.size === 0) return
+
+    for (const stream of streams) stream.destroy()
+
+    /*
+    When streams are destroyed, they attempt to send an 'end' control message.
+    Since these messages are sent without an acknowledgment,
+    we need to wait briefly before closing the connection.
+    Even if these messages are lost, the reply stream will be closed anyway,
+    either due to feedback idling or the deletion of the stream queue.
+    */
+    await timeout(50)
   }
 
   /**
