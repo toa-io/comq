@@ -4,6 +4,7 @@ const stream = require('node:stream')
 const { EventEmitter } = require('node:events')
 const { randomBytes } = require('node:crypto')
 const { lazy, track, failsafe, promex, timeout } = require('@toa.io/generic')
+const { memo } = require('./attributes')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
@@ -40,9 +41,6 @@ class IO {
   #replyStreams = new Set()
 
   #diagnostics = new EventEmitter()
-
-  #sealing = null
-  #closing = null
 
   /**
    * @param {comq.Connection} connection
@@ -160,27 +158,17 @@ class IO {
       await this.#events.publish(exchange, buffer, properties)
     })
 
-  async seal () {
-    if (this.#sealing !== null) return this.#sealing
-    else this.#sealing = promex()
-
+  seal = memo(async () => {
     await this.#requests?.seal()
     await this.#events?.seal()
     await this.#destroyStreams(this.#replyStreams)
+  })
 
-    this.#sealing.resolve()
-  }
-
-  async close () {
-    if (this.#closing !== null) return this.#closing
-    else this.#closing = promex()
-
+  close = memo(async () => {
     await this.seal()
     await track(this)
     await this.#connection.close()
-
-    this.#closing.resolve()
-  }
+  })
 
   diagnose (event, listener) {
     this.#diagnostics.on(event, listener)
@@ -251,7 +239,9 @@ class IO {
             (Symbol.iterator in reply && !Array.isArray(reply) && !Buffer.isBuffer(reply)))
 
         if (iterator) {
-          const readable = reply instanceof stream.Readable ? reply : stream.Readable.from(reply)
+          const readable = reply instanceof stream.Readable
+            ? reply
+            : stream.Readable.from(reply)
 
           this.#feedback ??= await this.#createFeedback()
 
@@ -358,9 +348,9 @@ class IO {
     /*
     When streams are destroyed, they attempt to send an 'end' control message.
     Since these messages are sent without an acknowledgment,
-    we need to wait briefly before closing the connection.
+    it is needed to wait briefly before closing the connection.
     Even if these messages are lost, the reply stream will be closed anyway,
-    either due to feedback idling or the deletion of the stream queue.
+    either due to missing heartbeat or the deletion of the stream queue.
     */
     await timeout(50)
   }

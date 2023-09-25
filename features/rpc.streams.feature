@@ -9,7 +9,7 @@ Feature: Reply streams
     Given function replying `get_numbers` queue:
       """
       function * ({ limit }) {
-        for (let i = 0; i < limit; i++) { console.log(':', i); yield i }
+        for (let i = 0; i < limit; i++) yield i
       }
       """
     When the consumer fetches a stream with the following request to the `get_numbers` queue:
