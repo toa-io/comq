@@ -1,8 +1,9 @@
 'use strict'
 
 const amqp = require('amqplib')
-const { retry, promex, failsafe } = require('@toa.io/generic')
+const { retry, promex } = require('@toa.io/generic')
 
+const { failsafe } = require('./attributes')
 const presets = require('./topology')
 const channels = require('./channel')
 const emitter = require('./emitter')

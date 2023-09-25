@@ -1,6 +1,7 @@
 'use strict'
 
-const { lazy, recall, promex, failsafe, timeout } = require('@toa.io/generic')
+const { promex, timeout } = require('@toa.io/generic')
+const { failsafe, lazy, recall } = require('./attributes')
 const emitter = require('./emitter')
 
 /**
