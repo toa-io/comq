@@ -3,8 +3,8 @@
 const stream = require('node:stream')
 const { EventEmitter } = require('node:events')
 const { randomBytes } = require('node:crypto')
-const { lazy, track, failsafe, promex, timeout } = require('@toa.io/generic')
-const { memo } = require('./attributes')
+const { promex, timeout } = require('@toa.io/generic')
+const { memo, failsafe, lazy, track } = require('./attributes')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
