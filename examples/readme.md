@@ -56,10 +56,4 @@ $ node examples/streams/producer
 $ node examples/streams/consumer
 ```
 
-Optionally, you can specify the number of messages to consume:
-
-```shell
-$ node examples/streams/consumer 10 
-```
-
 [source](streams/consumer.js)
