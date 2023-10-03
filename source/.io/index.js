@@ -2,8 +2,10 @@
 
 const { concat } = require('./concat')
 const { createReplyEmitter } = require('./createReplyEmitter')
-const replies = require('./replies')
+const { ReplyStream } = require('./ReplyStream')
+const { ReplyPipe } = require('./ReplyPipe')
 
 exports.concat = concat
-exports.replies = replies
 exports.createReplyEmitter = createReplyEmitter
+exports.ReplyStream = ReplyStream
+exports.ReplyPipe = ReplyPipe

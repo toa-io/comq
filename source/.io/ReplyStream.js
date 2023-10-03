@@ -4,7 +4,7 @@ const { IDLE_INTERVAL, control } = require('./const')
 
 const { Readable } = require('node:stream')
 
-class Stream extends Readable {
+class ReplyStream extends Readable {
   #confirmation
 
   /** @type {ReturnType<setTimeout> | null} */
@@ -95,7 +95,6 @@ class Stream extends Readable {
       this._control(payload, properties)
     else if (!this.push(payload))
       this._clear()
-
   }
 
   _buffer (payload, properties) {
@@ -140,4 +139,4 @@ class Stream extends Readable {
 
 const MAX_BUFFER_SIZE = 1000
 
-exports.Stream = Stream
+exports.ReplyStream = ReplyStream

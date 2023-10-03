@@ -5,7 +5,7 @@ const { control, HEARTBEAT_INTERVAL } = require('./const')
 
 /** @typedef {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} Reply */
 
-class Pipe extends EventEmitter {
+class ReplyPipe extends EventEmitter {
   #index = -1
   #interrupted = false
   #heartbeatInterval = global['COMQ_TESTING_HEARTBEAT_INTERVAL'] || HEARTBEAT_INTERVAL
@@ -68,6 +68,7 @@ class Pipe extends EventEmitter {
 
   destroy () {
     this.#stream.destroy()
+    void this.#onClose()
   }
 
   async #transmit (data, properties) {
@@ -96,6 +97,7 @@ class Pipe extends EventEmitter {
   #clear () {
     clearInterval(this.#interval)
 
+    this.#stream.removeAllListeners()
     this.#channel.forget('return', this.#onReturn)
     this.#feedback.off(this.#properties.control.correlationId, this.#control)
   }
@@ -139,7 +141,7 @@ class Pipe extends EventEmitter {
    * @return {Promise<comq.Destroyable>}
    */
   static async create (request, stream, channel, control, reply) {
-    const pipe = new Pipe(request, stream, channel, control, reply)
+    const pipe = new ReplyPipe(request, stream, channel, control, reply)
 
     await pipe.pipe()
 
@@ -153,4 +155,4 @@ const CHUNK = { mandatory: true }
 /** @type {comq.amqp.options.Publish} */
 const CONTROL = { type: 'control', mandatory: true }
 
-exports.Pipe = Pipe
+exports.ReplyPipe = ReplyPipe

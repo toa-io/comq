@@ -105,7 +105,7 @@ class IO {
        */
       async (queue, payload, encoding) => {
         const request = this.#createRequest(queue, payload, encoding)
-        const stream = new io.replies.Stream(request, this.#reply.bind(this))
+        const stream = new io.ReplyStream(request, this.#reply.bind(this))
 
         this.#addReplyStream(stream)
 
@@ -249,7 +249,7 @@ class IO {
 
           this.#feedback ??= await this.#createFeedback()
 
-          const pipe = await io.replies.Pipe.create(request, readable, this.#replies, this.#feedback,
+          const pipe = await io.ReplyPipe.create(request, readable, this.#replies, this.#feedback,
             (message, properties) => this.#reply(request, message, properties))
 
           this.#addReplyPipe(pipe)
@@ -364,7 +364,7 @@ class IO {
     Even if these messages are lost, the reply stream will be closed anyway,
     either due to missing heartbeat or the deletion of the stream queue.
     */
-    await timeout(250)
+    await timeout(50)
   }
 
   /**
