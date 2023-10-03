@@ -1,19 +1,19 @@
 # Examples
 
-To run examples please start RabbitMQ server with `docker compose up -d` in the package root.
+To run the examples, please start RabbitMQ server with `docker compose up -d` in the package root.
 
 ## RPC
 
 Run in two terminals:
 
 ```shell
-$ node exampels/rpc/producer
+$ node examples/rpc/producer
 ```
 
 [source](rpc/producer.js)
 
 ```shell
-$ node exampels/rpc/consumer
+$ node examples/rpc/consumer
 ```
 
 [source](rpc/consumer.js)
@@ -41,3 +41,19 @@ $ node examples/events/producer
 `A` and `B` are consumer groups.
 
 > Try to run multiple instances with the same consumer group.
+
+## Reply streams
+
+Run in two terminals:
+
+```shell
+$ node examples/streams/producer
+```
+
+[source](streams/producer.js)
+
+```shell
+$ node examples/streams/consumer
+```
+
+[source](streams/consumer.js)

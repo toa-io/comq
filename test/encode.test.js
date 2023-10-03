@@ -11,7 +11,7 @@ it('should be', async () => {
 
 it('should throw if encoding is not supported', async () => {
   const value = 1
-  const encoding = /** @type {comq.encoding} */ 'wtf/' + generate()
+  const encoding = /** @type {comq.Encoding} */ 'wtf/' + generate()
 
   expect(() => encode(value, encoding)).toThrow('not supported')
 })
@@ -34,7 +34,7 @@ it('should encode as msgpack', async () => {
   expect(buffer).toStrictEqual(packed)
 })
 
-/** @type {[comq.encoding, string, Buffer][]} */
+/** @type {[comq.Encoding, string, Buffer][]} */
 const samples = [
   ['text/plain', 'some string', Buffer.from('some string')]
 ]

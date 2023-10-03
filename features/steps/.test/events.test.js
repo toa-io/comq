@@ -234,7 +234,7 @@ describe('Given I\'m publishing {quantity}B events to the {token} exchange at {q
 
     await timeout(100)
 
-    const callsAmountExpected = [9, 10]
+    const callsAmountExpected = [8, 9, 10, 11]
 
     expect(callsAmountExpected).toContain(context.io.emit.mock.calls.length)
     expect(context.publishing).toBeDefined()

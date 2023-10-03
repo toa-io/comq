@@ -22,6 +22,13 @@ class Context extends World {
   sharded
   shard
   sealing
+  stream
+  streamValues = []
+  streamEnded = false
+  streams = {}
+  streamsValues = {}
+  streamsEnded = {}
+  generatorDestroyed = false
 
   async connect (user, password) {
     const urls = this.#urls(user, password)
@@ -47,7 +54,7 @@ class Context extends World {
 
   /**
    * @param {string[]} urls
-   * @param {comq.connect} [method]
+   * @param {comq.Connect} [method]
    * @return {Promise<void>}
    */
   async #connect (urls, method = connect) {
@@ -87,7 +94,7 @@ const SHARDS = ['localhost:5673', 'localhost:5674']
 const USER = 'developer'
 const PASSWORD = 'secret'
 
-/** @type {comq.diagnostics.event[]} */
+/** @type {comq.diagnostics.Event[]} */
 const EVENTS = ['open', 'close', 'flow', 'discard']
 
 exports.Context = Context

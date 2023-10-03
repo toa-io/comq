@@ -1,4 +1,4 @@
 'use strict'
 
-/** @type {comq.encoding[]} */
+/** @type {comq.Encoding[]} */
 exports.encodings = ['application/msgpack', 'application/json']

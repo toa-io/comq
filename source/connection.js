@@ -1,11 +1,12 @@
 'use strict'
 
-const { EventEmitter } = require('node:events')
 const amqp = require('amqplib')
-const { retry, promex, failsafe } = require('@toa.io/generic')
+const { retry, promex } = require('@toa.io/generic')
 
+const { failsafe } = require('./attributes')
 const presets = require('./topology')
 const channels = require('./channel')
+const emitter = require('./emitter')
 
 /**
  * @implements {comq.Connection}
@@ -26,7 +27,7 @@ class Connection {
   /** @type {boolean} */
   #running = false
 
-  #diagnostics = createEmitter()
+  #diagnostics = emitter.create()
 
   /**
    * @param {string} url
@@ -112,14 +113,6 @@ class Connection {
 
     return this.#running || abruptly
   }
-}
-
-function createEmitter () {
-  const emitter = new EventEmitter()
-
-  emitter.setMaxListeners(10000)
-
-  return emitter
 }
 
 function noop () {}

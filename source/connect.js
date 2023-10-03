@@ -5,12 +5,12 @@ const { Connection } = require('./connection')
 const { SingletonConnection } = require('./singleton')
 const shards = require('./shards')
 
-/** @type {comq.connect} */
+/** @type {comq.Connect} */
 const connect = async (...urls) => {
   return create(urls, connectionConstructor(Connection))
 }
 
-/** @type {comq.connect} */
+/** @type {comq.Connect} */
 const assert = async (...urls) => {
   return create(urls, connectionConstructor(SingletonConnection))
 }

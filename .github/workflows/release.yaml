@@ -4,8 +4,8 @@ on:
   pull_request:
     types: [closed]
     branches:
-      - main
-      - dev
+      - release
+      - alpha
     paths:
       - 'source/**'
       - 'types/**'
@@ -27,7 +27,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -36,7 +36,7 @@ jobs:
 
       - name: Import GPG key
         id: gpg
-        uses: crazy-max/ghaction-import-gpg@v5
+        uses: crazy-max/ghaction-import-gpg@v6
         with:
           gpg_private_key: ${{ secrets.TOABOT_GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.TOABOT_GPG_PASSPHRASE }}
@@ -45,15 +45,16 @@ jobs:
 
       - name: Bump version
         run: |
-          if [ ${{ github.base_ref }} = main ]; then
-            npx lerna@6.5.1 version --conventional-graduate --no-commit-hooks --no-changelog --yes --message "ci: %s" --sign-git-commit --sign-git-tag
-            git fetch
-            git checkout dev
-            git merge main
-            git push --all origin --no-verify
+          if [ ${{ github.base_ref }} = release ]; then
+            npx lerna@7.3.0 version --conventional-graduate --no-commit-hooks --no-changelog --yes --message "ci: %s" --sign-git-commit --sign-git-tag
           else
-            npx lerna@6.5.1 version --conventional-prerelease --preid dev --dist-tag dev --no-commit-hooks --no-changelog --yes --message "ci: %s" --git-tag-command "echo %s" --sign-git-commit
+            npx lerna@7.3.0 version --conventional-prerelease --preid alpha --dist-tag alpha --no-commit-hooks --no-changelog --yes --message "ci: %s" --git-tag-command "echo %s" --sign-git-commit
           fi
+          
+          git fetch
+          git checkout dev
+          git merge ${{ github.base_ref }}
+          git push --all origin --no-verify
         env:
           GITHUB_TOKEN: ${{ secrets.TOABOT_GITHUB_TOKEN }}
           GIT_AUTHOR_NAME: ${{ steps.gpg.outputs.name }}
@@ -65,10 +66,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm pkg delete scripts.prepare # husky
-          
-          if [ ${{ github.base_ref }} = main ]; then
+          if [ ${{ github.base_ref }} = release ]; then
             npm publish
           else
-            npm publish --tag dev
+            npm publish --tag alpha
           fi

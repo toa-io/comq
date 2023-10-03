@@ -1,8 +1,8 @@
 'use strict'
 
-const { EventEmitter } = require('node:events')
 const events = require('../events')
 const channel = require('./channel')
+const emitter = require('../emitter')
 
 /**
  * @implements {comq.Connection}
@@ -11,7 +11,7 @@ class Connection {
   /** @type {comq.Connection[]} */
   #connections
 
-  #diagnostics = new EventEmitter()
+  #diagnostics = emitter.create()
 
   /**
    * @param {comq.Connection[]} connections

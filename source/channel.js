@@ -1,7 +1,8 @@
 'use strict'
 
-const { EventEmitter } = require('node:events')
-const { lazy, recall, promex, failsafe, timeout } = require('@toa.io/generic')
+const { promex, timeout } = require('@toa.io/generic')
+const { failsafe, lazy, recall } = require('./attributes')
+const emitter = require('./emitter')
 
 /**
  * @implements {comq.Channel}
@@ -24,8 +25,8 @@ class Channel {
   /** @type {string[]} */
   #tags = []
 
-  /** @type {toa.generic.Promex} */
-  #paused
+  /** @type {toa.generic.Promex | null} */
+  #paused = null
 
   /** @type {boolean} */
   #sealed = false
@@ -36,7 +37,7 @@ class Channel {
   /** @type {Set<toa.generic.Promex>} */
   #confirmations = new Set()
 
-  #diagnostics = new EventEmitter()
+  #diagnostics = emitter.create()
 
   /**
    * @param {comq.amqp.Connection} connection
@@ -56,6 +57,9 @@ class Channel {
   async create () {
     if (this.#topology.confirms) this.#channel = await this.#connection.createConfirmChannel()
     else this.#channel = await this.#connection.createChannel()
+
+    this.#channel.on('drain', this.#unpause)
+    this.#channel.on('return', (message) => this.#diagnostics.emit('return', message))
   }
 
   consume = recall(this,
@@ -63,10 +67,10 @@ class Channel {
       lazy(this, this.#assertQueue,
         /**
          * @param {string} queue
-         * @param {comq.channels.consumer} callback
+         * @param {comq.channels.Consumer} callback
          */
         async (queue, callback) => {
-          if (!this.#sealed) await this.#consume(queue, callback)
+          if (!this.#sealed) return await this.#consume(queue, callback)
         })))
 
   subscribe = recall(this,
@@ -75,7 +79,7 @@ class Channel {
         /**
          * @param {string} exchange
          * @param {string} queue
-         * @param {comq.channels.consumer} callback
+         * @param {comq.channels.Consumer} callback
          * @returns {Promise<void>}
          */
         async (exchange, queue, callback) => {
@@ -107,9 +111,13 @@ class Channel {
   async fire (queue, buffer, options) {
     try {
       await this.#publish(DEFAULT, queue, buffer, options)
+
+      return true
     } catch (exception) {
       if (this.#failfast) throw exception
       // ignore otherwise
+
+      return false
     }
   }
 
@@ -125,6 +133,10 @@ class Channel {
     this.#diagnostics.on(event, listener)
   }
 
+  forget (event, listener) {
+    this.#diagnostics.off(event, listener)
+  }
+
   async recover (connection) {
     this.#connection = connection
 
@@ -137,7 +149,7 @@ class Channel {
 
     for (const confirmation of this.#confirmations) confirmation.reject(INTERRUPTION)
 
-    await timeout(0) // let unpause and confirmation interruptions be handled
+    await timeout(0) // handle interruptions
 
     this.#recovery.resolve()
     this.#recovery = promex()
@@ -197,7 +209,7 @@ class Channel {
    * @param {comq.amqp.options.Publish} options
    */
   async #publish (exchange, queue, buffer, options) {
-    if (this.#paused !== undefined) await this.#unpaused()
+    if (this.#paused !== null) await this.#unpaused()
 
     options = Object.assign({ persistent: this.#topology.persistent }, options)
 
@@ -226,8 +238,8 @@ class Channel {
 
   /**
    * @param {string} queue
-   * @param {comq.channels.consumer} consumer
-   * @returns {Promise<void>}
+   * @param {comq.channels.Consumer} consumer
+   * @returns {Promise<string>}
    */
   async #consume (queue, consumer) {
     /** @type {comq.amqp.options.Consume} */
@@ -239,11 +251,13 @@ class Channel {
     const response = await this.#channel.consume(queue, consumer, options)
 
     this.#tags.push(response.consumerTag)
+
+    return response.consumerTag
   }
 
   /**
-   * @param {comq.channels.consumer} consumer
-   * @returns {comq.channels.consumer}
+   * @param {comq.channels.Consumer} consumer
+   * @returns {comq.channels.Consumer}
    */
   #getAcknowledgingConsumer = (consumer) =>
     async (message) => {
@@ -276,10 +290,9 @@ class Channel {
   }
 
   #pause () {
-    if (this.#paused !== undefined) return
+    if (this.#paused !== null) return
 
     this.#paused = promex()
-    this.#channel.once('drain', this.#unpause)
     this.#diagnostics.emit('flow')
     this.#diagnostics.emit('pause')
   }
@@ -288,12 +301,12 @@ class Channel {
    * @param {Error} [exception]
    */
   #unpause = (exception) => {
-    if (this.#paused === undefined) return
+    if (this.#paused === null) return
 
     if (exception === undefined) this.#paused.resolve()
     else this.#paused.reject(exception)
 
-    this.#paused = undefined
+    this.#paused = null
     this.#diagnostics.emit('drain')
     this.#diagnostics.emit('resume')
   }

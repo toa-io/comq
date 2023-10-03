@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import * as _diagnostics from '../../../types/diagnostic'
 import * as _io from '../../../types/io'
 import * as _amqp from '../../../types/amqp'
@@ -15,7 +16,7 @@ declare namespace comq.features {
     eventsConsumedCount: number
     consumed?: Record<string, { payload: any, properties?: _amqp.Properties }>
     consumedCount: number
-    events?: { [K in _diagnostics.event]?: boolean }
+    events?: { [K in _diagnostics.Event]?: boolean }
     exception?: Error
     consumptionPromise?: Promise<any>
     sharded: boolean
@@ -23,6 +24,13 @@ declare namespace comq.features {
     sealing: Promise<any>
     sending: any
     publishing: any
+    stream: Readable
+    streamValues: any[]
+    streamEnded: boolean
+    streams: Record<number, Readable>
+    streamsValues: Record<number, any[]>
+    streamsEnded: Record<number, boolean>
+    generatorDestroyed: boolean
 
     connect(user?: string, password?: string): Promise<void>
     assert(user?: string, password?: string): Promise<void>

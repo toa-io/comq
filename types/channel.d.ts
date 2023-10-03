@@ -5,7 +5,7 @@ declare namespace comq {
 
   namespace channels {
 
-    type consumer = (message: Message) => void | Promise<void>
+    type Consumer = (message: Message) => void | Promise<void>
 
   }
 
@@ -13,26 +13,28 @@ declare namespace comq {
     index?: number
     sharded?: boolean
 
-    create(): Promise<void>
+    create (): Promise<void>
 
-    consume(queue: string, consumer: channels.consumer): Promise<void>
+    consume (queue: string, consumer: channels.Consumer): Promise<string>
 
-    subscribe(exchange: string, queue: string, consumer: channels.consumer): Promise<void>
+    subscribe (exchange: string, queue: string, consumer: channels.Consumer): Promise<void>
 
-    send(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+    send (queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
-    publish(exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+    publish (exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
-    fire(queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+    fire (queue: string, buffer: Buffer, options?: Options.Publish): Promise<boolean>
 
-    seal(): Promise<void>
+    seal (): Promise<void>
 
-    diagnose(event: _diagnostics.event, listener: Function): void
+    diagnose (event: _diagnostics.Event, listener: Function): void
 
-    recover(connection: Connection): Promise<void>
+    forget (event: _diagnostics.Event, listener: Function): void
+
+    recover (connection: Connection): Promise<void>
   }
 
 }
 
 export type Channel = comq.Channel
-export type consumer = comq.channels.consumer
+export type Consumer = comq.channels.Consumer

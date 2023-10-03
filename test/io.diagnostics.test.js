@@ -30,7 +30,7 @@ describe.each(['request', 'reply', 'event'])('%s channel events',
   (type) => {
     it.each(['flow', 'drain', 'recover', 'discard', 'pause', 'resume'])('should re-emit %s',
       /**
-       * @param {comq.diagnostics.event} event
+       * @param {comq.diagnostics.Event} event
        */
       async (event) => {
         const listener = /** @type {Function} */ jest.fn()
@@ -56,7 +56,7 @@ describe.each(['request', 'reply', 'event'])('%s channel events',
 
 it.each(['open', 'close'])('should re-emit %s from connection',
   /**
-   * @param {comq.diagnostics.event} event
+   * @param {comq.diagnostics.Event} event
    */
   async (event) => {
     const listener = /** @type {Function} */ jest.fn(() => undefined)
