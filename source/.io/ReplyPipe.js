@@ -62,13 +62,13 @@ class ReplyPipe extends EventEmitter {
     await this.#transmit(control.ok, this.#properties.control)
 
     this.#stream.on('data', this.#onData)
-    this.#stream.on('close', this.#onClose)
+    this.#stream.on('close', this.#close)
     this.#heartbeat()
   }
 
   destroy () {
+    this.#close()
     this.#stream.destroy()
-    void this.#onClose()
   }
 
   async #transmit (data, properties) {
@@ -91,7 +91,7 @@ class ReplyPipe extends EventEmitter {
 
   #interrupt () {
     this.#interrupted = true
-    this.#stream.destroy()
+    this.destroy()
   }
 
   #clear () {
@@ -102,19 +102,19 @@ class ReplyPipe extends EventEmitter {
     this.#feedback.off(this.#properties.control.correlationId, this.#control)
   }
 
-  #onData = async (chunk) => {
-    await this.#transmit(chunk, this.#properties.chunk)
-
-    this.#heartbeat()
-  }
-
-  #onClose = async () => {
+  #close = () => {
     this.emit('close')
     this.#clear()
 
     if (!this.#interrupted) {
-      await this.#transmit(control.end, this.#properties.control)
+      void this.#transmit(control.end, this.#properties.control)
     }
+  }
+
+  #onData = async (chunk) => {
+    await this.#transmit(chunk, this.#properties.chunk)
+
+    this.#heartbeat()
   }
 
   #onReturn = (message) => {
