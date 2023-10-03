@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [closed]
     branches:
-      - main
+      - release
       - alpha
     paths:
       - 'source/**'
@@ -45,7 +45,7 @@ jobs:
 
       - name: Bump version
         run: |
-          if [ ${{ github.base_ref }} = main ]; then
+          if [ ${{ github.base_ref }} = release ]; then
             npx lerna@7.3.0 version --conventional-graduate --no-commit-hooks --no-changelog --yes --message "ci: %s" --sign-git-commit --sign-git-tag
           else
             npx lerna@7.3.0 version --conventional-prerelease --preid alpha --dist-tag alpha --no-commit-hooks --no-changelog --yes --message "ci: %s" --git-tag-command "echo %s" --sign-git-commit
@@ -66,7 +66,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ ${{ github.base_ref }} = main ]; then
+          if [ ${{ github.base_ref }} = release ]; then
             npm publish
           else
             npm publish --tag alpha
