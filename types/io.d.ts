@@ -14,6 +14,10 @@ declare namespace comq {
     readonly queue: string
   }
 
+  interface Destroyable extends EventEmitter {
+    destroy (): void
+  }
+
   interface Request {
     buffer: Buffer
     emitter: ReplyEmitter

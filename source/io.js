@@ -37,8 +37,11 @@ class IO {
   /** @type {Set<toa.generic.Promex>} */
   #pendingReplies = new Set()
 
-  /** @type {Set<stream.Readable>} */
+  /** @type {Set<comq.Destroyable>} */
   #replyStreams = new Set()
+
+  /** @type {Set<comq.Destroyable>} */
+  #replyPipes = new Set()
 
   #diagnostics = new EventEmitter()
 
@@ -166,6 +169,7 @@ class IO {
 
   close = memo(async () => {
     await this.seal()
+    await this.#destroyStreams(this.#replyPipes)
     await track(this)
     await this.#connection.close()
   })
@@ -245,9 +249,10 @@ class IO {
 
           this.#feedback ??= await this.#createFeedback()
 
-          // eslint-disable-next-line no-void
-          void io.replies.Pipe.create(request, readable, this.#replies, this.#feedback,
+          const pipe = await io.replies.Pipe.create(request, readable, this.#replies, this.#feedback,
             (message, properties) => this.#reply(request, message, properties))
+
+          this.#addReplyPipe(pipe)
         } else {
           await this.#reply(request, reply)
         }
@@ -321,15 +326,22 @@ class IO {
   }
 
   /**
-   * @param {stream.Readable} stream
+   * @param {comq.Destroyable} stream
    */
   #addReplyStream (stream) {
     this.#addStream(stream, this.#replyStreams)
   }
 
   /**
-   * @param {stream.Readable} stream
-   * @param {Set<stream.Readable>} streams
+   * @param {comq.Destroyable} pipe
+   */
+  #addReplyPipe (pipe) {
+    this.#addStream(pipe, this.#replyPipes)
+  }
+
+  /**
+   * @param {comq.Destroyable} stream
+   * @param {Set<comq.Destroyable>} streams
    */
   #addStream (stream, streams) {
     streams.add(stream)
@@ -337,7 +349,7 @@ class IO {
   }
 
   /**
-   * @param {Set<stream.Readable>} streams
+   * @param {Set<comq.Destroyable>} streams
    * @return {Promise<void>}
    */
   async #destroyStreams (streams) {
@@ -352,7 +364,7 @@ class IO {
     Even if these messages are lost, the reply stream will be closed anyway,
     either due to missing heartbeat or the deletion of the stream queue.
     */
-    await timeout(50)
+    await timeout(250)
   }
 
   /**

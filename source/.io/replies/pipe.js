@@ -1,10 +1,11 @@
 'use strict'
 
+const { EventEmitter } = require('node:events')
 const { control, HEARTBEAT_INTERVAL } = require('./const')
 
 /** @typedef {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} Reply */
 
-class Pipe {
+class Pipe extends EventEmitter {
   #index = -1
   #interrupted = false
   #heartbeatInterval = global['COMQ_TESTING_HEARTBEAT_INTERVAL'] || HEARTBEAT_INTERVAL
@@ -38,6 +39,8 @@ class Pipe {
    * @param {Reply} reply
    */
   constructor (request, stream, channel, feedback, reply) {
+    super()
+
     const { correlationId, replyTo } = request.properties
 
     this.#stream = stream
@@ -61,6 +64,10 @@ class Pipe {
     this.#stream.on('data', this.#onData)
     this.#stream.on('close', this.#onClose)
     this.#heartbeat()
+  }
+
+  destroy () {
+    this.#stream.destroy()
   }
 
   async #transmit (data, properties) {
@@ -100,9 +107,12 @@ class Pipe {
   }
 
   #onClose = async () => {
+    this.emit('close')
     this.#clear()
 
-    if (!this.#interrupted) await this.#transmit(control.end, this.#properties.control)
+    if (!this.#interrupted) {
+      await this.#transmit(control.end, this.#properties.control)
+    }
   }
 
   #onReturn = (message) => {
@@ -126,12 +136,14 @@ class Pipe {
    * @param {comq.Channel} channel
    * @param {comq.ReplyEmitter} control
    * @param {Reply} reply
-   * @return {Promise<void>}
+   * @return {Promise<comq.Destroyable>}
    */
   static async create (request, stream, channel, control, reply) {
     const pipe = new Pipe(request, stream, channel, control, reply)
 
     await pipe.pipe()
+
+    return /** @type {comq.Destroyable} */ pipe
   }
 }
 
