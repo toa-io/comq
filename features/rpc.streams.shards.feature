@@ -5,14 +5,14 @@ Feature: Reply streams over shards
     And heartbeat interval is set to 100ms
     And idle timeout is set to 150ms
 
-  Scenario: Fetching a stream using sharded connection
+  Scenario: Requesting a stream using sharded connection
     Given a generator replying `get_numbers` queue:
       """
       function * ({ amount }) {
         for (let i = 0; i < amount; i++) yield i
       }
       """
-    When the consumer fetches a stream with the following request to the `get_numbers` queue:
+    When the consumer requests a stream with the following request to the `get_numbers` queue:
       """yaml
       amount: 5
       """
@@ -23,7 +23,7 @@ Feature: Reply streams over shards
 
   Scenario: Broker crashes while fetching a stream
     Given a number generator with 90ms increasing delay replying `get_numbers` queue
-    When the consumer fetches a stream with request to the `get_numbers` queue
+    When the consumer requests a stream with request to the `get_numbers` queue
     And the consumer receives the stream
     And after 300ms
     And the broker has crashed

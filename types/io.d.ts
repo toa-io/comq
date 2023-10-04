@@ -22,17 +22,14 @@ declare namespace comq {
     buffer: Buffer
     emitter: ReplyEmitter
     properties: _amqp.Properties
-    reply: any
   }
 
   interface IO extends _diagnostics.Diagnosable {
     reply (queue: string, produce: Producer): Promise<void>
 
-    request<Reply = any, Request = any> (queue: string, payload: Request, encoding?: _encoding.Encoding): Promise<Reply>
+    request<Reply = any, Request = any> (queue: string, payload: Request, encoding?: _encoding.Encoding): Promise<Reply> | Promise<Readable>
 
     request (queue: string, stream: Readable, encoding?: _encoding.Encoding): Promise<Readable>
-
-    fetch (queue: string, payload: any, encoding?: _encoding.Encoding): Promise<Readable>
 
     consume<T = any> (exchange: string, group: string, consumer: Consumer<T>): Promise<void>
 

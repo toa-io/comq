@@ -47,7 +47,7 @@
   "scripts": {
     "prepare": "echo run: husky install",
     "test": "standard && jest",
-    "features": "cucumber-js",
+    "features": "cucumber-js --publish-quiet",
     "lint": "standard --fix --verbose | snazzy"
   },
   "standard": {

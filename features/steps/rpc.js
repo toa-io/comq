@@ -136,7 +136,7 @@ When('the consumer sends a request to the {token} queue',
     await send.call(this, queue, payload)
   })
 
-When('the consumer fetches a stream with the following request to the {token} queue:',
+When('the consumer requests a stream with the following request to the {token} queue:',
   /**
    * @param {string} queue
    * @param {string} yaml
@@ -148,7 +148,7 @@ When('the consumer fetches a stream with the following request to the {token} qu
     await fetch.call(this, queue, payload)
   })
 
-When('the consumer fetches a stream with request to the {token} queue',
+When('the consumer requests a stream with request to the {token} queue',
   /**
    * @param {string} queue
    * @this {comq.features.Context}
@@ -157,7 +157,7 @@ When('the consumer fetches a stream with request to the {token} queue',
     await fetch.call(this, queue, null)
   })
 
-When('the consumer{number} fetches a stream with request to the {token} queue',
+When('the consumer{number} requests a stream with request to the {token} queue',
   /**
    * @param {number} number
    * @param {string} queue
@@ -408,9 +408,9 @@ async function send (queue, payload) {
  */
 async function fetch (queue, payload, number) {
   if (number === undefined) {
-    this.stream = await this.io.fetch(queue, payload)
+    this.stream = await this.io.request(queue, payload)
   } else {
-    this.streams[number] = await this.io.fetch(queue, payload)
+    this.streams[number] = await this.io.request(queue, payload)
     this.streamsValues[number] = []
     this.streamsEnded[number] = false
   }

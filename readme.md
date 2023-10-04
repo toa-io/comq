@@ -202,12 +202,10 @@ await io.reply('get_numbers', function * ({ amount }) {
 })
 ```
 
-The Reply stream may be consumed by using the `IO.fetch` function:
-
-`async IO.fetch(queue: string, payload: any, encoding?: string): Readable`
+The Reply stream may be consumed by using the `IO.request` function:
 
 ```javascript
-const stream = await io.fetch('get_numbers', { amount: 10 })
+const stream = await io.request('get_numbers', { amount: 10 })
 
 for await (const number of stream)
   console.log(number)
@@ -219,8 +217,6 @@ for await (const number of stream)
   <source media="(prefers-color-scheme: dark)" srcset="./docs/reply-stream-topology-dark.jpg">
   <img alt="Reply topology" width="500" height="411" src="./docs/reply-stream-topology-light.jpg">
 </picture>
-
-On the first call of the `IO.fetch` for each request queue, an exclusive queue for replies is asserted (a stream queue).
 
 When the producer function of `IO.reply` returns an Iterator for the first time across all request queues,
 a control queue is asserted on the [Reply channel](#channels)
@@ -235,7 +231,7 @@ the request will be retransmitted upon reconnection.
 
 A heartbeat message is sent to the `replyTo` queue whenever a Reply stream idles for 5 seconds.
 If the Consumer of the reply stream doesn't receive a reply or a heartbeat message for 12 seconds, the stream returned
-by `IO.fetch` is destroyed.
+by `IO.request` is destroyed.
 These intervals are not configurable.
 
 An "end stream" message is sent to the `replyTo` queue when the Reply stream is finished.
@@ -247,7 +243,7 @@ See also [Reply stream shutdown](#reply-stream-shutdown).
 :warning:
 
 While consuming the Reply stream if the broker connection is lost,
-or if the Consumer crashes or destroys the stream returned by `IO.fetch`,
+or if the Consumer crashes or destroys the stream returned by `IO.request`,
 some of the values yielded by the Reply stream may be lost.
 
 To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not
