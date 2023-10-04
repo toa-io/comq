@@ -1,11 +1,11 @@
 'use strict'
 
+const { Readable } = require('node:stream')
+const { promex } = require('@toa.io/generic')
 const { IDLE_INTERVAL, control } = require('./const')
 
-const { Readable } = require('node:stream')
-
 class ReplyStream extends Readable {
-  #confirmation
+  confirmation = promex()
 
   /** @type {ReturnType<setTimeout> | null} */
   #timeout = null
@@ -36,14 +36,12 @@ class ReplyStream extends Readable {
   constructor (request, reply) {
     super({ objectMode: true })
 
-    this.#confirmation = request.reply
     this.#emitter = request.emitter
     this.#correlationId = request.properties.correlationId
     this.#idleInterval = global['COMQ_TESTING_IDLE_INTERVAL'] || IDLE_INTERVAL
     this.#reply = reply
 
-    this.#emitter.on(this.#correlationId, this._arrange.bind(this))
-    this.#confirmation.catch(this._clear.bind(this))
+    this.#emitter.on(this.#correlationId, this.arrange.bind(this))
   }
 
   _destroy (error, callback) {
@@ -59,9 +57,8 @@ class ReplyStream extends Readable {
   /**
    * @param {unknown} payload
    * @param {comq.amqp.Properties} properties
-   * @private
    */
-  _arrange (payload, properties) {
+  arrange (payload, properties) {
     if (properties.headers.index !== this.#index) {
       this._buffer(payload, properties)
 
@@ -113,7 +110,7 @@ class ReplyStream extends Readable {
     switch (message) {
       case control.ok:
         this.#control = { properties }
-        this.#confirmation.resolve()
+        this.confirmation.resolve()
         break
       case control.heartbeat:
         break
