@@ -32,7 +32,7 @@ class IO {
   #emitters = new Map()
 
   /** @type {comq.ReplyEmitter | null} */
-  #feedback = null
+  #control = null
 
   /** @type {Set<toa.generic.Promex>} */
   #pendingReplies = new Set()
@@ -86,33 +86,12 @@ class IO {
           )
         }
 
-        const { buffer, properties, emitter, reply } = this.#createRequest(queue, payload, encoding)
-
-        emitter.once(properties.correlationId, reply.resolve)
-
-        await this.#requests.send(queue, buffer, properties)
-
-        return reply
-      }))
-
-  fetch = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
-    failsafe(this, this.#recover,
-      /**
-       * @param {string} queue
-       * @param {any} payload
-       * @param {comq.Encoding} [encoding]
-       * @returns {Promise<Readable>}
-       */
-      async (queue, payload, encoding) => {
         const request = this.#createRequest(queue, payload, encoding)
-        const stream = new io.ReplyStream(request, this.#reply.bind(this))
-
-        this.#addReplyStream(stream)
+        const reply = this.#createReply(request)
 
         await this.#requests.send(queue, request.buffer, request.properties)
-        await request.reply // wait for the confirmation
 
-        return stream
+        return reply
       }))
 
   consume = lazy(this, this.#createEventChannel,
@@ -247,9 +226,9 @@ class IO {
             ? reply
             : stream.Readable.from(reply)
 
-          this.#feedback ??= await this.#createFeedback()
+          this.#control ??= await this.#createControl()
 
-          const pipe = await io.ReplyPipe.create(request, readable, this.#replies, this.#feedback,
+          const pipe = await io.ReplyPipe.create(request, readable, this.#replies, this.#control,
             (message, properties) => this.#reply(request, message, properties))
 
           this.#addReplyPipe(pipe)
@@ -291,18 +270,29 @@ class IO {
     const [buffer, contentType] = this.#encode(payload, encoding)
     const emitter = this.#emitters.get(queue)
     const correlationId = randomBytes(8).toString('hex')
-    const reply = this.#createReply()
 
     /** @type {comq.amqp.Properties} */
     const properties = { contentType, correlationId, replyTo: emitter.queue }
 
-    return { buffer, emitter, reply, properties }
+    return { buffer, emitter, properties }
+  }
+
+  /**
+   * @param {comq.Request} request
+   * @return {Promise<any>}
+   */
+  #createReply (request) {
+    const reply = this.#createPendingReply()
+
+    request.emitter.once(request.properties.correlationId, this.#getReplyResolver(request, reply))
+
+    return reply
   }
 
   /**
    * @return {toa.generic.Promex}
    */
-  #createReply () {
+  #createPendingReply () {
     const reply = promex()
 
     this.#pendingReplies.add(reply)
@@ -315,10 +305,39 @@ class IO {
   }
 
   /**
+   * @param {comq.Request} request
+   * @param reply
+   */
+  #getReplyResolver (request, reply) {
+    return async (payload, properties) => {
+      const isStream = properties.headers?.index !== undefined
+
+      if (isStream) {
+        const stream = this.#createReplyStream(request, payload, properties)
+
+        await stream.confirmation
+
+        reply.resolve(stream)
+      } else {
+        reply.resolve(payload)
+      }
+    }
+  }
+
+  #createReplyStream (request, payload, properties) {
+    const stream = new io.ReplyStream(request, this.#reply.bind(this))
+
+    stream.arrange(payload, properties)
+    this.#addReplyStream(/** @type {comq.Destroyable} */ stream)
+
+    return stream
+  }
+
+  /**
    * @return {Promise<comq.ReplyEmitter>}
    */
-  async #createFeedback () {
-    const queue = 'feedback'
+  async #createControl () {
+    const queue = 'control'
 
     await this.#consumeReplies(queue)
 

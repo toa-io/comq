@@ -50,6 +50,8 @@ async function healthy () {
 
     process = await execute('docker inspect -f {{.State.Health.Status}} comq-rmq-0')
   } while (process.output !== 'healthy')
+
+  await timeout(500)
 }
 
 const BROKERS_AMOUNT = 2
