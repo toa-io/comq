@@ -344,9 +344,6 @@ and it will be closed when the last instance of `IO` using that connection is [d
 Topology is designed to deliver maximum performance while ensuring that the **at least once**
 guarantee provided by RabbitMQ is maintained.
 
-> Topology design assumes that unanswered Requests and unconfirmed Events will be retransmitted
-> upon reconnection.
-
 ### Dynamic
 
 Static topology refers to the process of defining the complete topology declaration along with the
