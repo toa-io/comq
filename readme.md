@@ -137,12 +137,6 @@ auto-generated name.
 // with a consumer function
 await io.consume('numbers_added', 'logger',
   ({ a, b }) => console.log(`${a} was added to ${b}`))
-
-// as a stream
-const events = await io.consume('numbers_added', 'logger')
-
-for await (const { a, b } of events)
-  console.log(`${a} was added to ${b}`)
 ```
 
 ## Emission
