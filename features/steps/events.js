@@ -64,6 +64,7 @@ When('an event is emitted to the {token} exchange with properties:',
 
 When('a stream of {quantity} events is emitted to the {token} exchange',
   /**
+   * @param {string} amountQ
    * @param {string} exchange
    * @this {comq.features.Context}
    */
