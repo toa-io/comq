@@ -26,8 +26,8 @@ class ReplyStream extends Readable {
 
   #buffered = 0
 
-  /** @type {Record<number, unknown>} */
-  #queue = {}
+  /** @type {Map<number, unknown>} */
+  #queue = new Map()
 
   /**
    * @param {comq.Request} request
@@ -70,12 +70,12 @@ class ReplyStream extends Readable {
     if (this.#buffered > 0) {
       let message
 
-      while ((message = this.#queue[this.#index])) {
-        delete this.#queue[this.#index]
+      while ((message = this.#queue.get(this.#index))) {
+        this.#queue.delete(this.#index)
         this._add(message.payload, message.properties)
       }
 
-      this.#buffered = Object.keys(this.#queue).length
+      this.#buffered = this.#queue.size
     }
   }
 
@@ -98,7 +98,7 @@ class ReplyStream extends Readable {
     if (this.#buffered > MAX_BUFFER_SIZE) this.destroy()
 
     this.#buffered++
-    this.#queue[properties.headers.index] = { payload, properties }
+    this.#queue.set(properties.headers.index, { payload, properties })
   }
 
   /**
