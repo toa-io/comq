@@ -4,7 +4,7 @@ const stream = require('node:stream')
 const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
 const { timeout, quantity, match } = require('@toa.io/generic')
-const { parse } = require('@toa.io/yaml')
+const { load: parse } = require('js-yaml')
 const { Given, When, Then } = require('@cucumber/cucumber')
 
 Given('(that ){token} is consuming events from the {token} exchange',

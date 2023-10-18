@@ -29,8 +29,6 @@
   "devDependencies": {
     "@cucumber/cucumber": "^9.1.2",
     "@toa.io/command": "^0.4.0",
-    "@toa.io/tomato": "^0.4.0",
-    "@toa.io/yaml": "^0.4.0",
     "@types/amqplib": "^0.10.1",
     "@types/jest": "^29.5.2",
     "husky": "^8.0.3",
@@ -42,6 +40,7 @@
   "dependencies": {
     "@toa.io/generic": "^0.4.0",
     "amqplib": "^0.10.3",
+    "js-yaml": "^4.1.0",
     "msgpackr": "^1.9.5"
   },
   "scripts": {
