@@ -27,7 +27,7 @@
   "main": "source/index.js",
   "types": "types/index.d.ts",
   "devDependencies": {
-    "@cucumber/cucumber": "^9.1.2",
+    "@cucumber/cucumber": "^10.0.0",
     "@toa.io/command": "^0.4.0",
     "@toa.io/tomato": "^0.4.0",
     "@toa.io/yaml": "^0.4.0",
