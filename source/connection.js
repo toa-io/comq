@@ -1,7 +1,8 @@
 'use strict'
 
 const amqp = require('amqplib')
-const { retry, promex } = require('@toa.io/generic')
+const { Promex } = require('promex')
+const { retry } = require('reretry')
 
 const { failsafe } = require('./attributes')
 const presets = require('./topology')
@@ -21,8 +22,8 @@ class Connection {
   /** @type {comq.Channel[]} */
   #channels = []
 
-  /** @type {toa.generic.Promex} */
-  #recovery = promex()
+  /** @type {Promex} */
+  #recovery = new Promex()
 
   /** @type {boolean} */
   #running = false
@@ -37,7 +38,7 @@ class Connection {
   }
 
   async open () {
-    await retry(this.#open, RETRY)
+    await retry(this.#open)
 
     this.#running = true
   }
@@ -69,14 +70,11 @@ class Connection {
     this.#diagnostics.on(event, listener)
   }
 
-  /**
-   * @type {toa.generic.retry.Task}
-   */
   #open = async (retry) => {
     try {
       this.#connection = await amqp.connect(this.#url)
     } catch (exception) {
-      if (this.#transient(exception)) return retry()
+      if (this.#transient(exception)) return retry
       else throw exception
     }
 
@@ -90,7 +88,7 @@ class Connection {
     for (const channel of this.#channels) await channel.recover(this.#connection)
 
     this.#recovery.resolve()
-    this.#recovery = promex()
+    this.#recovery = new Promex()
   }
 
   /**
@@ -116,10 +114,5 @@ class Connection {
 }
 
 function noop () {}
-
-/** @type {toa.generic.retry.Options} */
-const RETRY = {
-  retries: Infinity
-}
 
 exports.Connection = Connection

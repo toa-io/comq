@@ -27,10 +27,11 @@
   "main": "source/index.js",
   "types": "types/index.d.ts",
   "devDependencies": {
-    "@cucumber/cucumber": "^10.0.0",
+    "@cucumber/cucumber": "^10.0.1",
     "@toa.io/command": "^0.4.0",
-    "@types/amqplib": "^0.10.1",
-    "@types/jest": "^29.5.2",
+    "@toa.io/generic": "^1.0.0-alpha.0",
+    "@types/amqplib": "^0.10.3",
+    "@types/jest": "^29.5.8",
     "husky": "^8.0.3",
     "jest": "^29.5.0",
     "js-yaml": "^4.1.0",
@@ -39,14 +40,15 @@
     "standard": "^17.1.0"
   },
   "dependencies": {
-    "@toa.io/generic": "^0.4.0",
     "amqplib": "^0.10.3",
-    "msgpackr": "^1.9.5"
+    "msgpackr": "^1.9.5",
+    "promex": "^0.1.1",
+    "reretry": "^0.1.0"
   },
   "scripts": {
     "prepare": "echo run: husky install",
     "test": "standard && jest",
-    "features": "cucumber-js --publish-quiet",
+    "features": "cucumber-js --fail-fast",
     "lint": "standard --fix --verbose | snazzy"
   },
   "standard": {

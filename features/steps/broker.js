@@ -32,7 +32,7 @@ Given('one of the brokers is/has {status}',
 const actions = {
   up: async (n = 0) => {
     await execute('docker start comq-rmq-' + n)
-    await healthy()
+    await healthy(n)
   },
   down: async (n = 0) => {
     await execute('docker stop comq-rmq-' + n)
@@ -42,16 +42,14 @@ const actions = {
   }
 }
 
-async function healthy () {
+async function healthy (n) {
   let process
 
   do {
     await timeout(HEALTHCHECK_INTERVAL)
 
-    process = await execute('docker inspect -f {{.State.Health.Status}} comq-rmq-0')
+    process = await execute('docker inspect -f {{.State.Health.Status}} comq-rmq-' + n)
   } while (process.output !== 'healthy')
-
-  await timeout(500)
 }
 
 const BROKERS_AMOUNT = 2
