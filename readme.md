@@ -137,12 +137,6 @@ auto-generated name.
 // with a consumer function
 await io.consume('numbers_added', 'logger',
   ({ a, b }) => console.log(`${a} was added to ${b}`))
-
-// as a stream
-const events = await io.consume('numbers_added', 'logger')
-
-for await (const { a, b } of events)
-  console.log(`${a} was added to ${b}`)
 ```
 
 ## Emission
@@ -349,9 +343,6 @@ and it will be closed when the last instance of `IO` using that connection is [d
 
 Topology is designed to deliver maximum performance while ensuring that the **at least once**
 guarantee provided by RabbitMQ is maintained.
-
-> Topology design assumes that unanswered Requests and unconfirmed Events will be retransmitted
-> upon reconnection.
 
 ### Dynamic
 

@@ -1,6 +1,6 @@
 'use strict'
 
-const { promex, sample } = require('@toa.io/generic')
+const { Promex } = require('promex')
 const events = require('../events')
 const emitter = require('../emitter')
 
@@ -22,13 +22,13 @@ class Channel {
   /** @type {Set<Promise<comq.Channel>>} */
   #pending = new Set()
 
-  /** @type {Map<comq.Channel, toa.generic.Promex>} */
+  /** @type {Map<comq.Channel, Promex>} */
   #bench = new Map()
 
   /** @type {comq.topology.type} */
   #type
 
-  #recovery = promex()
+  #recovery = new Promex()
 
   #diagnostics = emitter.create()
 
@@ -134,7 +134,7 @@ class Channel {
   #remove (channel) {
     if (!this.#channels.has(channel)) return
 
-    this.#bench.set(channel, promex())
+    this.#bench.set(channel, new Promex())
     this.#channels.delete(channel)
     this.#update()
     this.#diagnostics.emit('remove', channel.index)
@@ -162,7 +162,7 @@ class Channel {
     this.#add(channel)
 
     this.#recovery.resolve()
-    this.#recovery = promex()
+    this.#recovery = new Promex()
   }
 
   #comeback (channel) {
@@ -209,7 +209,7 @@ class Channel {
   async #one (fn) {
     if (this.#pool.length === 0) await this.#recovery
 
-    const channel = sample(this.#pool)
+    const channel = this.#pool[Math.floor(Math.random() * this.#pool.length)]
 
     try {
       return await fn(channel)

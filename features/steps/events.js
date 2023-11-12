@@ -4,7 +4,7 @@ const stream = require('node:stream')
 const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
 const { timeout, quantity, match } = require('@toa.io/generic')
-const { parse } = require('@toa.io/yaml')
+const { load: parse } = require('js-yaml')
 const { Given, When, Then } = require('@cucumber/cucumber')
 
 Given('(that ){token} is consuming events from the {token} exchange',
@@ -64,6 +64,7 @@ When('an event is emitted to the {token} exchange with properties:',
 
 When('a stream of {quantity} events is emitted to the {token} exchange',
   /**
+   * @param {string} amountQ
    * @param {string} exchange
    * @this {comq.features.Context}
    */
