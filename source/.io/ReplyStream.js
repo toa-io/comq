@@ -1,11 +1,11 @@
 'use strict'
 
 const { Readable } = require('node:stream')
-const { promex } = require('@toa.io/generic')
+const { Promex } = require('promex')
 const { IDLE_INTERVAL, control } = require('./const')
 
 class ReplyStream extends Readable {
-  confirmation = promex()
+  confirmation = new Promex()
 
   /** @type {ReturnType<setTimeout> | null} */
   #timeout = null

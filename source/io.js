@@ -3,7 +3,8 @@
 const stream = require('node:stream')
 const { EventEmitter } = require('node:events')
 const { randomBytes } = require('node:crypto')
-const { promex, timeout } = require('@toa.io/generic')
+const { setTimeout } = require('node:timers/promises')
+const { Promex } = require('promex')
 const { memo, failsafe, lazy, track } = require('./attributes')
 
 const { decode } = require('./decode')
@@ -34,7 +35,7 @@ class IO {
   /** @type {comq.ReplyEmitter | null} */
   #control = null
 
-  /** @type {Set<toa.generic.Promex>} */
+  /** @type {Set<Promex>} */
   #pendingReplies = new Set()
 
   /** @type {Set<comq.Destroyable>} */
@@ -279,7 +280,7 @@ class IO {
 
   /**
    * @param {comq.Request} request
-   * @return {Promise<any>}
+   * @return {Promex<any>}
    */
   #createReply (request) {
     const reply = this.#createPendingReply()
@@ -290,10 +291,10 @@ class IO {
   }
 
   /**
-   * @return {toa.generic.Promex}
+   * @return {Promex}
    */
   #createPendingReply () {
-    const reply = promex()
+    const reply = new Promex()
 
     this.#pendingReplies.add(reply)
 
@@ -383,7 +384,7 @@ class IO {
     Even if these messages are lost, the reply stream will be closed anyway,
     either due to missing heartbeat or the deletion of the stream queue.
     */
-    await timeout(50)
+    await setTimeout(50)
   }
 
   /**

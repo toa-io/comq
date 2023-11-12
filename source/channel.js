@@ -1,6 +1,6 @@
 'use strict'
 
-const { promex, timeout } = require('@toa.io/generic')
+const { Promex } = require('promex')
 const { failsafe, lazy, recall } = require('./attributes')
 const emitter = require('./emitter')
 
@@ -25,16 +25,16 @@ class Channel {
   /** @type {string[]} */
   #tags = []
 
-  /** @type {toa.generic.Promex | null} */
+  /** @type {Promex | null} */
   #paused = null
 
   /** @type {boolean} */
   #sealed = false
 
-  /** @type {toa.generic.Promex} */
-  #recovery = promex()
+  /** @type {Promex} */
+  #recovery = new Promex()
 
-  /** @type {Set<toa.generic.Promex>} */
+  /** @type {Set<Promex>} */
   #confirmations = new Set()
 
   #diagnostics = emitter.create()
@@ -149,10 +149,11 @@ class Channel {
 
     for (const confirmation of this.#confirmations) confirmation.reject(INTERRUPTION)
 
-    await timeout(0) // handle interruptions
+    // handle interruptions
+    await new Promise(resolve => setTimeout(resolve, 0))
 
     this.#recovery.resolve()
-    this.#recovery = promex()
+    this.#recovery = new Promex()
     this.#diagnostics.emit('recover')
   }
 
@@ -222,10 +223,10 @@ class Channel {
   }
 
   /**
-   * @return {toa.generic.Promex}
+   * @return {Promex}
    */
   #confirmation () {
-    const confirmation = promex()
+    const confirmation = new Promex()
 
     this.#confirmations.add(confirmation)
 
@@ -292,7 +293,7 @@ class Channel {
   #pause () {
     if (this.#paused !== null) return
 
-    this.#paused = promex()
+    this.#paused = new Promex()
     this.#diagnostics.emit('flow')
     this.#diagnostics.emit('pause')
   }
