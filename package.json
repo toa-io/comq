@@ -28,7 +28,7 @@
   "types": "types/index.d.ts",
   "devDependencies": {
     "@cucumber/cucumber": "^10.0.1",
-    "@toa.io/command": "^0.4.0",
+    "@toa.io/command": "^0.22.0",
     "@toa.io/generic": "^1.0.0-alpha.0",
     "@types/amqplib": "^0.10.3",
     "@types/jest": "^29.5.8",
