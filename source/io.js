@@ -218,7 +218,7 @@ class IO {
 
         if (request.properties.replyTo === undefined) return
 
-        const iterator = typeof reply === 'object' &&
+        const iterator = typeof reply === 'object' && reply !== null &&
           (Symbol.asyncIterator in reply ||
             (Symbol.iterator in reply && !Array.isArray(reply) && !Buffer.isBuffer(reply)))
 
