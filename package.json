@@ -40,8 +40,8 @@
     "standard": "^17.1.0"
   },
   "dependencies": {
-    "amqplib": "^0.10.3",
-    "msgpackr": "^1.9.5",
+    "amqplib": "^0.10.4",
+    "msgpackr": "^1.10.2",
     "promex": "^0.1.1",
     "reretry": "^0.1.0"
   },
