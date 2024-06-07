@@ -8,6 +8,7 @@ for distributed, eventually consistent systems running on Node.js.
 - [Dynamic topology](#topology)
 - [Request](#request)-[reply](#reply) (RPC)
 - Events ([pub](#emission)/[sub](#consumption))
+- [Tasks](#tasks)
 - [Pipelines](#pipelines)
 - [Reply streams](#reply-streams)
 - [Content encoding](#encoding)
@@ -64,11 +65,13 @@ properties set.
 the `replyTo` property of the Request. The `correlationId` property of the Reply is set to the same
 value as in the Request.
 
-**Event** is an AMQP message that is published to an exchange.
+**Event** is an AMQP message published to an exchange.
 
-**Producer** is an application role that receives Requests and produces Replies and Events.
+**Task** is an AMQP message sent to a queue without a `replyTo` property set.
 
-**Consumer** is an application role that sends Requests and consumes Replies and Events.
+**Producer** is an application role that receives Requests and Tasks, and produces Replies and Events.
+
+**Consumer** is an application role that sends Requests and Tasks, and consumes Replies and Events.
 
 ## Reply
 
@@ -154,6 +157,22 @@ asserted.
 ```javascript
 await io.emit('numbers_added', { a: 1, b: 2 })
 ```
+
+## Tasks
+
+`async IO.enqueue(queue: string, payload: any, encoding?: string): void`
+
+Publish encoded Task to the `queue`.
+
+On the initial call, the `queue` is asserted on the Events channel using Event topology.
+
+`async IO.process(queue: string, processor): void`
+
+`processor` function's signature is `async? (payload: any): void`
+
+Process decoded Task from the `queue`.
+
+The `queue` is asserted on the Events channel using Event topology.
 
 ## Pipelines
 

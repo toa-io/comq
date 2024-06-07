@@ -43,6 +43,16 @@ declare namespace comq {
 
     emit (exchange: string, stream: Readable, properties?: _amqp.Properties): Promise<void>
 
+    enqueue (exchange: string, payload: any, encoding?: _encoding.Encoding): Promise<void>
+
+    enqueue (exchange: string, payload: any, properties?: _amqp.Properties): Promise<void>
+
+    enqueue (exchange: string, stream: Readable, encoding?: _encoding.Encoding): Promise<void>
+
+    enqueue (exchange: string, stream: Readable, properties?: _amqp.Properties): Promise<void>
+
+    process<T = any> (queue: string, consumer: Consumer<T>): Promise<void>
+
     seal (): Promise<void>
 
     close (): Promise<void>

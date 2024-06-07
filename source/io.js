@@ -114,13 +114,14 @@ class IO {
      * @param {string} exchange
      * @param {any} payload
      * @param {comq.Encoding | comq.amqp.options.Publish} [encoding]
+     * @param {'publish' | 'send'} method
      * @returns {Promise<void>}
      */
-    async (exchange, payload, encoding) => {
+    async (exchange, payload, encoding, method = 'publish') => {
       if (payload instanceof stream.Readable) {
         return transform(
           payload,
-          (payload) => this.emit(exchange, payload, encoding),
+          (payload) => this.emit(exchange, payload, encoding, method),
           this.#events
         )
       }
@@ -138,8 +139,19 @@ class IO {
 
       properties.contentType = contentType
 
-      await this.#events.publish(exchange, buffer, properties)
+      await this.#events[method](exchange, buffer, properties)
     })
+
+  process = lazy(this, this.#createEventChannel,
+    async (queue, callback) => {
+      const consumer = this.#getEventConsumer(callback)
+
+      await this.#events.consume(queue, consumer)
+    })
+
+  enqueue (queue, payload, encoding) {
+    return this.emit(queue, payload, encoding, 'send')
+  }
 
   seal = memo(async () => {
     await this.#requests?.seal()
