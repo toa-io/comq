@@ -12,11 +12,13 @@ class Context extends World {
   connecting
   requestsSent = []
   reply
-  consumed
+  consumed = {}
   published
   eventsPublishedCount = 0
   eventsConsumedCount = 0
   events = {}
+  processed
+  enqueued
   exception
   expected
   sharded

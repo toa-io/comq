@@ -167,8 +167,6 @@ Then('all events have been received',
  * @return {Promise<void>}
  */
 async function consume (group, exchange) {
-  this.consumed ??= {}
-
   const consumer = async (payload, properties) => {
     this.consumed[group] = { payload, properties }
     this.eventsConsumedCount++
