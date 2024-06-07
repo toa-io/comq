@@ -112,7 +112,7 @@ Then('the event is received',
     await consumed.call(this)
   })
 
-Then('{quantity} events is received',
+Then('{quantity} events ha(ve)(s) been received',
   /**
    * @this {comq.features.Context}
    */
@@ -167,8 +167,6 @@ Then('all events have been received',
  * @return {Promise<void>}
  */
 async function consume (group, exchange) {
-  this.consumed ??= {}
-
   const consumer = async (payload, properties) => {
     this.consumed[group] = { payload, properties }
     this.eventsConsumedCount++

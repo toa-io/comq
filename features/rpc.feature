@@ -18,6 +18,19 @@ Feature: Request-reply (RPC)
       3
       """
 
+  Scenario: Getting `null` reply
+    Given function replying `add_numbers` queue:
+      """
+      () => { return null }
+      """
+    When the consumer sends the following request to the `add_numbers` queue:
+      """yaml
+      """
+    Then the consumer receives the reply:
+      """yaml
+      null
+      """
+
   Scenario: Request causing an exception is discarded
     Given function replying `throw_error` queue:
     """

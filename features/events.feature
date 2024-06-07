@@ -23,4 +23,4 @@ Feature: Events
   Scenario: Streaming requests
     Given that events are exclusively consumed from the `numbers_added` exchange
     When a stream of 1k events is emitted to the `numbers_added` exchange
-    Then 1k events is received
+    Then 1k events have been received
