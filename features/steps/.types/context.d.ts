@@ -19,6 +19,7 @@ declare namespace comq.features {
     events?: { [K in _diagnostics.Event]?: boolean }
     enqueued?: any
     processed: any
+    tasksProcessedCount: number
     exception?: Error
     consumptionPromise?: Promise<any>
     sharded: boolean

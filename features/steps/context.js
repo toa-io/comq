@@ -19,6 +19,7 @@ class Context extends World {
   events = {}
   processed
   enqueued
+  tasksProcessedCount = 0
   exception
   expected
   sharded

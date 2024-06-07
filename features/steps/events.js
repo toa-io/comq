@@ -112,7 +112,7 @@ Then('the event is received',
     await consumed.call(this)
   })
 
-Then('{quantity} events is received',
+Then('{quantity} events ha(ve)(s) been received',
   /**
    * @this {comq.features.Context}
    */
