@@ -32,6 +32,6 @@ Then('the task has been received',
    * @this {comq.features.Context}
    */
   function () {
-    assert.notEqual(this.enqueued, undefined)
-    assert.equal(this.processed, this.enqueued)
+    assert.notEqual(this.enqueued, undefined, 'Task was not enqueued')
+    assert.equal(this.processed, this.enqueued, 'Task was not processed')
   })
