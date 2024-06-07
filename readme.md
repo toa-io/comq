@@ -164,7 +164,7 @@ await io.emit('numbers_added', { a: 1, b: 2 })
 
 Publish encoded Task to the `queue`.
 
-On the initial call, the `queue` is asserted on the Events channel using Event topology.
+On the initial call, the `queue` is asserted on the Events channel using [Event topology](#topology).
 
 `async IO.process(queue: string, processor): void`
 
