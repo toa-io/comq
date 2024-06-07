@@ -176,7 +176,7 @@ The `queue` is asserted on the Events channel using Event topology.
 
 ## Pipelines
 
-Payloads for Requests and Events can be passed as a readable stream
+Payloads for Requests, Events and Tasks can be passed as a readable stream
 in [object mode](https://nodejs.org/api/stream.html#object-mode), enabling the handling of large amounts of data with
 the benefits of RabbitMQ back pressure and flow control.
 
@@ -185,6 +185,8 @@ the benefits of RabbitMQ back pressure and flow control.
 Returns a readable stream of replies.
 
 `async IO.emit(exchange: string, stream: Readable, encoding?: string): void`
+
+`async IO.enqueue(queue: string, stream: Readable, encoding?: string): void`
 
 ```javascript
 function * generate () {
@@ -195,6 +197,10 @@ function * generate () {
 const events = Readable.from(generate())
 
 await io.emit('numbers_added', events)
+
+const tasks = Readable.from(generate())
+
+await io.enqueue('add_numbers', tasks)
 
 const requests = Readable.from(generate())
 
