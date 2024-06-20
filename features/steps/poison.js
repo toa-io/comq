@@ -9,7 +9,7 @@ Then('the message is discarded',
    * @this {comq.features.Context}
    */
   async function () {
-    if (this.events.discard !== true) await timeout(50)
+    if (this.events.discard !== true) await timeout(300)
 
     assert.equal(this.events.discard, true, 'The {message} was not discarded')
   })

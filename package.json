@@ -48,7 +48,7 @@
   "scripts": {
     "prepare": "echo run: husky install",
     "test": "standard && jest",
-    "features": "cucumber-js --fail-fast",
+    "features": "cucumber-js --fail-fast -t 'not @manual'",
     "lint": "standard --fix --verbose | snazzy"
   },
   "standard": {

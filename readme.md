@@ -164,7 +164,7 @@ await io.emit('numbers_added', { a: 1, b: 2 })
 
 Publish encoded Task to the `queue`.
 
-On the initial call, the `queue` is asserted on the Events channel using Event topology.
+On the initial call, the `queue` is asserted on the Events channel using [Event topology](#topology).
 
 `async IO.process(queue: string, processor): void`
 
@@ -176,7 +176,7 @@ The `queue` is asserted on the Events channel using Event topology.
 
 ## Pipelines
 
-Payloads for Requests and Events can be passed as a readable stream
+Payloads for Requests, Events and Tasks can be passed as a readable stream
 in [object mode](https://nodejs.org/api/stream.html#object-mode), enabling the handling of large amounts of data with
 the benefits of RabbitMQ back pressure and flow control.
 
@@ -185,6 +185,8 @@ the benefits of RabbitMQ back pressure and flow control.
 Returns a readable stream of replies.
 
 `async IO.emit(exchange: string, stream: Readable, encoding?: string): void`
+
+`async IO.enqueue(queue: string, stream: Readable, encoding?: string): void`
 
 ```javascript
 function * generate () {
@@ -195,6 +197,10 @@ function * generate () {
 const events = Readable.from(generate())
 
 await io.emit('numbers_added', events)
+
+const tasks = Readable.from(generate())
+
+await io.enqueue('add_numbers', tasks)
 
 const requests = Readable.from(generate())
 
@@ -405,8 +411,9 @@ See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.ht
   manual [acknowledgment mode](https://www.rabbitmq.com/confirms.html#acknowledgment-modes),
   and Replies are consumed using automatic mode.
 
-If an incoming message causes an exception, then it is "negatively acknowledged" and requeued. If it
-causes an exception again, it will be discarded.
+If an incoming message causes an exception, the corresponding channel is sealed, the message is republished, and the
+exception is thrown.
+If the message causes exceptions five times in a row, it is discarded.
 
 > It is highly recommended to set up a dead letter exchange policy to analyze messages that caused
 > exceptions. Note that in some cases, if the problematic message is a Request, a Consumer will

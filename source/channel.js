@@ -267,18 +267,29 @@ class Channel {
 
         this.#channel.ack(message)
       } catch (exception) {
-        if (exception.message === 'Channel closed') return // the message will be requeued by the broker
+        if (exception.message === 'Channel closed') { return } // the message is requeued by the broker
 
-        if (message.fields.redelivered) this.#discard(message, exception)
-        else this.#requeue(message)
+        const redeliveries = message.properties.headers[REDELIVERY_HEADER] ?? 0
+
+        if (redeliveries >= MAX_REDELIVERIES) this.#discard(message, exception)
+        else {
+          await this.#requeue(message, redeliveries)
+          throw exception
+        }
       }
     }
 
   /**
    * @param {comq.amqp.Message} message
+   * @param {number} attempt
    */
-  #requeue (message) {
-    this.#channel.nack(message, false, true)
+  async #requeue (message, attempt) {
+    this.#channel.ack(message)
+
+    message.properties.headers[REDELIVERY_HEADER] = attempt + 1
+
+    await this.seal()
+    await this.#publish(message.fields.exchange, message.fields.routingKey, message.content, message.properties)
   }
 
   /**
@@ -357,6 +368,9 @@ const DURABLE = { durable: true }
 const EXCLUSIVE = { exclusive: true }
 
 const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
+
+const MAX_REDELIVERIES = 5
+const REDELIVERY_HEADER = 'x-attempt'
 
 function noop () {}
 

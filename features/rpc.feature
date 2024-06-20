@@ -31,15 +31,6 @@ Feature: Request-reply (RPC)
       null
       """
 
-  Scenario: Request causing an exception is discarded
-    Given function replying `throw_error` queue:
-    """
-    () => { throw new Error() }
-    """
-    When the consumer sends a request to the `throw_error` queue
-    Then the message is discarded
-    And the consumer does not receive the reply
-
   Scenario: Streaming requests
     Given a producer replying `ping` queue
     When the consumer sends 1k requests to the `ping` queue as a stream
