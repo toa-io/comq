@@ -134,32 +134,6 @@ describe('acknowledgments', () => {
     else expect(options).toMatchObject({ noAck: true })
   })
 
-  it.each(/** @type {[string, boolean][]} */ [
-    ['nack', true],
-    ['discard', false]
-  ])('should %s the message caused an exception', async (_, requeue) => {
-    topology.acknowledgments = true
-
-    channel = await create(connection, topology)
-    chan = await getCreatedChannel()
-
-    const consumer = /** @type {Function} */ jest.fn(async () => { throw new Error() })
-
-    await channel.consume(queue, consumer)
-
-    const callback = chan.consume.mock.calls[0][1]
-    const content = randomBytes(8)
-    const properties = {}
-    const fields = {}
-    const message = /** @type {comq.amqp.Message} */ { content, properties, fields }
-
-    if (!requeue) fields.redelivered = !requeue
-
-    await callback(message)
-
-    expect(chan.nack).toHaveBeenCalledWith(message, false, requeue)
-  })
-
   it('should ignore Channel ended exception', async () => {
     topology.acknowledgments = true
 
@@ -844,10 +818,7 @@ describe('diagnostics', () => {
     expect(resumed).toStrictEqual(true)
   })
 
-  it.each(/** @type {[string, boolean][]} */ [
-    ['', true],
-    [' not', false]
-  ])('should%s emit `discard` event', async (_, redelivered) => {
+  it('should emit `discard` event', async () => {
     jest.clearAllMocks()
 
     topology.acknowledgments = true
@@ -866,14 +837,12 @@ describe('diagnostics', () => {
 
     const callback = /** @type {Function} */ chan.consume.mock.calls[0][1]
     const content = randomBytes(8)
-    const properties = {}
-    const fields = { redelivered }
-    const message = /** @type {comq.amqp.Message} */ { content, properties, fields }
+    const properties = { headers: { 'x-attempt': 5 } }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
 
     await callback(message)
 
-    if (redelivered) expect(listener).toHaveBeenCalledWith(message, exception)
-    else expect(listener).not.toHaveBeenCalled()
+    expect(listener).toHaveBeenCalledWith(message, exception)
   })
 })
 

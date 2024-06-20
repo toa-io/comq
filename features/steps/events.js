@@ -38,6 +38,17 @@ Given('(that )events are exclusively consumed from the {token} exchange',
     this.consumptionPromise = consume.call(this, undefined, exchange)
   })
 
+Given('(that )events from the {token} exchange are causing exceptions',
+  /**
+   * @param {string} exchange
+   * @this {comq.features.Context}
+   */
+  async function (exchange) {
+    await this.io.consume(exchange, 'exceptions', () => {
+      throw new Error('Expected exception')
+    })
+  })
+
 When('an event is emitted to the {token} exchange',
   /**
    * @param {string} exchange

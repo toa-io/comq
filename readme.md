@@ -411,8 +411,9 @@ See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.ht
   manual [acknowledgment mode](https://www.rabbitmq.com/confirms.html#acknowledgment-modes),
   and Replies are consumed using automatic mode.
 
-If an incoming message causes an exception, then it is "negatively acknowledged" and requeued. If it
-causes an exception again, it will be discarded.
+If an incoming message causes an exception, the corresponding channel is sealed, the message is republished, and the
+exception is thrown.
+If the message causes exceptions five times in a row, it is discarded.
 
 > It is highly recommended to set up a dead letter exchange policy to analyze messages that caused
 > exceptions. Note that in some cases, if the problematic message is a Request, a Consumer will
