@@ -42,6 +42,13 @@ it('should return Channel', async () => {
   expect(channel).toBeDefined()
 })
 
+it('should set prefetch limit', async () => {
+  channel = await create(connection, topology)
+  chan = await getCreatedChannel()
+
+  expect(chan.prefetch).toHaveBeenCalledWith(topology.prefetch)
+})
+
 it.each([true, false])('should create channel (confirms: %s)', async (confirms) => {
   const method = `create${confirms ? 'Confirm' : ''}Channel`
 
