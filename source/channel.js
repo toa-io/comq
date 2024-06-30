@@ -58,6 +58,8 @@ class Channel {
     if (this.#topology.confirms) this.#channel = await this.#connection.createConfirmChannel()
     else this.#channel = await this.#connection.createChannel()
 
+    await this.#channel.prefetch(this.#topology.prefetch)
+
     this.#channel.on('drain', this.#unpause)
     this.#channel.on('return', (message) => this.#diagnostics.emit('return', message))
   }
