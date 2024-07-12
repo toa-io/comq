@@ -5,6 +5,8 @@
  * @returns {Buffer}
  */
 const encode = (value) => {
+  if (value === undefined) { return Buffer.alloc(0) }
+
   const json = JSON.stringify(value)
 
   return Buffer.from(json)
@@ -14,6 +16,8 @@ const encode = (value) => {
  * @param {Buffer} buffer
  */
 const decode = (buffer) => {
+  if (buffer.length === 0) { return undefined }
+
   const json = buffer.toString()
 
   return JSON.parse(json)

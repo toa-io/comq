@@ -51,7 +51,7 @@ declare namespace comq {
 
     enqueue (exchange: string, stream: Readable, properties?: _amqp.Properties): Promise<void>
 
-    process<T = any> (queue: string, consumer: Consumer<T>): Promise<void>
+    process<T = any> (queue: string, processor: Consumer<T>): Promise<void>
 
     seal (): Promise<void>
 

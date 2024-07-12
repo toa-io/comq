@@ -96,9 +96,9 @@ describe('send', () => {
     expect(properties.replyTo).toStrictEqual(queue)
   })
 
-  it('should encode message with msgpack by default', async () => {
+  it('should encode message with json by default', async () => {
     /** @type {comq.Encoding} */
-    const contentType = 'application/msgpack'
+    const contentType = 'application/json'
     const buffer = encode(payload, contentType)
 
     expect(call[1]).toStrictEqual(buffer)
