@@ -452,7 +452,7 @@ class IO {
 const OCTETS = 'application/octet-stream'
 
 /** @type {comq.Encoding} */
-const DEFAULT = 'application/msgpack'
+const DEFAULT = 'application/json'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
 

@@ -283,9 +283,9 @@ At the same time, there is no guarantee that the stream will be transmitted to t
 
 ## Encoding
 
-By default, outgoing message contents are encoded with [msgpack](https://msgpack.org) and
-the `contentType` property is set to `application/msgpack`. If the encoding format is
-specified ([request](#request), [emit](#emission)), contents are encoded accordingly.
+By default, outgoing message contents are encoded with JSON and
+the `contentType` property is set to `application/json`.
+If the encoding format is specified ([request](#request), [emit](#emission)), contents are encoded accordingly.
 
 Exceptions are Buffers, which are sent without encoding and the `contentType` property set
 to specified encoding format or `application/octet-stream` by default.
@@ -298,8 +298,8 @@ If the specified encoding format is not supported, an exception will be thrown.
 
 The following encoding formats are supported:
 
-- `application/msgpack`
 - `application/json`
+- `application/msgpack`
 - `application/octet-stream`
 - `text/plain`
 

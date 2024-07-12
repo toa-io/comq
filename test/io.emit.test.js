@@ -64,8 +64,8 @@ it('should publish stream of events', async () => {
   expect(events.publish).toHaveBeenCalledTimes(10)
 })
 
-it('should encode message as msgpack by default', async () => {
-  const encoding = 'application/msgpack'
+it('should encode message as json by default', async () => {
+  const encoding = 'application/json'
   const buf = encode(payload, encoding)
   const [, buffer, properties] = events.publish.mock.calls[0]
 
