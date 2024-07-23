@@ -108,8 +108,9 @@ class Connection {
 
   #transient (exception) {
     const abruptly = exception.message === 'Socket closed abruptly during opening handshake'
+    const tls = exception.message === 'Client network socket disconnected before secure TLS connection was established'
 
-    return this.#running || abruptly
+    return this.#running || abruptly || tls
   }
 }
 
