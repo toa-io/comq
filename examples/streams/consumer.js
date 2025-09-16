@@ -1,7 +1,7 @@
 import { connect } from 'comq'
 import { url } from '../const.js'
 
-const limit = Number(process.argv[2]) || Math.round(Math.random() * 8 + 2)
+const limit = Number(process.argv[2]) ?? Math.round(Math.random() * 8 + 2)
 
 let io
 let stream
@@ -19,9 +19,9 @@ async function run () {
 }
 
 async function fetch () {
-  console.log(`Fetching stream with ${limit} numbers`)
+  console.log(`Fetching stream with ${limit === 0 ? 'infinite' : limit} numbers`)
 
-  stream = await io.fetch('get_numbers', { limit })
+  stream = await io.request('get_numbers', { limit })
 
   for await (const number of stream) console.log('Received:', number)
 
