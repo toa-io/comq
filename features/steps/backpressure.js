@@ -6,8 +6,8 @@ const { quantity, timeout } = require('@toa.io/generic')
 
 const { When } = require('@cucumber/cucumber')
 
-const PAYLOAD = quantity('500k')
-const BATCH = 20
+const BASE_PAYLOAD = quantity('500k')
+const BASE_BATCH = 20
 const DEADLINE = 25_000
 
 When('I\'m flooding the {token} queue until back pressure is applied',
@@ -16,15 +16,33 @@ When('I\'m flooding the {token} queue until back pressure is applied',
    * @this {comq.features.Context}
    */
   async function (queue) {
-    const buffer = randomBytes(PAYLOAD)
     const deadline = Date.now() + DEADLINE
     const pending = []
+    const errors = []
+    let iteration = 0
 
     while (!this.events.flow && Date.now() < deadline) {
-      for (let i = 0; i < BATCH; i++) { pending.push(this.io.request(queue, buffer).catch(() => {})) }
+      if (errors.length > 0) throw errors[0]
 
+      const payload = BASE_PAYLOAD * (iteration + 1)
+      const batch = BASE_BATCH * (iteration + 1)
+      const buffer = randomBytes(payload)
+
+      for (let i = 0; i < batch; i++) {
+        pending.push(
+          this.io.request(queue, buffer).catch((exception) => {
+            errors.push(exception)
+          })
+        )
+      }
+
+      iteration++
       await timeout(0)
+
+      if (errors.length > 0) throw errors[0]
     }
+
+    if (errors.length > 0) throw errors[0]
 
     assert.equal(this.events.flow, true, 'Back pressure hasn\'t been applied')
   })
