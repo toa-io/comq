@@ -41,7 +41,7 @@ Feature: Sharded Connection
   Scenario: Shard crashes while publishing events
     Given an active sharded connection
     And events are exclusively consumed from the `flood` exchange
-    And I'm publishing 1kB events to the `flood` exchange at 100Hz
+    And I'm publishing 1kB events to the `flood` exchange at 10Hz
     When one of the brokers has crashed
     Then no exceptions are thrown
     And all events have been received

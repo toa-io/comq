@@ -1,8 +1,12 @@
 'use strict'
 
+const { execFile } = require('node:child_process')
+const { promisify } = require('node:util')
 const { timeout } = require('@toa.io/generic')
 const { RabbitMQContainer } = require('@testcontainers/rabbitmq')
 const { getContainerRuntimeClient } = require('testcontainers')
+
+const docker = promisify(execFile)
 
 const IMAGE = 'rabbitmq:3.10.0-management'
 const USER = 'developer'
@@ -41,6 +45,10 @@ async function startBrokers () {
   )
 
   brokers.push(...started)
+
+  await Promise.all(
+    Array.from({ length: BROKERS_AMOUNT }, (_, n) => healthy(n))
+  )
 }
 
 async function stopBrokers () {
@@ -77,59 +85,32 @@ async function removeStale (name) {
 function getAddress (n = 0) {
   if (brokers[n] === undefined) throw new Error(`Broker ${n} is not started`)
 
-  return `127.0.0.1:${HOST_PORTS[n]}`
-}
-
-/**
- * @param {number} n
- * @returns {Promise<import('dockerode').Container>}
- */
-async function getDockerContainer (n) {
-  const client = await getContainerRuntimeClient()
-
-  return client.container.getById(brokers[n].getId())
-}
-
-/**
- * @param {number} n
- * @returns {Promise<boolean>}
- */
-async function isRunning (n) {
-  const client = await getContainerRuntimeClient()
-  const inspect = await client.container.inspect(await getDockerContainer(n))
-
-  return inspect.State.Running === true
+  return `localhost:${HOST_PORTS[n]}`
 }
 
 /**
  * @param {number} [n]
  */
 async function healthy (n = 0) {
-  const client = await getContainerRuntimeClient()
-
   do {
     await timeout(HEALTHCHECK_INTERVAL)
 
-    const inspect = await client.container.inspect(await getDockerContainer(n))
+    const { stdout } = await docker('docker', ['inspect', '-f', '{{.State.Health.Status}}', `comq-rmq-${n}`])
 
-    if (inspect.State.Health?.Status === 'healthy') return
+    if (stdout.trim() === 'healthy') return
   } while (true)
 }
 
 const actions = {
   up: async (n = 0) => {
-    const client = await getContainerRuntimeClient()
-    const container = await getDockerContainer(n)
-
-    if (!(await isRunning(n))) await client.container.start(container)
-
+    await docker('docker', ['start', `comq-rmq-${n}`])
     await healthy(n)
   },
   down: async (n = 0) => {
-    if (await isRunning(n)) await brokers[n].stop({ remove: false })
+    await docker('docker', ['stop', `comq-rmq-${n}`])
   },
   crashed: async (n = 0) => {
-    if (await isRunning(n)) await (await getDockerContainer(n)).kill()
+    await docker('docker', ['kill', `comq-rmq-${n}`])
   }
 }
 
