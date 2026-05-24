@@ -9,6 +9,7 @@ const USER = 'developer'
 const PASSWORD = 'secret'
 const AMQP_PORT = 5672
 const BROKERS_AMOUNT = 2
+const HOST_PORTS = [5673, 5674]
 const HEALTHCHECK_INTERVAL = global.COMQ_TESTING_HEALTHCHECK_INTERVAL ?? 1000
 
 /** @type {import('@testcontainers/rabbitmq').StartedRabbitMQContainer[]} */
@@ -17,14 +18,24 @@ const brokers = []
 async function startBrokers () {
   if (brokers.length > 0) return
 
+  for (let n = 0; n < BROKERS_AMOUNT; n++) await removeStale(`comq-rmq-${n}`)
+
   const started = await Promise.all(
-    Array.from({ length: BROKERS_AMOUNT }, () =>
+    HOST_PORTS.map((hostPort, n) =>
       new RabbitMQContainer(IMAGE)
         .withEnvironment({
           RABBITMQ_DEFAULT_USER: USER,
           RABBITMQ_DEFAULT_PASS: PASSWORD
         })
         .withAutoRemove(false)
+        .withName(`comq-rmq-${n}`)
+        .withExposedPorts({ container: AMQP_PORT, host: hostPort })
+        .withHealthCheck({
+          test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping'],
+          interval: 5000,
+          timeout: 1000,
+          retries: 5
+        })
         .start()
     )
   )
@@ -38,15 +49,35 @@ async function stopBrokers () {
 }
 
 /**
+ * @param {string} name
+ */
+async function removeStale (name) {
+  const client = await getContainerRuntimeClient()
+  const listed = await client.container.list()
+
+  for (const info of listed) {
+    if (!info.Names.some((entry) => entry === `/${name}`)) continue
+
+    const container = client.container.getById(info.Id)
+
+    try {
+      await client.container.stop(container, { timeout: 0 })
+    } catch {
+      // already stopped
+    }
+
+    await container.remove({ force: true })
+  }
+}
+
+/**
  * @param {number} [n]
  * @returns {string}
  */
 function getAddress (n = 0) {
-  const broker = brokers[n]
+  if (brokers[n] === undefined) throw new Error(`Broker ${n} is not started`)
 
-  if (broker === undefined) throw new Error(`Broker ${n} is not started`)
-
-  return `${broker.getHost()}:${broker.getMappedPort(AMQP_PORT)}`
+  return `127.0.0.1:${HOST_PORTS[n]}`
 }
 
 /**
@@ -64,8 +95,8 @@ async function getDockerContainer (n) {
  * @returns {Promise<boolean>}
  */
 async function isRunning (n) {
-  const container = await getDockerContainer(n)
-  const inspect = await container.inspect()
+  const client = await getContainerRuntimeClient()
+  const inspect = await client.container.inspect(await getDockerContainer(n))
 
   return inspect.State.Running === true
 }
@@ -74,28 +105,23 @@ async function isRunning (n) {
  * @param {number} [n]
  */
 async function healthy (n = 0) {
-  const broker = brokers[n]
+  const client = await getContainerRuntimeClient()
 
   do {
     await timeout(HEALTHCHECK_INTERVAL)
 
-    try {
-      const result = await broker.exec(['rabbitmq-diagnostics', '-q', 'ping'])
+    const inspect = await client.container.inspect(await getDockerContainer(n))
 
-      if (result.exitCode === 0) return
-    } catch {
-      // container may still be starting
-    }
+    if (inspect.State.Health?.Status === 'healthy') return
   } while (true)
 }
 
 const actions = {
   up: async (n = 0) => {
-    if (!(await isRunning(n))) {
-      const client = await getContainerRuntimeClient()
+    const client = await getContainerRuntimeClient()
+    const container = await getDockerContainer(n)
 
-      await client.container.start(await getDockerContainer(n))
-    }
+    if (!(await isRunning(n))) await client.container.start(container)
 
     await healthy(n)
   },
