@@ -50,7 +50,7 @@
     "reretry": "^0.1.0"
   },
   "scripts": {
-    "prepare": "echo run: husky install",
+    "prepare": "husky",
     "test": "standard && jest",
     "features": "cucumber-js --fail-fast -t 'not @manual'",
     "lint": "standard --fix --verbose | snazzy"
