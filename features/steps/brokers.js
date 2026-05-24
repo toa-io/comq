@@ -8,7 +8,7 @@ const { getContainerRuntimeClient } = require('testcontainers')
 
 const docker = promisify(execFile)
 
-const IMAGE = 'rabbitmq:3.10.0-management'
+const IMAGE = 'rabbitmq:4.3-management'
 const USER = 'developer'
 const PASSWORD = 'secret'
 const AMQP_PORT = 5672

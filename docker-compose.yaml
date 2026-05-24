@@ -1,6 +1,6 @@
 services:
   rabbitmq-0:
-    image: rabbitmq:3.10.0-management
+    image: rabbitmq:4.3-management
     container_name: comq-rmq-0
     ports:
       - '5673:5672'
@@ -18,7 +18,7 @@ services:
         limits:
           memory: 512MB
   rabbitmq-1:
-    image: rabbitmq:3.10.0-management
+    image: rabbitmq:4.3-management
     container_name: comq-rmq-1
     ports:
       - '5674:5672'
