@@ -1,0 +1,28 @@
+name: Dev
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  features-fast:
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run fast feature tests
+        run: npm run features:fast
