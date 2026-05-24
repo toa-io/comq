@@ -53,6 +53,7 @@
     "prepare": "husky",
     "test": "standard && jest",
     "features": "cucumber-js --fail-fast -t 'not @manual'",
+    "features:fast": "cucumber-js --fail-fast -t 'not @manual and not @heavy'",
     "lint": "standard --fix --verbose | snazzy"
   },
   "standard": {

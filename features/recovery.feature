@@ -1,3 +1,4 @@
+@heavy
 Feature: Request-Reply Topology Recovery
 
   Background:
