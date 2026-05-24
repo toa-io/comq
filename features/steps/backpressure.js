@@ -4,43 +4,27 @@ const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
 const { quantity, timeout } = require('@toa.io/generic')
 
-const { When, Then } = require('@cucumber/cucumber')
+const { When } = require('@cucumber/cucumber')
 
-When('I\'m sending {quantity}B requests to the {token} queue at {quantity}Hz for {number} second(s)',
+const PAYLOAD = quantity('500k')
+const BATCH = 20
+const DEADLINE = 25_000
+
+When('I\'m flooding the {token} queue until back pressure is applied',
   /**
-   * @param {string} bytesQ
    * @param {string} queue
-   * @param {string} frequencyQ
-   * @param {number} seconds
    * @this {comq.features.Context}
    */
-  async function (bytesQ, queue, frequencyQ, seconds) {
-    const bytes = quantity(bytesQ)
-    const frequency = quantity(frequencyQ)
-    const buffer = randomBytes(bytes)
-    const times = seconds * frequency
+  async function (queue) {
+    const buffer = randomBytes(PAYLOAD)
+    const deadline = Date.now() + DEADLINE
+    const pending = []
 
-    // intervals less than 1ms are not accurate
-    const interval = Math.max((1000 / frequency), 1)
-    const each = Math.max(1 / (1000 / frequency), 1)
+    while (!this.events.flow && Date.now() < deadline) {
+      for (let i = 0; i < BATCH; i++) { pending.push(this.io.request(queue, buffer).catch(() => {})) }
 
-    const promises = []
-
-    for (let i = 0; i < times; i++) {
-      const promise = this.io.request(queue, buffer)
-
-      promises.push(promise)
-
-      if ((i + 1) % each === 0) await timeout(interval)
+      await timeout(0)
     }
 
-    await Promise.all(promises)
-  })
-
-Then('back pressure was applied',
-  /**
-   * @this {comq.features.Context}
-   */
-  function () {
     assert.equal(this.events.flow, true, 'Back pressure hasn\'t been applied')
   })

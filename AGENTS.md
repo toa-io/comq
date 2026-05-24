@@ -32,5 +32,4 @@ Do not use `docker compose up` for feature tests — Testcontainers manages brok
 - Unit tests (`jest`) use mocks and do NOT require running RabbitMQ.
 - Feature tests (`cucumber-js`) start brokers in `BeforeAll` and stop them in `AfterAll`.
 - Recovery/connection tests (in `features/connection.feature`, `features/recovery.feature`, `features/shards.feature`) stop/kill broker containers and take 5-15 minutes to complete.
-- The backpressure test (`features/backpressure.feature`) is timing-sensitive and may fail in resource-constrained environments.
 - To run only fast feature tests (no broker stop/start): `npx cucumber-js --fail-fast -t 'not @manual' features/events.feature features/rpc.feature features/tasks.feature features/singleton.feature features/properties.feature features/tasks.shards.feature`
