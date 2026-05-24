@@ -2,6 +2,7 @@
 
 const { World } = require('@cucumber/cucumber')
 const { connect, assert } = require('../../')
+const { getAddress, USER, PASSWORD } = require('./brokers')
 
 /**
  * @implements {comq.features.Context}
@@ -88,14 +89,11 @@ class Context extends World {
   }
 
   #url (i, user, password) {
-    return PROTOCOL + user + ':' + password + '@' + SHARDS[i]
+    return PROTOCOL + user + ':' + password + '@' + getAddress(i)
   }
 }
 
 const PROTOCOL = 'amqp://'
-const SHARDS = ['localhost:5673', 'localhost:5674']
-const USER = 'developer'
-const PASSWORD = 'secret'
 
 /** @type {comq.diagnostics.Event[]} */
 const EVENTS = ['open', 'close', 'flow', 'discard']
