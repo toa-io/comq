@@ -24,6 +24,12 @@
   "main": "source/index.js",
   "types": "types/index.d.ts",
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.2",
+    "@semantic-release/npm": "^13.1.2",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "@cucumber/cucumber": "^12.9.0",
     "@testcontainers/rabbitmq": "^12.0.0",
     "@toa.io/generic": "^1.0.0-alpha.208",
@@ -53,8 +59,5 @@
     "env": [
       "jest"
     ]
-  },
-  "workspaces": [
-    "."
-  ]
+  }
 }
