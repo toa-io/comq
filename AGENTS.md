@@ -26,6 +26,7 @@ Do not use `docker compose up` for feature tests — Testcontainers manages brok
 - `npm test` — runs `standard` (lint) + `jest` (300 unit tests, no RabbitMQ required)
 - `npm run features` — runs all Cucumber feature tests (starts RabbitMQ via Testcontainers)
 - `npm run lint` — runs `standard --fix --verbose | snazzy`
+- `npm run typecheck` — verifies JSDoc types in `source/` via TypeScript (`source/types.js` + `types/index.d.ts`)
 
 ### Testing Notes
 

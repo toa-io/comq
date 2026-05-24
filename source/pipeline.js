@@ -3,6 +3,12 @@
 const { Transform } = require('node:stream')
 const stream = require('node:stream/promises')
 
+/**
+ * @param {import('node:stream').Readable} source
+ * @param {(chunk: any) => any | Promise<any>} transform
+ * @param {comq.Channel} channel
+ * @returns {Pipeline}
+ */
 function pipeline (source, transform, channel) {
   const destination = new Pipeline(transform)
 
@@ -15,6 +21,12 @@ function pipeline (source, transform, channel) {
   return destination
 }
 
+/**
+ * @param {import('node:stream').Readable} source
+ * @param {(chunk: any) => any | Promise<any>} transform
+ * @param {comq.Channel} channel
+ * @returns {Promise<void>}
+ */
 async function transform (source, transform, channel) {
   const readable = pipeline(source, transform, channel)
 

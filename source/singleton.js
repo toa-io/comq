@@ -2,6 +2,9 @@
 
 const { Connection } = require('./connection')
 
+/**
+ * Reference-counted connection per URL (singleton per broker URL).
+ */
 class SingletonConnection extends Connection {
   /** @type {string} */
   #url

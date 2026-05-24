@@ -4,9 +4,6 @@ const { Promex } = require('promex')
 const events = require('../events')
 const emitter = require('../emitter')
 
-/**
- * @implements {comq.Channel}
- */
 class Channel {
   sharded = true
 
@@ -191,12 +188,13 @@ class Channel {
 
   /**
    * @param {(channel: comq.Channel) => void} fn
-   * @return {Promise<any>[]}
+   * @return {Promise<unknown>[]}
    */
   #apply (fn) {
+    /** @type {Promise<unknown>[]} */
     const promises = []
 
-    for (const channel of this.#channels) promises.push(fn(channel))
+    for (const channel of this.#channels) promises.push(Promise.resolve(fn(channel)))
     for (const pending of this.#pending) promises.push(pending.then(fn))
     for (const recover of this.#bench.values()) promises.push(recover.then(fn))
 
@@ -224,14 +222,14 @@ class Channel {
 /**
  * @param {comq.Connection[]} connections
  * @param {comq.topology.type} type
- * @return {comq.Channel}
+ * @returns {Promise<comq.Channel>}
  */
 async function create (connections, type) {
   const channel = new Channel(connections, type)
 
   await channel.create()
 
-  return channel
+  return /** @type {comq.Channel} */ (channel)
 }
 
 exports.create = create

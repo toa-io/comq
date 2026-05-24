@@ -9,14 +9,11 @@ const presets = require('./topology')
 const channels = require('./channel')
 const emitter = require('./emitter')
 
-/**
- * @implements {comq.Connection}
- */
 class Connection {
   /** @type {string} */
   #url
 
-  /** @type {comq.amqp.Connection} */
+  /** @type {import('amqplib').ChannelModel} */
   #connection
 
   /** @type {comq.Channel[]} */

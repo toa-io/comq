@@ -39,10 +39,10 @@ async function call (context, initializers, args) {
  * @returns {Promise}
  */
 function resolve (context, init, args) {
-  const key = context[LOCK]
+  const key = /** @type {symbol} */ (context[LOCK])
   const expected = args.slice(0, init.length)
 
-  return lock(context, init, expected, key)
+  return lock(context, /** @type {(...args: unknown[]) => Promise<unknown>} */ (init), expected, key)
 }
 
 /**
@@ -53,9 +53,13 @@ function resolve (context, init, args) {
  * @returns {Promise<unknown>}
  */
 function lock (context, init, args, key) {
-  if (init[key] === undefined) init[key] = []
+  const registry = /** @type {any} */ (init)
 
-  const locks = init[key]
+  const slot = /** @type {string | number} */ (/** @type {any} */ (key))
+
+  if (registry[slot] === undefined) registry[slot] = []
+
+  const locks = registry[slot]
   const found = locks.find((lock) => lock.args.reduce((match, argument, i) => match && argument === args[i], true))
 
   if (found !== undefined) return found.promise

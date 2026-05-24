@@ -26,7 +26,7 @@ class ReplyStream extends Readable {
 
   #buffered = 0
 
-  /** @type {Map<number, unknown>} */
+  /** @type {Map<number, { payload: unknown, properties: comq.amqp.Properties }>} */
   #queue = new Map()
 
   /**
@@ -89,7 +89,7 @@ class ReplyStream extends Readable {
     this.#index++
 
     if (properties.type === 'control')
-      this._control(payload, properties)
+      this._control(/** @type {string} */ (payload), properties)
     else if (!this.push(payload))
       this._clear()
   }

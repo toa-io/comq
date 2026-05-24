@@ -1,5 +1,7 @@
 'use strict'
 
+/// <reference path="../../source/types.js" />
+
 const { World } = require('@cucumber/cucumber')
 const { connect, assert } = require('../../')
 const { getAddress, USER, PASSWORD } = require('./brokers')

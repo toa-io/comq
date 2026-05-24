@@ -18,7 +18,7 @@ const assert = async (...urls) => {
 /**
  * @param {string[]} urls
  * @param {(urls: string[]) => comq.Connection} constructor
- * @return {Promise<IO>}
+ * @return {Promise<comq.IO>}
  */
 const create = async (urls, constructor) => {
   const connection = constructor(urls)
@@ -40,7 +40,7 @@ const connectionConstructor = (ConnectionClass) =>
 
 /**
  * @param {string[]} urls
- * @param {function} ConnectionClass
+ * @param {new (url: string) => comq.Connection} ConnectionClass
  * @return {comq.Connection}
  */
 const shardedConnection = (urls, ConnectionClass) => {

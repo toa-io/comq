@@ -14,9 +14,8 @@ function createReplyEmitter (label) {
   const emitter = new EventEmitter()
 
   emitter.setMaxListeners(0)
-  emitter.queue = queue
 
-  return /** @type {comq.ReplyEmitter} */ emitter
+  return Object.assign(emitter, { queue })
 }
 
 exports.createReplyEmitter = createReplyEmitter

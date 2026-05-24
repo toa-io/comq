@@ -2,13 +2,13 @@
 
 /**
  * @param {object} context
- * @param {(exception: Error) => Promise<unknown>} recover
+ * @param {(exception: Error) => (Promise<unknown> | boolean | void)} recover
  * @param {(...args: unknown[]) => Promise<unknown>} method
  */
 function failsafe (context, recover, method = undefined) {
   // two arguments passed
   if (method === undefined) {
-    method = recover
+    method = /** @type {(...args: unknown[]) => Promise<unknown>} */ (recover)
     recover = undefined
   }
 

@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "checkJs": true,
+    "moduleResolution": "node",
+    "maxNodeModuleJsDepth": 1,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true
+  },
+  "include": [
+    "source/**/*.js"
+  ],
+  "exclude": [
+    "source/**/*.test.js",
+    "node_modules"
+  ]
+}

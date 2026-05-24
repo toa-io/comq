@@ -13,9 +13,6 @@ const { pipeline, transform } = require('./pipeline')
 const events = require('./events')
 const io = require('./.io')
 
-/**
- * @implements {comq.IO}
- */
 class IO {
   /** @type {comq.Connection} */
   #connection
@@ -74,9 +71,9 @@ class IO {
     failsafe(this, this.#recover,
       /**
        * @param {string} queue
-       * @param {any | Readable} payload
+       * @param {any | import('node:stream').Readable} payload
        * @param {comq.Encoding} [encoding]
-       * @returns {Promise<any | Readable>}
+       * @returns {Promise<any | import('node:stream').Readable>}
        */
       async (queue, payload, encoding) => {
         if (payload instanceof stream.Readable) {
@@ -96,15 +93,21 @@ class IO {
       }))
 
   consume = lazy(this, this.#createEventChannel,
+    /**
+     * @param {string} exchange
+     * @param {string | comq.Consumer} [group]
+     * @param {comq.Consumer} [callback]
+     * @returns {Promise<void>}
+     */
     async (exchange, group, callback) => {
       if (callback === undefined) { // two arguments passed
-        callback = group
+        callback = /** @type {comq.Consumer} */ (group)
         group = undefined
       }
 
       const exclusive = group === undefined
-      const queue = exclusive ? undefined : io.concat(exchange, group)
-      const consumer = this.#getEventConsumer(callback)
+      const queue = exclusive ? undefined : io.concat(exchange, /** @type {string} */ (group))
+      const consumer = this.#getEventConsumer(/** @type {comq.Consumer} */ (callback))
 
       await this.#events.subscribe(exchange, queue, consumer)
     })
@@ -132,7 +135,7 @@ class IO {
       if (typeof encoding === 'object') { // properties passed
         Object.assign(properties, encoding)
 
-        encoding = /** @type {comq.Encoding} */ properties.contentType
+        encoding = /** @type {comq.Encoding | undefined} */ (properties.contentType)
       }
 
       const [buffer, contentType] = this.#encode(payload, encoding)
@@ -143,12 +146,23 @@ class IO {
     })
 
   process = lazy(this, this.#createEventChannel,
+    /**
+     * @param {string} queue
+     * @param {comq.Consumer} callback
+     * @returns {Promise<void>}
+     */
     async (queue, callback) => {
       const consumer = this.#getEventConsumer(callback)
 
       await this.#events.consume(queue, consumer)
     })
 
+  /**
+   * @param {string} queue
+   * @param {any | import('node:stream').Readable} payload
+   * @param {comq.Encoding | comq.amqp.options.Publish} [encoding]
+   * @returns {Promise<void>}
+   */
   enqueue (queue, payload, encoding) {
     return this.emit(queue, payload, encoding, 'send')
   }
@@ -219,7 +233,7 @@ class IO {
    * @returns {comq.channels.Consumer}
    */
   #getRequestConsumer = (producer) =>
-    track(this,
+    /** @type {comq.channels.Consumer} */ (track(this,
       /**
        * @param {comq.amqp.Message} request
        * @returns {Promise<void>}
@@ -248,7 +262,7 @@ class IO {
         } else {
           await this.#reply(request, reply)
         }
-      })
+      }))
 
   /**
    * @param {string} queue
@@ -267,11 +281,11 @@ class IO {
    * @returns {comq.channels.Consumer}
    */
   #getEventConsumer = (callback) =>
-    track(this, async (message) => {
+    /** @type {comq.channels.Consumer} */ (track(this, async (message) => {
       const payload = decode(message)
 
       await callback(payload, message.properties)
-    })
+    }))
 
   /**
    * @param {string} queue

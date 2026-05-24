@@ -4,9 +4,6 @@ const events = require('../events')
 const channel = require('./channel')
 const emitter = require('../emitter')
 
-/**
- * @implements {comq.Connection}
- */
 class Connection {
   /** @type {comq.Connection[]} */
   #connections

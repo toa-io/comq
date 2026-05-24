@@ -4,13 +4,10 @@ const { Promex } = require('promex')
 const { failsafe, lazy, recall } = require('./attributes')
 const emitter = require('./emitter')
 
-/**
- * @implements {comq.Channel}
- */
 class Channel {
   index
 
-  /** @type {comq.amqp.Connection} */
+  /** @type {import('amqplib').ChannelModel} */
   #connection
 
   /** @type {comq.Topology} */
@@ -40,7 +37,7 @@ class Channel {
   #diagnostics = emitter.create()
 
   /**
-   * @param {comq.amqp.Connection} connection
+   * @param {import('amqplib').ChannelModel} connection
    * @param {comq.Topology} topology
    * @param {number} index
    */
@@ -147,7 +144,7 @@ class Channel {
     lazy.reset(this)
     await recall(this)
 
-    this.#unpause(INTERRUPTION)
+    this.#unpause(/** @type {Error} */ (/** @type {unknown} */ (INTERRUPTION)))
 
     for (const confirmation of this.#confirmations) confirmation.reject(INTERRUPTION)
 
@@ -347,7 +344,7 @@ async function create (connection, topology, index) {
 
   await channel.create()
 
-  return channel
+  return /** @type {comq.Channel} */ (channel)
 }
 
 /**

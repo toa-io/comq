@@ -3,7 +3,7 @@
 const { EventEmitter } = require('node:events')
 const { control, HEARTBEAT_INTERVAL } = require('./const')
 
-/** @typedef {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} Reply */
+/** @typedef {(message: any, properties?: comq.amqp.options.Publish) => Promise<boolean | void>} Reply */
 
 class ReplyPipe extends EventEmitter {
   #index = -1
@@ -33,7 +33,7 @@ class ReplyPipe extends EventEmitter {
 
   /**
    * @param {comq.amqp.Message} request
-   * @param {stream.Readable} stream
+   * @param {import('node:stream').Readable} stream
    * @param {comq.Channel} channel
    * @param {comq.ReplyEmitter} feedback
    * @param {Reply} reply
@@ -74,8 +74,7 @@ class ReplyPipe extends EventEmitter {
   async #transmit (data, properties) {
     this.#index++
 
-    const ok = await this.#reply(data,
-      { ...properties, headers: { index: this.#index } })
+    const ok = await this.#reply(data, { ...properties, headers: { index: this.#index } })
 
     if (!ok) this.#interrupt()
   }
@@ -134,7 +133,7 @@ class ReplyPipe extends EventEmitter {
 
   /**
    * @param {comq.amqp.Message} request
-   * @param {stream.Readable} stream
+   * @param {import('node:stream').Readable} stream
    * @param {comq.Channel} channel
    * @param {comq.ReplyEmitter} control
    * @param {Reply} reply
