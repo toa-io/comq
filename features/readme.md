@@ -1,4 +1,11 @@
 # Features
 
-To run features, start the RabbitMQ server by running `docker compose up -d` in the package root,
-then execute `npm run features`.
+Feature tests start two RabbitMQ instances automatically via [Testcontainers](https://node.testcontainers.org/modules/rabbitmq/).
+
+Run them with:
+
+```bash
+npm run features
+```
+
+Docker must be available on the host. No manual `docker compose` setup is required.
