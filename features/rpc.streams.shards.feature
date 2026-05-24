@@ -21,6 +21,7 @@ Feature: Reply streams over shards
       [0, 1, 2, 3, 4]
       """
 
+  @heavy
   Scenario: Broker crashes while fetching a stream
     Given a number generator with 90ms increasing delay replying `get_numbers` queue
     When the consumer requests a stream with request to the `get_numbers` queue

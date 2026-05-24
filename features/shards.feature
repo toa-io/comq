@@ -1,3 +1,4 @@
+@heavy
 Feature: Sharded Connection
 
   Scenario: Establishing sharded connection
