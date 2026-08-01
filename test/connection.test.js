@@ -156,6 +156,28 @@ describe('reconnection', () => {
     expect(errors).toContain(boom)
     expect(unhandled).not.toHaveBeenCalled()
   })
+
+  it('should ignore close from a stale connection', async () => {
+    const stale = conn
+    const closeHandler = stale.on.mock.calls.find(([event]) => event === 'close')[1]
+
+    stale.emit('close', new Error('gone'))
+
+    await timeout(50)
+
+    const live = await amqplib.connect.mock.results[1].value
+    const connects = amqplib.connect.mock.calls.length
+
+    expect(live).not.toBe(stale)
+
+    live.removeAllListeners.mockClear()
+    closeHandler(new Error('late'))
+
+    await timeout(10)
+
+    expect(amqplib.connect).toHaveBeenCalledTimes(connects)
+    expect(live.removeAllListeners).not.toHaveBeenCalled()
+  })
 })
 
 describe('create channel', () => {

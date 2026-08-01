@@ -98,7 +98,7 @@ class Connection {
     // https://amqp-node.github.io/amqplib/channel_api.html#model_events
     connection.on('error', noop)
 
-    connection.on('close', this.#close)
+    connection.on('close', (error) => this.#close(connection, error))
     this.#connection = connection
     this.#armWatchdog(connection)
     this.#diagnostics.emit('open')
@@ -122,12 +122,16 @@ class Connection {
   }
 
   /**
-   * @param {Error} error
+   * @param {comq.amqp.Connection} connection
+   * @param {Error} [error]
    */
-  #close = (error) => {
+  #close = (connection, error) => {
     this.#disarmWatchdog()
+
+    if (this.#connection !== connection) return
+
     this.#diagnostics.emit('close', error)
-    this.#connection.removeAllListeners()
+    connection.removeAllListeners()
     this.#connection = undefined
 
     if (error !== undefined) {
