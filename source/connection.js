@@ -25,6 +25,9 @@ class Connection {
   /** @type {Promex} */
   #recovery = new Promex()
 
+  /** @type {Promise<void> | null} */
+  #opening = null
+
   /** @type {boolean} */
   #running = false
 
@@ -35,10 +38,17 @@ class Connection {
    */
   constructor (url) {
     this.#url = url
+
+    // EventEmitter throws on 'error' with no listeners
+    this.#diagnostics.on('error', noop)
   }
 
   async open () {
-    await retry(this.#open)
+    if (this.#opening !== null) return this.#opening
+
+    this.#opening = retry(this.#open).finally(() => { this.#opening = null })
+
+    await this.#opening
 
     this.#running = true
   }
@@ -71,8 +81,11 @@ class Connection {
   }
 
   #open = async (retry) => {
+    /** @type {comq.amqp.Connection} */
+    let connection
+
     try {
-      this.#connection = await amqp.connect(this.#url)
+      connection = await amqp.connect(this.#url)
     } catch (exception) {
       if (this.#transient(exception)) return retry
       else throw exception
@@ -80,12 +93,24 @@ class Connection {
 
     // This prevents the process from crashing; 'close' will be emitted next.
     // https://amqp-node.github.io/amqplib/channel_api.html#model_events
-    this.#connection.on('error', noop)
+    connection.on('error', noop)
 
-    this.#connection.on('close', this.#close)
+    connection.on('close', this.#close)
+    this.#connection = connection
     this.#diagnostics.emit('open')
 
-    for (const channel of this.#channels) await channel.recover(this.#connection)
+    try {
+      for (const channel of this.#channels) await channel.recover(connection)
+    } catch (exception) {
+      this.#diagnostics.emit('error', exception)
+      connection.removeAllListeners()
+
+      await connection.close().catch(noop)
+
+      if (this.#connection === connection) this.#connection = undefined
+
+      return retry
+    }
 
     this.#recovery.resolve()
     this.#recovery = new Promex()
@@ -94,12 +119,14 @@ class Connection {
   /**
    * @param {Error} error
    */
-  #close = async (error) => {
+  #close = (error) => {
     this.#diagnostics.emit('close', error)
     this.#connection.removeAllListeners()
     this.#connection = undefined
 
-    if (error !== undefined) await this.open()
+    if (error !== undefined) {
+      this.open().catch((exception) => this.#diagnostics.emit('error', exception))
+    }
   }
 
   #recover () {

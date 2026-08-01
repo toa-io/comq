@@ -109,6 +109,46 @@ describe('reconnection', () => {
 
     expect(channel.recover).toHaveBeenCalledWith(replacement)
   })
+
+  it('should retry when channel recover fails', async () => {
+    const channel = await connection.createChannel('request')
+
+    channel.recover
+      .mockRejectedValueOnce(new Error('Channel closed'))
+      .mockResolvedValue(undefined)
+
+    conn.emit('close', new Error())
+
+    const start = Date.now()
+
+    while (channel.recover.mock.calls.length < 2 && Date.now() - start < 10000) {
+      await timeout(50)
+    }
+
+    expect(channel.recover).toHaveBeenCalledTimes(2)
+    expect(amqplib.connect.mock.calls.length).toBeGreaterThanOrEqual(3)
+  }, 15000)
+
+  it('should emit error when reconnect open fails', async () => {
+    const errors = []
+    const unhandled = jest.fn()
+
+    connection.diagnose('error', (exception) => errors.push(exception))
+    process.on('unhandledRejection', unhandled)
+
+    const boom = new Error('reconnect failed')
+
+    connection.open = jest.fn(async () => { throw boom })
+
+    conn.emit('close', new Error('broker down'))
+
+    await timeout(10)
+
+    process.off('unhandledRejection', unhandled)
+
+    expect(errors).toContain(boom)
+    expect(unhandled).not.toHaveBeenCalled()
+  })
 })
 
 describe('create channel', () => {

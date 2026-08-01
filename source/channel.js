@@ -34,6 +34,9 @@ class Channel {
   /** @type {Promex} */
   #recovery = new Promex()
 
+  /** @type {boolean} */
+  #recovering = false
+
   /** @type {Set<Promex>} */
   #confirmations = new Set()
 
@@ -145,7 +148,14 @@ class Channel {
     await this.create()
 
     lazy.reset(this)
-    await recall(this)
+
+    this.#recovering = true
+
+    try {
+      await recall(this)
+    } finally {
+      this.#recovering = false
+    }
 
     this.#unpause(INTERRUPTION)
 
@@ -332,6 +342,7 @@ class Channel {
 
   async #recover (exception) {
     if (permanent(exception)) return false
+    if (this.#recovering) return false
     else await this.#recovery
   }
 }

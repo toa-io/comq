@@ -1,6 +1,6 @@
 declare namespace comq.diagnostics {
 
-  type Event = 'open' | 'close' | 'flow' | 'drain' | 'remove' | 'recover' | 'discard' |
+  type Event = 'open' | 'close' | 'error' | 'flow' | 'drain' | 'remove' | 'recover' | 'discard' |
     'pause' | 'resume' | 'return'
 
   interface Diagnosable {
