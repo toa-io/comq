@@ -250,6 +250,44 @@ describe('create channel', () => {
   })
 })
 
+describe('watchdog', () => {
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('should destroy silent connection when watchdog expires', async () => {
+    jest.useFakeTimers()
+
+    await connection.open()
+
+    const conn = await amqplib.connect.mock.results[0].value
+
+    await jest.advanceTimersByTimeAsync(60_000)
+
+    expect(conn.connection.stream.destroy).toHaveBeenCalled()
+  })
+
+  it('should reset watchdog on socket data', async () => {
+    jest.useFakeTimers()
+
+    await connection.open()
+
+    const conn = await amqplib.connect.mock.results[0].value
+
+    await jest.advanceTimersByTimeAsync(50_000)
+
+    conn.connection.stream.emit('data', Buffer.alloc(0))
+
+    await jest.advanceTimersByTimeAsync(50_000)
+
+    expect(conn.connection.stream.destroy).not.toHaveBeenCalled()
+
+    await jest.advanceTimersByTimeAsync(10_000)
+
+    expect(conn.connection.stream.destroy).toHaveBeenCalled()
+  })
+})
+
 describe('close', () => {
   it('should close connection', async () => {
     await connection.open()

@@ -31,6 +31,9 @@ class Connection {
   /** @type {boolean} */
   #running = false
 
+  /** @type {NodeJS.Timeout | null} */
+  #heartbeatTimer = null
+
   #diagnostics = emitter.create()
 
   /**
@@ -97,11 +100,13 @@ class Connection {
 
     connection.on('close', this.#close)
     this.#connection = connection
+    this.#armWatchdog(connection)
     this.#diagnostics.emit('open')
 
     try {
       for (const channel of this.#channels) await channel.recover(connection)
     } catch (exception) {
+      this.#disarmWatchdog()
       this.#diagnostics.emit('error', exception)
       connection.removeAllListeners()
 
@@ -120,6 +125,7 @@ class Connection {
    * @param {Error} error
    */
   #close = (error) => {
+    this.#disarmWatchdog()
     this.#diagnostics.emit('close', error)
     this.#connection.removeAllListeners()
     this.#connection = undefined
@@ -133,6 +139,30 @@ class Connection {
     return this.#recovery
   }
 
+  /**
+   * @param {comq.amqp.Connection} connection
+   * @param {number} [timeoutMs]
+   */
+  #armWatchdog (connection, timeoutMs = WATCHDOG_MS) {
+    const socket = connection.connection?.stream
+
+    if (socket === undefined) return
+
+    const reset = () => {
+      clearTimeout(this.#heartbeatTimer)
+      this.#heartbeatTimer = setTimeout(() => socket.destroy(), timeoutMs)
+      this.#heartbeatTimer.unref()
+    }
+
+    reset()
+    socket.on('data', reset)
+  }
+
+  #disarmWatchdog () {
+    clearTimeout(this.#heartbeatTimer)
+    this.#heartbeatTimer = null
+  }
+
   #transient (exception) {
     if (this.#running) return true
     if (TRANSIENT_CODES.has(exception.code)) return true
@@ -141,6 +171,9 @@ class Connection {
     return false
   }
 }
+
+/** @type {number} */
+const WATCHDOG_MS = 60_000
 
 const TRANSIENT_CODES = new Set([
   'ECONNREFUSED',

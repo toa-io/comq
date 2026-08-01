@@ -21,6 +21,12 @@ class Connection extends EventEmitter {
   constructor () {
     super()
 
+    const stream = new EventEmitter()
+
+    stream.destroy = jest.fn()
+
+    this.connection = { stream }
+
     // noinspection JSValidateTypes
     this.removeAllListeners = jest.spyOn(this, 'removeAllListeners')
 
