@@ -134,12 +134,28 @@ class Connection {
   }
 
   #transient (exception) {
-    const abruptly = exception.message === 'Socket closed abruptly during opening handshake'
-    const tls = exception.message === 'Client network socket disconnected before secure TLS connection was established'
+    if (this.#running) return true
+    if (TRANSIENT_CODES.has(exception.code)) return true
+    if (TRANSIENT_MESSAGES.has(exception.message)) return true
 
-    return this.#running || abruptly || tls
+    return false
   }
 }
+
+const TRANSIENT_CODES = new Set([
+  'ECONNREFUSED',
+  'EAI_AGAIN',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH'
+])
+
+const TRANSIENT_MESSAGES = new Set([
+  'Socket closed abruptly during opening handshake',
+  'Client network socket disconnected before secure TLS connection was established'
+])
 
 function noop () {}
 

@@ -88,6 +88,21 @@ When('I attempt to establish sharded connection',
     await connect(this)
   })
 
+When('I attempt to establish sharded connection for {number} second(s)',
+  /**
+   * @param {number} interval
+   * @this {comq.features.Context}
+   */
+  async function (interval) {
+    this.sharded = true
+
+    const gap = timeout(interval * 1000)
+
+    this.connecting = connect(this)
+
+    await Promise.any([this.connecting, gap])
+  })
+
 When('I attempt to establish a sharded connection as {string} with password {string}',
   /**
    * @param {string} user

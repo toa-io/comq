@@ -40,7 +40,15 @@ describe('initial connection', () => {
   })
 
   it.each(/** @type {[string, Partial<Error>][]} */[
-    ['Socket closed', { message: 'Socket closed abruptly during opening handshake' }]
+    ['Socket closed', { message: 'Socket closed abruptly during opening handshake' }],
+    ['TLS disconnect', { message: 'Client network socket disconnected before secure TLS connection was established' }],
+    ['ECONNREFUSED', { code: 'ECONNREFUSED' }],
+    ['EAI_AGAIN', { code: 'EAI_AGAIN' }],
+    ['ENOTFOUND', { code: 'ENOTFOUND' }],
+    ['ETIMEDOUT', { code: 'ETIMEDOUT' }],
+    ['ECONNRESET', { code: 'ECONNRESET' }],
+    ['EHOSTUNREACH', { code: 'EHOSTUNREACH' }],
+    ['ENETUNREACH', { code: 'ENETUNREACH' }]
   ])('should reconnect on %s',
     async (_, error) => {
       amqplib.connect.mockImplementationOnce(async () => { throw error })
@@ -50,10 +58,9 @@ describe('initial connection', () => {
       expect(amqplib.connect).toHaveBeenCalledTimes(2)
     })
 
-  it.each(/** @type {[string, Partial<Error>][]} */[
-    ['ECONNREFUSED', { code: 'ECONNREFUSED' }],
-    ['any exception', new Error(generate())]
-  ])('should throw if error is %s', async (_, exception) => {
+  it('should throw if error is permanent', async () => {
+    const exception = new Error(generate())
+
     amqplib.connect.mockImplementationOnce(async () => { throw exception })
 
     await expect(connection.open()).rejects.toStrictEqual(exception)

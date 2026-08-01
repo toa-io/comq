@@ -6,9 +6,10 @@ Feature: Sharded Connection
 
   Scenario: Connecting while a shard is down
     Given one of the brokers has crashed
-    When I attempt to establish sharded connection
-    Then an exception is thrown: "ECONNREFUSED"
-    Then the broker is up
+    When I attempt to establish sharded connection for 1 second
+    Then the connection is not established
+    When the broker is up
+    Then the connection is established
 
   Scenario: Connecting with wrong credentials
     When I attempt to establish a sharded connection as "someone" with password "whatever"
