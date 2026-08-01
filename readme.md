@@ -103,10 +103,11 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 ## Request
 
-`async IO.request(queue: string, payload: any, encoding?: string): any`
+`async IO.request(queue: string, payload: any, encoding?: string, timeout?: number): any`
 
 Send encoded Request message with `replyTo` and `correlationId` properties set and
-return decoded Reply content.
+return decoded Reply content. Optional `timeout` (ms) rejects with `ETIMEDOUT` if no
+Reply arrives in time; encoding may be omitted when only `timeout` is passed.
 
 On the initial call, queues for Requests and Replies are asserted.
 
@@ -114,6 +115,7 @@ On the initial call, queues for Requests and Replies are asserted.
 
 ```javascript
 const sum = await io.request('add_numbers', { a: 1, b: 2 })
+const sumOrTimeout = await io.request('add_numbers', { a: 1, b: 2 }, 5000)
 ```
 
 ## Consumption
