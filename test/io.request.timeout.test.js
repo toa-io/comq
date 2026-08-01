@@ -33,3 +33,29 @@ it('should reject when request times out with encoding', async () => {
     code: 'ETIMEDOUT'
   })
 })
+
+it('should time out while send is still pending', async () => {
+  connection.createChannel.mockImplementation(async () => hangingChannel())
+
+  await expect(io.request(queue, payload, 50)).rejects.toMatchObject({
+    code: 'ETIMEDOUT'
+  })
+})
+
+/**
+ * @returns {jest.MockedObject<comq.Channel>}
+ */
+function hangingChannel () {
+  return /** @type {jest.MockedObject<comq.Channel>} */ ({
+    sharded: false,
+    consume: jest.fn(async () => undefined),
+    send: jest.fn(() => new Promise(() => {})),
+    deliver: jest.fn(async () => undefined),
+    fire: jest.fn(async () => undefined),
+    subscribe: jest.fn(async () => undefined),
+    publish: jest.fn(async () => undefined),
+    diagnose: jest.fn(),
+    seal: jest.fn(async () => undefined),
+    recover: jest.fn(async () => undefined)
+  })
+}

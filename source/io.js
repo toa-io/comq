@@ -96,13 +96,14 @@ class IO {
         const request = this.#createRequest(queue, payload, /** @type {comq.Encoding} */ encoding)
         const reply = this.#createReply(request)
 
-        await this.#requests.send(queue, request.buffer, request.properties)
+        const done = this.#requests.send(queue, request.buffer, request.properties)
+          .then(() => reply)
 
-        if (typeof timeout !== 'number') return reply
+        if (typeof timeout !== 'number') return done
 
         try {
           return await Promise.race([
-            reply,
+            done,
             delay(timeout).then(() => Promise.reject(timeoutError(timeout)))
           ])
         } catch (exception) {
