@@ -1,3 +1,4 @@
+@heavy
 Feature: Connection Tolerance
 
   Scenario: Connect

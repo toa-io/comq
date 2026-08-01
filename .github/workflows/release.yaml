@@ -1,73 +1,43 @@
 name: Release
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - release
-      - alpha
-    paths:
-      - 'source/**'
-      - 'types/**'
-      - 'package-lock.json'
 
-env:
-  CI: 1
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
 
 jobs:
-  publish:
-    if: github.event.pull_request.merged == true
+  release:
     runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
 
     steps:
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: 'https://registry.npmjs.org'
-
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run tests
-        run: npm i && npm test
+        run: npm test
 
-      - name: Import GPG key
-        id: gpg
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.TOABOT_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.TOABOT_GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-
-      - name: Bump version
-        run: |
-          if [ ${{ github.base_ref }} = release ]; then
-            npx lerna@7.3.0 version --conventional-graduate --no-commit-hooks --no-changelog --yes --message "ci: %s" --sign-git-commit --sign-git-tag
-          else
-            npx lerna@7.3.0 version --conventional-prerelease --preid alpha --dist-tag alpha --no-commit-hooks --no-changelog --yes --message "ci: %s" --git-tag-command "echo %s" --sign-git-commit
-          fi
-          
-          git fetch
-          git checkout dev
-          git merge ${{ github.base_ref }}
-          git push --all origin --no-verify
+      - name: Semantic release
         env:
-          GITHUB_TOKEN: ${{ secrets.TOABOT_GITHUB_TOKEN }}
-          GIT_AUTHOR_NAME: ${{ steps.gpg.outputs.name }}
-          GIT_AUTHOR_EMAIL: ${{ steps.gpg.outputs.email }}
-          GIT_COMMITTER_NAME: ${{ steps.gpg.outputs.name }}
-          GIT_COMMITTER_EMAIL: ${{ steps.gpg.outputs.email }}
-
-      - name: Publish packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ ${{ github.base_ref }} = release ]; then
-            npm publish
-          else
-            npm publish --tag alpha
-          fi
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

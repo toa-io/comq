@@ -552,6 +552,29 @@ describe('recovery', () => {
     await expect(channel.consume(queue, consumer)).rejects.toStrictEqual(exception)
   })
 
+  it('should not deadlock when recall hits a transient error during recover', async () => {
+    await channel.consume(queue, consumer)
+
+    const replacement = await amqplib.connect()
+    const method = `create${topology.confirms ? 'Confirm' : ''}Channel`
+
+    replacement[method].mockImplementationOnce(async () => {
+      const transient = await amqplib.connect()
+      const bad = await transient[method]()
+
+      bad.consume.mockImplementation(async () => { throw new Error('Channel closed') })
+
+      return bad
+    })
+
+    const deadlock = timeout(200).then(() => {
+      throw new Error('recover hung (deadlock)')
+    })
+
+    await expect(Promise.race([channel.recover(replacement), deadlock]))
+      .rejects.toThrow('Channel closed')
+  })
+
   describe.each(/** @type {[string, boolean][]} */ [
     ['', false],
     [' not', true]

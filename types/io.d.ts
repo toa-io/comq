@@ -15,7 +15,7 @@ declare namespace comq {
   }
 
   interface Destroyable extends EventEmitter {
-    destroy (): void
+    destroy(): void
   }
 
   interface Request {
@@ -25,51 +25,59 @@ declare namespace comq {
   }
 
   interface IO extends _diagnostics.Diagnosable {
-    reply (queue: string, produce: Producer): Promise<void>
+    reply(queue: string, produce: Producer): Promise<void>
 
-    request<Reply = any, Request = any> (queue: string, payload: Request, encoding?: _encoding.Encoding): Promise<Reply> | Promise<Readable>
+    request<Reply = any, Request = any>(queue: string, payload: Request, encoding?: _encoding.Encoding, timeout?: number): Promise<Reply> | Promise<Readable>
 
-    request (queue: string, stream: Readable, encoding?: _encoding.Encoding): Promise<Readable>
+    request<Reply = any, Request = any>(queue: string, payload: Request, timeout: number): Promise<Reply> | Promise<Readable>
 
-    consume<T = any> (exchange: string, group: string, consumer: Consumer<T>): Promise<void>
+    request(queue: string, stream: Readable, encoding?: _encoding.Encoding, timeout?: number): Promise<Readable>
 
-    consume<T = any> (exchange: string, consumer: Consumer<T>): Promise<void>
+    consume<T = any>(exchange: string, group: string, consumer: Consumer<T>): Promise<void>
 
-    emit (exchange: string, payload: any, encoding?: _encoding.Encoding): Promise<void>
+    consume<T = any>(exchange: string, consumer: Consumer<T>): Promise<void>
 
-    emit (exchange: string, payload: any, properties?: _amqp.Properties): Promise<void>
+    emit(exchange: string, payload: any, encoding?: _encoding.Encoding): Promise<void>
 
-    emit (exchange: string, stream: Readable, encoding?: _encoding.Encoding): Promise<void>
+    emit(exchange: string, payload: any, properties?: _amqp.Properties): Promise<void>
 
-    emit (exchange: string, stream: Readable, properties?: _amqp.Properties): Promise<void>
+    emit(exchange: string, stream: Readable, encoding?: _encoding.Encoding): Promise<void>
 
-    enqueue (exchange: string, payload: any, encoding?: _encoding.Encoding): Promise<void>
+    emit(exchange: string, stream: Readable, properties?: _amqp.Properties): Promise<void>
 
-    enqueue (exchange: string, payload: any, properties?: _amqp.Properties): Promise<void>
+    enqueue(exchange: string, payload: any, encoding?: _encoding.Encoding): Promise<void>
 
-    enqueue (exchange: string, stream: Readable, encoding?: _encoding.Encoding): Promise<void>
+    enqueue(exchange: string, payload: any, properties?: _amqp.Properties): Promise<void>
 
-    enqueue (exchange: string, stream: Readable, properties?: _amqp.Properties): Promise<void>
+    enqueue(exchange: string, stream: Readable, encoding?: _encoding.Encoding): Promise<void>
 
-    process<T = any> (queue: string, processor: Consumer<T>): Promise<void>
+    enqueue(exchange: string, stream: Readable, properties?: _amqp.Properties): Promise<void>
 
-    seal (): Promise<void>
+    process<T = any>(queue: string, processor: Consumer<T>): Promise<void>
 
-    close (): Promise<void>
+    seal(): Promise<void>
 
-    diagnose (event: 'open', listener: (index?: number) => void): void
+    close(): Promise<void>
 
-    diagnose (event: 'close', listener: (index?: number) => void): void
+    diagnose(event: 'open', listener: (index?: number) => void): void
 
-    diagnose (event: 'flow', listener: (channel: _topology.type, index?: number) => void): void
+    diagnose(event: 'close', listener: (index?: number) => void): void
 
-    diagnose (event: 'drain', listener: (channel: _topology.type, index?: number) => void): void
+    diagnose(event: 'error', listener: (error: Error, index?: number) => void): void
 
-    diagnose (event: 'remove', listener: (index?: number) => void): void
+    diagnose(event: 'flow', listener: (channel: _topology.type, index?: number) => void): void
 
-    diagnose (event: 'recover', listener: (channel: _topology.type, index?: number) => void): void
+    diagnose(event: 'drain', listener: (channel: _topology.type, index?: number) => void): void
 
-    diagnose (event: 'discard', listener: (channel: _topology.type, message: any, index?: number) => void): void
+    diagnose(event: 'remove', listener: (index?: number) => void): void
+
+    diagnose(event: 'recover', listener: (channel: _topology.type, index?: number) => void): void
+
+    diagnose(event: 'discard', listener: (channel: _topology.type, message: any, index?: number) => void): void
+
+    diagnose(event: 'pause', listener: (channel: _topology.type) => void): void
+
+    diagnose(event: 'resume', listener: (channel: _topology.type) => void): void
   }
 }
 

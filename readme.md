@@ -103,10 +103,11 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 ## Request
 
-`async IO.request(queue: string, payload: any, encoding?: string): any`
+`async IO.request(queue: string, payload: any, encoding?: string, timeout?: number): any`
 
 Send encoded Request message with `replyTo` and `correlationId` properties set and
-return decoded Reply content.
+return decoded Reply content. Optional `timeout` (ms) rejects with `ETIMEDOUT` if no
+Reply arrives in time; encoding may be omitted when only `timeout` is passed.
 
 On the initial call, queues for Requests and Replies are asserted.
 
@@ -114,6 +115,7 @@ On the initial call, queues for Requests and Replies are asserted.
 
 ```javascript
 const sum = await io.request('add_numbers', { a: 1, b: 2 })
+const sumOrTimeout = await io.request('add_numbers', { a: 1, b: 2 }, 5000)
 ```
 
 ## Consumption
@@ -329,14 +331,15 @@ combined into a cluster.
 Outgoing messages are sent to a single connection chosen at random from the shard pool. Shards that lose their
 underlying connection or experience channel [back pressure](#flow-control) on a corresponding channel are removed from
 the pool until the issue is resolved. Pending messages meeting these conditions are immediately routed among the
-remaining shards in the pool. If no shards are available, messages will wait until a shard's connection is
-re-established.
+remaining shards in the pool. If no shards are available, `send` / `publish` / `request` wait until a shard's
+connection is re-established (unbounded). For RPC, pass a [`request` timeout](#request) so callers fail with
+`ETIMEDOUT` instead of hanging while the pool is empty or a Reply never arrives.
 
 Incoming messages are consumed from all shards.
 
 `async connect(...shards: string[]): IO`
 
-Returns an instance of `IO` once a successful connection to one of the shards is established.
+Returns an instance of `IO` once connections to the shards are established.
 
 ### Example
 

@@ -3,7 +3,7 @@
 const stream = require('node:stream')
 const { EventEmitter } = require('node:events')
 const { randomBytes } = require('node:crypto')
-const { setTimeout } = require('node:timers/promises')
+const { setTimeout: delay } = require('node:timers/promises')
 const { Promex } = require('promex')
 const { memo, failsafe, lazy, track } = require('./attributes')
 
@@ -75,24 +75,45 @@ class IO {
       /**
        * @param {string} queue
        * @param {any | Readable} payload
-       * @param {comq.Encoding} [encoding]
+       * @param {comq.Encoding | number} [encoding]
+       * @param {number} [timeout]
        * @returns {Promise<any | Readable>}
        */
-      async (queue, payload, encoding) => {
+      async (queue, payload, encoding, timeout) => {
+        if (typeof encoding === 'number') {
+          timeout = encoding
+          encoding = undefined
+        }
+
         if (payload instanceof stream.Readable) {
           return pipeline(
             payload,
-            (payload) => this.request(queue, payload, encoding),
+            (payload) => this.request(queue, payload, encoding, timeout),
             this.#requests
           )
         }
 
-        const request = this.#createRequest(queue, payload, encoding)
+        const request = this.#createRequest(queue, payload, /** @type {comq.Encoding} */ encoding)
         const reply = this.#createReply(request)
 
-        await this.#requests.send(queue, request.buffer, request.properties)
+        const done = this.#requests.send(queue, request.buffer, request.properties)
+          .then(() => reply)
 
-        return reply
+        if (typeof timeout !== 'number') return done
+
+        try {
+          return await Promise.race([
+            done,
+            delay(timeout).then(() => Promise.reject(timeoutError(timeout)))
+          ])
+        } catch (exception) {
+          if (exception.code === 'ETIMEDOUT') {
+            request.emitter.removeAllListeners(request.properties.correlationId)
+            reply.reject(exception)
+          }
+
+          throw exception
+        }
       }))
 
   consume = lazy(this, this.#createEventChannel,
@@ -396,7 +417,7 @@ class IO {
     Even if these messages are lost, the reply stream will be closed anyway,
     either due to missing heartbeat or the deletion of the stream queue.
     */
-    await setTimeout(50)
+    await delay(50)
   }
 
   /**
@@ -455,6 +476,19 @@ const OCTETS = 'application/octet-stream'
 const DEFAULT = 'application/json'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
+
+/**
+ * @param {number} timeout
+ * @returns {Error}
+ */
+function timeoutError (timeout) {
+  const error = /** @type {Error & { code: string }} */ new Error(
+    `Request timed out after ${timeout}ms`)
+
+  error.code = 'ETIMEDOUT'
+
+  return error
+}
 
 function noop () {}
 

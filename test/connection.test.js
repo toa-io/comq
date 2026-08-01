@@ -40,7 +40,15 @@ describe('initial connection', () => {
   })
 
   it.each(/** @type {[string, Partial<Error>][]} */[
-    ['Socket closed', { message: 'Socket closed abruptly during opening handshake' }]
+    ['Socket closed', { message: 'Socket closed abruptly during opening handshake' }],
+    ['TLS disconnect', { message: 'Client network socket disconnected before secure TLS connection was established' }],
+    ['ECONNREFUSED', { code: 'ECONNREFUSED' }],
+    ['EAI_AGAIN', { code: 'EAI_AGAIN' }],
+    ['ENOTFOUND', { code: 'ENOTFOUND' }],
+    ['ETIMEDOUT', { code: 'ETIMEDOUT' }],
+    ['ECONNRESET', { code: 'ECONNRESET' }],
+    ['EHOSTUNREACH', { code: 'EHOSTUNREACH' }],
+    ['ENETUNREACH', { code: 'ENETUNREACH' }]
   ])('should reconnect on %s',
     async (_, error) => {
       amqplib.connect.mockImplementationOnce(async () => { throw error })
@@ -50,10 +58,9 @@ describe('initial connection', () => {
       expect(amqplib.connect).toHaveBeenCalledTimes(2)
     })
 
-  it.each(/** @type {[string, Partial<Error>][]} */[
-    ['ECONNREFUSED', { code: 'ECONNREFUSED' }],
-    ['any exception', new Error(generate())]
-  ])('should throw if error is %s', async (_, exception) => {
+  it('should throw if error is permanent', async () => {
+    const exception = new Error(generate())
+
     amqplib.connect.mockImplementationOnce(async () => { throw exception })
 
     await expect(connection.open()).rejects.toStrictEqual(exception)
@@ -108,6 +115,46 @@ describe('reconnection', () => {
     const replacement = await amqplib.connect.mock.results[1].value
 
     expect(channel.recover).toHaveBeenCalledWith(replacement)
+  })
+
+  it('should retry when channel recover fails', async () => {
+    const channel = await connection.createChannel('request')
+
+    channel.recover
+      .mockRejectedValueOnce(new Error('Channel closed'))
+      .mockResolvedValue(undefined)
+
+    conn.emit('close', new Error())
+
+    const start = Date.now()
+
+    while (channel.recover.mock.calls.length < 2 && Date.now() - start < 10000) {
+      await timeout(50)
+    }
+
+    expect(channel.recover).toHaveBeenCalledTimes(2)
+    expect(amqplib.connect.mock.calls.length).toBeGreaterThanOrEqual(3)
+  }, 15000)
+
+  it('should emit error when reconnect open fails', async () => {
+    const errors = []
+    const unhandled = jest.fn()
+
+    connection.diagnose('error', (exception) => errors.push(exception))
+    process.on('unhandledRejection', unhandled)
+
+    const boom = new Error('reconnect failed')
+
+    connection.open = jest.fn(async () => { throw boom })
+
+    conn.emit('close', new Error('broker down'))
+
+    await timeout(10)
+
+    process.off('unhandledRejection', unhandled)
+
+    expect(errors).toContain(boom)
+    expect(unhandled).not.toHaveBeenCalled()
   })
 })
 
@@ -200,6 +247,44 @@ describe('create channel', () => {
     await connection.createChannel('request')
 
     expect(create).toHaveBeenCalled()
+  })
+})
+
+describe('watchdog', () => {
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('should destroy silent connection when watchdog expires', async () => {
+    jest.useFakeTimers()
+
+    await connection.open()
+
+    const conn = await amqplib.connect.mock.results[0].value
+
+    await jest.advanceTimersByTimeAsync(60_000)
+
+    expect(conn.connection.stream.destroy).toHaveBeenCalled()
+  })
+
+  it('should reset watchdog on socket data', async () => {
+    jest.useFakeTimers()
+
+    await connection.open()
+
+    const conn = await amqplib.connect.mock.results[0].value
+
+    await jest.advanceTimersByTimeAsync(50_000)
+
+    conn.connection.stream.emit('data', Buffer.alloc(0))
+
+    await jest.advanceTimersByTimeAsync(50_000)
+
+    expect(conn.connection.stream.destroy).not.toHaveBeenCalled()
+
+    await jest.advanceTimersByTimeAsync(10_000)
+
+    expect(conn.connection.stream.destroy).toHaveBeenCalled()
   })
 })
 

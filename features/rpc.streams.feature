@@ -64,6 +64,7 @@ Feature: Reply streams
     And after 200ms
     Then the generator is destroyed
 
+  @heavy
   Scenario: Broker crashes while streaming reply
     Given a number generator with 90ms increasing delay replying `get_numbers` queue
     When the consumer requests a stream with request to the `get_numbers` queue

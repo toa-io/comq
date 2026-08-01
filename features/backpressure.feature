@@ -8,5 +8,4 @@ Feature: Back pressure handling
     """
     () => { return Buffer.from('ok') }
     """
-    When I'm sending 100kB requests to the `flood` queue at 5kHz for 0.5 seconds
-    Then back pressure was applied
+    When I'm flooding the `flood` queue until back pressure is applied

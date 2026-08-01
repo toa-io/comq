@@ -18,6 +18,8 @@ async function run () {
 async function * produce ({ limit }) {
   console.log('Request received with limit:', limit)
 
+  if (limit === 0) limit = Infinity
+
   for (let i = 0; i < limit; i++) {
     yield i
 

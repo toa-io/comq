@@ -4,43 +4,45 @@ const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
 const { quantity, timeout } = require('@toa.io/generic')
 
-const { When, Then } = require('@cucumber/cucumber')
+const { When } = require('@cucumber/cucumber')
 
-When('I\'m sending {quantity}B requests to the {token} queue at {quantity}Hz for {number} second(s)',
+const BASE_PAYLOAD = quantity('500k')
+const BASE_BATCH = 20
+const DEADLINE = 25_000
+
+When('I\'m flooding the {token} queue until back pressure is applied',
   /**
-   * @param {string} bytesQ
    * @param {string} queue
-   * @param {string} frequencyQ
-   * @param {number} seconds
    * @this {comq.features.Context}
    */
-  async function (bytesQ, queue, frequencyQ, seconds) {
-    const bytes = quantity(bytesQ)
-    const frequency = quantity(frequencyQ)
-    const buffer = randomBytes(bytes)
-    const times = seconds * frequency
+  async function (queue) {
+    const deadline = Date.now() + DEADLINE
+    const pending = []
+    const errors = []
+    let iteration = 0
 
-    // intervals less than 1ms are not accurate
-    const interval = Math.max((1000 / frequency), 1)
-    const each = Math.max(1 / (1000 / frequency), 1)
+    while (!this.events.flow && Date.now() < deadline) {
+      if (errors.length > 0) throw errors[0]
 
-    const promises = []
+      const payload = BASE_PAYLOAD * (iteration + 1)
+      const batch = BASE_BATCH * (iteration + 1)
+      const buffer = randomBytes(payload)
 
-    for (let i = 0; i < times; i++) {
-      const promise = this.io.request(queue, buffer)
+      for (let i = 0; i < batch; i++) {
+        pending.push(
+          this.io.request(queue, buffer).catch((exception) => {
+            errors.push(exception)
+          })
+        )
+      }
 
-      promises.push(promise)
+      iteration++
+      await timeout(0)
 
-      if ((i + 1) % each === 0) await timeout(interval)
+      if (errors.length > 0) throw errors[0]
     }
 
-    await Promise.all(promises)
-  })
+    if (errors.length > 0) throw errors[0]
 
-Then('back pressure was applied',
-  /**
-   * @this {comq.features.Context}
-   */
-  function () {
     assert.equal(this.events.flow, true, 'Back pressure hasn\'t been applied')
   })
