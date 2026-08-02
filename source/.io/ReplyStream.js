@@ -26,6 +26,8 @@ class ReplyStream extends Readable {
 
   #buffered = 0
 
+  #maxBufferSize
+
   /** @type {Map<number, unknown>} */
   #queue = new Map()
 
@@ -39,6 +41,7 @@ class ReplyStream extends Readable {
     this.#emitter = request.emitter
     this.#correlationId = request.properties.correlationId
     this.#idleInterval = global['COMQ_TESTING_IDLE_INTERVAL'] || IDLE_INTERVAL
+    this.#maxBufferSize = global['COMQ_TESTING_MAX_BUFFER_SIZE'] || MAX_BUFFER_SIZE
     this.#reply = reply
 
     this.#emitter.on(this.#correlationId, this.arrange.bind(this))
@@ -48,7 +51,9 @@ class ReplyStream extends Readable {
     this._clear()
     this.push(null)
 
-    void this.#reply(this.#control, control.end)
+    if (this.#control !== undefined)
+      void this.#reply(this.#control, control.end)
+
     super._destroy(error, callback)
   }
 
@@ -95,7 +100,11 @@ class ReplyStream extends Readable {
   }
 
   _buffer (payload, properties) {
-    if (this.#buffered > MAX_BUFFER_SIZE) this.destroy()
+    if (this.#buffered > this.#maxBufferSize) {
+      this.destroy()
+
+      return
+    }
 
     this.#buffered++
     this.#queue.set(properties.headers.index, { payload, properties })
