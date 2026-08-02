@@ -1,3 +1,11 @@
+## [0.15.1](https://github.com/toa-io/comq/compare/v0.15.0...v0.15.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* skip end control when reply stream buffer overflows ([654e046](https://github.com/toa-io/comq/commit/654e046bdcbfbbbbbb789e5bb032bc16564221d1)), closes [#control](https://github.com/toa-io/comq/issues/control) [#reply](https://github.com/toa-io/comq/issues/reply)
+* skip end control when reply stream buffer overflows ([#237](https://github.com/toa-io/comq/issues/237)) ([c34d87f](https://github.com/toa-io/comq/commit/c34d87f6d219ce6c8509d989117eadd55a33ca86))
+
 # [0.15.0](https://github.com/toa-io/comq/compare/v0.14.0...v0.15.0) (2026-08-01)
 
 
