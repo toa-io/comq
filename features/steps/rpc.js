@@ -4,9 +4,10 @@ const stream = require('node:stream')
 const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
 const { parse } = require('./yaml')
-const { match, timeout, quantity } = require('@toa.io/generic')
+const { match, timeout, quantity, random } = require('@toa.io/generic')
 const { Given, When, Then } = require('@cucumber/cucumber')
 const { Readable } = require('node:stream')
+const { actions, BROKERS_AMOUNT } = require('./brokers')
 
 Given('function replying {token} queue:',
   /**
@@ -85,6 +86,12 @@ Given('idle timeout is set to {number}ms',
     global.COMQ_TESTING_IDLE_INTERVAL = value
   })
 
+Given('watchdog interval is set to {number}ms with {number}s AMQP heartbeat',
+  function (watchdog, heartbeat) {
+    global.COMQ_TESTING_WATCHDOG_INTERVAL = watchdog
+    global.COMQ_TESTING_AMQP_HEARTBEAT = heartbeat
+  })
+
 Given('a producer replying {token} queue',
   /**
    * @param {string} queue
@@ -93,6 +100,22 @@ Given('a producer replying {token} queue',
   async function (queue) {
     const producer = async (request) => {
       await timeout(10)
+
+      return request
+    }
+
+    await this.io.reply(queue, producer)
+  })
+
+Given('a producer replying {token} queue in {number}ms',
+  /**
+   * @param {string} queue
+   * @param {number} delay
+   * @this {comq.features.Context}
+   */
+  async function (queue, delay) {
+    const producer = async (request) => {
+      await timeout(delay)
 
       return request
     }
@@ -134,6 +157,32 @@ When('the consumer sends a request to the {token} queue',
     const payload = randomBytes(8)
 
     await send.call(this, queue, payload)
+  })
+
+When('the consumer sends {number} requests to the {token} queue',
+  /**
+   * @param {number} amount
+   * @param {string} queue
+   * @this {comq.features.Context}
+   */
+  async function (amount, queue) {
+    sendMany.call(this, amount, queue)
+  })
+
+// the requests must be published while the frozen shard still looks reachable,
+// which is a window too short to spend on a step boundary
+When('the consumer sends {number} requests to the {token} queue as a broker freezes',
+  /**
+   * @param {number} amount
+   * @param {string} queue
+   * @this {comq.features.Context}
+   */
+  async function (amount, queue) {
+    this.shard = random(BROKERS_AMOUNT)
+
+    await actions.frozen(this.shard)
+
+    sendMany.call(this, amount, queue)
   })
 
 When('the consumer requests a stream with the following request to the {token} queue:',
@@ -424,6 +473,17 @@ Then('all replies have been received',
 
     await Promise.all(this.requestsSent)
   })
+
+/**
+ * @param {number} amount
+ * @param {string} queue
+ * @this {comq.features.Context}
+ */
+function sendMany (amount, queue) {
+  for (let i = 0; i < amount; i++) {
+    this.requestsSent.push(this.io.request(queue, randomBytes(8)))
+  }
+}
 
 async function send (queue, payload) {
   if (this.expected) await this.expected

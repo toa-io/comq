@@ -35,8 +35,8 @@ class IO {
   /** @type {comq.ReplyEmitter | null} */
   #control = null
 
-  /** @type {Set<Promex>} */
-  #pendingReplies = new Set()
+  /** @type {Map<Promex, comq.Request>} */
+  #pendingReplies = new Map()
 
   /** @type {Set<comq.Destroyable>} */
   #replyStreams = new Set()
@@ -230,9 +230,14 @@ class IO {
   }
 
   #setupRetransmission () {
-    const event = (this.#requests.sharded === true) ? 'remove' : 'recover'
-
-    this.#requests.diagnose(event, this.#retransmit)
+    if (this.#requests.sharded === true) {
+      // a shard leaves the pool when it rejects a publish, and is lost when its
+      // connection drops, which leaves an already sent request unanswered
+      this.#requests.diagnose('remove', this.#retransmit)
+      this.#requests.diagnose('lost', this.#retransmit)
+    } else {
+      this.#requests.diagnose('recover', this.#retransmit)
+    }
   }
 
   /**
@@ -316,7 +321,7 @@ class IO {
    * @return {Promex<any>}
    */
   #createReply (request) {
-    const reply = this.#createPendingReply()
+    const reply = this.#createPendingReply(request)
 
     request.emitter.once(request.properties.correlationId, this.#getReplyResolver(request, reply))
 
@@ -324,12 +329,13 @@ class IO {
   }
 
   /**
+   * @param {comq.Request} request
    * @return {Promex}
    */
-  #createPendingReply () {
+  #createPendingReply (request) {
     const reply = new Promex()
 
-    this.#pendingReplies.add(reply)
+    this.#pendingReplies.set(reply, request)
 
     reply
       .catch(noop)
@@ -455,10 +461,14 @@ class IO {
   }
 
   #retransmit = () => {
-    for (const emitter of this.#emitters.values()) emitter.removeAllListeners()
+    for (const [reply, request] of this.#pendingReplies) {
+      // detaching this attempt alone leaves the listeners of the reply streams
+      // that are still flowing over the other shards in place
+      request.emitter.removeAllListeners(request.properties.correlationId)
 
-    // trigger failsafe attribute
-    for (const reply of this.#pendingReplies) reply.reject(RETRANSMISSION)
+      // trigger failsafe attribute
+      reply.reject(RETRANSMISSION)
+    }
   }
 
   /**

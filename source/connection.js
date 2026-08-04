@@ -151,7 +151,7 @@ class Connection {
    * @param {comq.amqp.Connection} connection
    * @param {number} [timeoutMs]
    */
-  #armWatchdog (connection, timeoutMs = WATCHDOG_MS) {
+  #armWatchdog (connection, timeoutMs = global.COMQ_TESTING_WATCHDOG_INTERVAL ?? WATCHDOG_MS) {
     const socket = connection.connection?.stream
 
     if (socket === undefined) return

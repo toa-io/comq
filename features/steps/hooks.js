@@ -12,6 +12,9 @@ After(
    * @this {comq.features.Context}
    */
   async function () {
+    delete global.COMQ_TESTING_WATCHDOG_INTERVAL
+    delete global.COMQ_TESTING_AMQP_HEARTBEAT
+
     await Promise.all(
       Array.from({ length: BROKERS_AMOUNT }, (_, n) => actions.up(n))
     )

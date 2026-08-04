@@ -28,7 +28,7 @@ defineParameterType({
 
 defineParameterType({
   name: 'status',
-  regexp: /(up|down|crashed)/,
+  regexp: /(up|down|crashed|frozen)/,
   transformer: (value) => value
 })
 

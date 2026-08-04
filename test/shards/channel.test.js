@@ -29,6 +29,58 @@ it('should expose `sharded`', async () => {
   expect(channel.sharded).toStrictEqual(true)
 })
 
+it('should report a lost shard', async () => {
+  channel = await create(connections, type)
+
+  const lost = /** @type {jest.MockedFunction} */ jest.fn()
+
+  channel.diagnose('lost', lost)
+
+  const calls = connections[1].diagnose.mock.calls.filter((call) => call[0] === 'close')
+
+  expect(calls.length).toBeGreaterThan(0)
+
+  for (const call of calls) call[1]()
+
+  expect(lost).toHaveBeenCalledWith(1)
+})
+
+it('should not publish to a lost shard', async () => {
+  channel = await create(connections, type)
+
+  const channels = await getCreatedChannels()
+  const calls = connections[1].diagnose.mock.calls.filter((call) => call[0] === 'close')
+
+  for (const call of calls) call[1]()
+
+  const buffer = randomBytes(8)
+  const label = generate()
+
+  for (let i = 0; i < 20; i++) await channel.send(label, buffer)
+
+  expect(channels[0].send).toHaveBeenCalledTimes(20)
+  expect(channels[1].send).not.toHaveBeenCalled()
+})
+
+// a lost shard is not benched, so it is used again as soon as it reconnects
+it('should publish to a recovered shard', async () => {
+  channel = await create(connections, type)
+
+  const channels = await getCreatedChannels()
+  const close = connections[1].diagnose.mock.calls.filter((call) => call[0] === 'close')
+  const open = connections[1].diagnose.mock.calls.filter((call) => call[0] === 'open')
+
+  for (const call of close) call[1]()
+  for (const call of open) call[1]()
+
+  const buffer = randomBytes(8)
+  const label = generate()
+
+  for (let i = 0; i < 20; i++) await channel.send(label, buffer)
+
+  expect(channels[1].send).toHaveBeenCalled()
+})
+
 it('should resolve when one of the connections has created a channel', async () => {
   /** @type {toa.generic.Promex[]} */
   const promises = []

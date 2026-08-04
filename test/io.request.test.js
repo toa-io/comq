@@ -207,7 +207,124 @@ describe('send', () => {
 
     expect(requests.send).toHaveBeenCalledTimes(2)
   })
+
+  it('should resend unanswered Requests when a shard is lost', async () => {
+    jest.clearAllMocks()
+
+    connection = mock.connection(true)
+    io = new IO(connection)
+
+    promise = io.request(queue, payload)
+
+    // allows initializers to run
+    await immediate()
+
+    requests = await findChannel('request')
+
+    expect(requests.diagnose).toHaveBeenCalledWith('lost', expect.any(Function))
+
+    await lose()
+
+    expect(requests.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('should not interrupt a confirmed reply stream when a shard is lost', async () => {
+    jest.clearAllMocks()
+
+    connection = mock.connection(true)
+    io = new IO(connection)
+
+    promise = io.request(queue, payload)
+
+    await immediate()
+
+    requests = await findChannel('request')
+    replies = await findChannel('reply')
+
+    const correlationId = requests.send.mock.calls[0][2].correlationId
+    const callback = replies.consume.mock.calls[0][1]
+
+    await callback(message(correlationId, 0, 'ok', 'control'))
+
+    const output = await promise
+
+    expect(output).toBeInstanceOf(stream.Readable)
+
+    await lose()
+
+    // the stream is carried by whichever shard replied, so it keeps flowing
+    const chunk = randomBytes(8)
+
+    await callback(message(correlationId, 1, chunk))
+
+    expect(output.read()).toStrictEqual(chunk)
+
+    output.destroy()
+  })
+
+  it('should not resend an answered Request when a shard is lost', async () => {
+    jest.clearAllMocks()
+
+    connection = mock.connection(true)
+    io = new IO(connection)
+
+    promise = io.request(queue, payload)
+
+    await immediate()
+
+    requests = await findChannel('request')
+    replies = await findChannel('reply')
+
+    const correlationId = requests.send.mock.calls[0][2].correlationId
+    const callback = replies.consume.mock.calls[0][1]
+
+    const answer = /** @type {comq.amqp.Message} */
+      { content: randomBytes(8), properties: { correlationId } }
+
+    await callback(answer)
+    await promise
+
+    await lose()
+
+    expect(requests.send).toHaveBeenCalledTimes(1)
+  })
 })
+
+/**
+ * Fires the listeners the IO has attached to the shard loss diagnostic.
+ *
+ * @return {Promise<void>}
+ */
+async function lose () {
+  const calls = requests.diagnose.mock.calls.filter((call) => call[0] === 'lost')
+
+  for (const [, listener] of calls) listener(0)
+
+  await immediate()
+  await immediate()
+}
+
+/**
+ * @param {string} correlationId
+ * @param {number} index
+ * @param {any} content
+ * @param {string} [type]
+ * @return {comq.amqp.Message}
+ */
+function message (correlationId, index, content, type) {
+  const raw = Buffer.isBuffer(content)
+
+  return /** @type {comq.amqp.Message} */ {
+    content: raw ? content : encode(content, 'application/json'),
+    properties: {
+      correlationId,
+      type,
+      replyTo: queue,
+      contentType: raw ? 'application/octet-stream' : 'application/json',
+      headers: { index }
+    }
+  }
+}
 
 describe('reply', () => {
   it.each([undefined, 'application/octet-stream'])('should return raw content if encoding is %s',

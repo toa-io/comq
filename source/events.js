@@ -4,4 +4,4 @@
 exports.connection = ['open', 'close', 'error']
 
 /** @type {comq.diagnostics.Event[]} */
-exports.channel = ['flow', 'drain', 'recover', 'discard', 'pause', 'resume', 'return']
+exports.channel = ['flow', 'drain', 'recover', 'discard', 'pause', 'resume', 'return', 'lost']

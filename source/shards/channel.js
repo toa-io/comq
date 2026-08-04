@@ -25,6 +25,9 @@ class Channel {
   /** @type {Promex[]} */
   #down = []
 
+  /** @type {boolean[]} */
+  #alive = []
+
   /** @type {Map<comq.Channel, Promex>} */
   #bench = new Map()
 
@@ -106,18 +109,28 @@ class Channel {
    * Tracks whether a shard is reachable, so that subscribing does not wait for
    * one that is not. The pool itself is left alone: a channel is only benched
    * when it actually fails to publish, otherwise a lost connection would
-   * interrupt the streams it is carrying.
+   * interrupt the streams it is carrying. Losing a shard is reported instead,
+   * since a request awaiting its reply on it will never be answered.
    *
    * @param {comq.Connection} connection
    * @param {number} index
    */
   #watch (connection, index) {
     this.#down[index] = new Promex()
+    this.#alive[index] = connection.connected !== false
 
     if (connection.connected === false) this.#down[index].resolve()
 
-    connection.diagnose('close', () => this.#down[index].resolve())
-    connection.diagnose('open', () => (this.#down[index] = new Promex()))
+    connection.diagnose('close', () => {
+      this.#alive[index] = false
+      this.#down[index].resolve()
+      this.#diagnostics.emit(LOST, index)
+    })
+
+    connection.diagnose('open', () => {
+      this.#alive[index] = true
+      this.#down[index] = new Promex()
+    })
   }
 
   /**
@@ -141,6 +154,7 @@ class Channel {
   #pipe (channel) {
     for (const event of events.channel) {
       if (event === RETURN) continue // returns are retried before being reported
+      if (event === LOST) continue // a shard is lost with its connection, not its channel
 
       channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, channel.index))
     }
@@ -300,12 +314,27 @@ class Channel {
   }
 
   /**
+   * The channels of the shards that are known to be connected, falling back to the
+   * whole pool while none is, so that a publish is attempted rather than dropped.
+   *
+   * @return {comq.Channel[]}
+   */
+  #reachable () {
+    const reachable = this.#pool.filter((channel) => this.#alive[channel.index] !== false)
+
+    return reachable.length === 0 ? this.#pool : reachable
+  }
+
+  /**
    * @param {(channel: comq.Channel) => void} fn
    */
   async #one (fn) {
     if (this.#pool.length === 0) await this.#recovery
 
-    const channel = this.#pool[Math.floor(Math.random() * this.#pool.length)]
+    // publishing to a lost shard is silently accepted by the destroyed socket, so
+    // it must be avoided rather than retried: nothing would report the loss twice
+    const pool = this.#reachable()
+    const channel = pool[Math.floor(Math.random() * pool.length)]
 
     try {
       return await fn(channel)
@@ -333,6 +362,7 @@ async function create (connections, type) {
 const DEFAULT = ''
 const RETURN = 'return'
 const RETURN_HEADER = 'x-return'
+const LOST = 'lost'
 
 function noop () {}
 
