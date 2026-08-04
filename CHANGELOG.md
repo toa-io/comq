@@ -1,3 +1,11 @@
+## [0.15.2](https://github.com/toa-io/comq/compare/v0.15.1...v0.15.2) (2026-08-04)
+
+
+### Bug Fixes
+
+* report and recover undeliverable replies ([b2d2d0f](https://github.com/toa-io/comq/commit/b2d2d0f11d7714c2d32d3d85894fa78e2203f8c6))
+* report and recover undeliverable replies ([#241](https://github.com/toa-io/comq/issues/241)) ([73e5592](https://github.com/toa-io/comq/commit/73e5592762634fbead29d825be68a3da3136729b))
+
 ## [0.15.1](https://github.com/toa-io/comq/compare/v0.15.0...v0.15.1) (2026-08-02)
 
 
