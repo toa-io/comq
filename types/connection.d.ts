@@ -6,6 +6,8 @@ import * as _topology from './topology'
 declare namespace comq {
 
   interface Connection {
+    readonly connected?: boolean
+
     open(): Promise<void>
 
     close(): Promise<void>

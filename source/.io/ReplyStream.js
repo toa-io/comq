@@ -44,12 +44,20 @@ class ReplyStream extends Readable {
     this.#maxBufferSize = global['COMQ_TESTING_MAX_BUFFER_SIZE'] || MAX_BUFFER_SIZE
     this.#reply = reply
 
+    this.confirmation.catch(noop) // it is not awaited until the stream is handed over
+
     this.#emitter.on(this.#correlationId, this.arrange.bind(this))
+
+    // control.ok may never arrive, hence the watchdog is armed before the first message
+    this._heartbeat()
   }
 
   _destroy (error, callback) {
     this._clear()
     this.push(null)
+
+    // a no-op once control.ok has been received
+    this.confirmation.reject(error ?? new Error(UNCONFIRMED))
 
     if (this.#control !== undefined)
       void this.#reply(this.#control, control.end)
@@ -145,4 +153,9 @@ class ReplyStream extends Readable {
 
 const MAX_BUFFER_SIZE = 1000
 
+const UNCONFIRMED = 'Reply stream has been destroyed before confirmation'
+
+function noop () {}
+
 exports.ReplyStream = ReplyStream
+exports.UNCONFIRMED = UNCONFIRMED

@@ -185,7 +185,8 @@ describe('encoding', () => {
 
     const props = {
       correlationId: properties.correlationId,
-      contentType: properties.contentType
+      contentType: properties.contentType,
+      mandatory: true
     }
 
     expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, reply, props)

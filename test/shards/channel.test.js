@@ -87,28 +87,75 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
     for (const chan of channels) expect(chan[method]).toHaveBeenCalledWith(...args)
   })
 
-  it(`should should ${method} using available and pending channels`, async () => {
+  it(`should not resolve ${method} until pending channels are created`, async () => {
     const promise = promex()
 
     connections[0].createChannel.mockImplementationOnce(() => promise)
 
     channel = await create(connections, type)
 
-    await channel[method](...args)
+    let resolved = false
+
+    const subscription = channel[method](...args).then(() => { resolved = true })
+
+    await immediate()
 
     /** @type {jest.MockedObject<comq.Channel>} */
     const chan1 = await connections[1].createChannel.mock.results[0].value
 
     expect(chan1[method]).toHaveBeenCalled()
+    expect(resolved).toStrictEqual(false)
 
     /** @type {jest.MockedObject<comq.Channel>} */
     const chan0 = mock.channel()
 
     promise.resolve(chan0)
 
-    await immediate()
+    await subscription
 
     expect(chan0[method]).toHaveBeenCalled()
+    expect(resolved).toStrictEqual(true)
+  })
+
+  it(`should resolve ${method} without a disconnected shard`, async () => {
+    const promise = promex()
+
+    connections[0].createChannel.mockImplementationOnce(() => promise)
+    connections[0].connected = false
+
+    try {
+      channel = await create(connections, type)
+
+      // must not wait for the channel that is never going to be created
+      await channel[method](...args)
+
+      /** @type {jest.MockedObject<comq.Channel>} */
+      const chan1 = await connections[1].createChannel.mock.results[0].value
+
+      expect(chan1[method]).toHaveBeenCalled()
+    } finally {
+      connections[0].connected = true
+      promise.resolve(mock.channel())
+    }
+  })
+
+  it(`should resolve ${method} when a shard disconnects`, async () => {
+    const promise = promex()
+
+    connections[0].createChannel.mockImplementationOnce(() => promise)
+
+    channel = await create(connections, type)
+
+    const subscription = channel[method](...args)
+    const calls = connections[0].diagnose.mock.calls.filter((call) => call[0] === 'close')
+
+    expect(calls.length).toBeGreaterThan(0)
+
+    for (const call of calls) call[1]()
+
+    await subscription
+
+    promise.resolve(mock.channel())
   })
 
   it(`should ${method} using a channel removed from the pool once it is recovered`, async () => {
@@ -339,6 +386,43 @@ describe('diagnose', () => {
     expect(listener).toHaveBeenCalledWith(expect.any(Number))
   })
 
+  it('should re-fire a returned message on another shard', async () => {
+    const listener = /** @type {jest.MockedFunction} */ jest.fn()
+    const index = random(channels.length)
+    const chan = channels[index]
+    const message = returned()
+
+    channel.diagnose('return', listener)
+
+    emitReturn(chan, message)
+
+    const rest = channels.filter((one) => one !== chan)
+
+    const properties = expect.objectContaining(
+      { mandatory: true, headers: { 'x-return': 1 } })
+
+    for (const one of rest) {
+      expect(one.fire).toHaveBeenCalledWith(message.fields.routingKey, message.content, properties)
+    }
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('should emit `return` event once every shard has returned the message', async () => {
+    const listener = /** @type {jest.MockedFunction} */ jest.fn()
+    const index = random(channels.length)
+    const chan = channels[index]
+    const message = returned({ 'x-return': channels.length - 1 })
+
+    channel.diagnose('return', listener)
+
+    emitReturn(chan, message)
+
+    for (const one of channels) expect(one.fire).not.toHaveBeenCalled()
+
+    expect(listener).toHaveBeenCalledWith(message, index)
+  })
+
   it('should emit `pause` and `unpause` events', async () => {
     const queue = generate()
     const buffer = randomBytes(8)
@@ -427,6 +511,30 @@ it('should remove channel with back pressure from the pool', async () => {
 
   expect(chan.send).toHaveBeenCalled()
 })
+
+/**
+ * @param {Record<string, any>} [headers]
+ * @return {comq.amqp.Message}
+ */
+function returned (headers = {}) {
+  return /** @type {comq.amqp.Message} */ {
+    content: randomBytes(8),
+    fields: { exchange: '', routingKey: generate() },
+    properties: { correlationId: generate(), headers }
+  }
+}
+
+/**
+ * @param {jest.MockedObject<comq.Channel>} channel
+ * @param {comq.amqp.Message} message
+ */
+function emitReturn (channel, message) {
+  const calls = channel.diagnose.mock.calls.filter((call) => call[0] === 'return')
+
+  expect(calls.length).toBeGreaterThan(0)
+
+  for (const call of calls) call[1](message)
+}
 
 /**
  * @return {Promise<jest.MockedObject<comq.Channel>[]>}

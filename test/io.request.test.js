@@ -237,6 +237,30 @@ describe('reply', () => {
 
       expect(output).toStrictEqual(value)
     })
+
+  it('should re-send the Request if a reply stream is never confirmed', async () => {
+    global.COMQ_TESTING_MAX_BUFFER_SIZE = 3
+
+    const correlationId = requests.send.mock.calls[0][2].correlationId
+    const callback = replies.consume.mock.calls[0][1]
+
+    try {
+      // out of order chunks overflow the buffer, so the stream dies before control.ok
+      for (let index = 1; index <= 5; index++) {
+        const properties = { correlationId, headers: { index } }
+        const message = /** @type {comq.amqp.Message} */ { content: randomBytes(8), properties }
+
+        await callback(message)
+      }
+
+      await immediate()
+      await immediate()
+
+      expect(requests.send).toHaveBeenCalledTimes(2)
+    } finally {
+      delete global.COMQ_TESTING_MAX_BUFFER_SIZE
+    }
+  })
 })
 
 const reply = async (content = randomBytes(8), contentType = undefined) => {

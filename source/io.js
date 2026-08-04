@@ -349,7 +349,12 @@ class IO {
       if (isStream) {
         const stream = this.#createReplyStream(request, payload, properties)
 
-        await stream.confirmation
+        try {
+          await stream.confirmation
+        } catch {
+          // the stream has never started, hence the request is re-sent
+          return reply.reject(RETRANSMISSION)
+        }
 
         reply.resolve(stream)
       } else {
@@ -438,6 +443,9 @@ class IO {
 
     properties.contentType = contentType
     properties.correlationId = request.properties.correlationId
+
+    // an unroutable reply must be returned by the broker rather than dropped
+    properties.mandatory = true
 
     return await this.#replies.fire(replyTo, buffer, properties)
   }
