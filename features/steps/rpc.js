@@ -167,6 +167,38 @@ When('the consumer{number} requests a stream with request to the {token} queue',
     await fetch.call(this, queue, null, number)
   })
 
+When('the consumer requests {number} streams with the following request to the {token} queue:',
+  /**
+   * @param {number} amount
+   * @param {string} queue
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (amount, queue, yaml) {
+    const payload = parse(yaml)
+
+    for (let number = 0; number < amount; number++) {
+      await fetch.call(this, queue, payload, number)
+
+      for await (const value of this.streams[number]) this.streamsValues[number].push(value)
+
+      this.streamsEnded[number] = true
+    }
+  })
+
+Then('every stream has been received',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    for (const number of Object.keys(this.streams)) {
+      assert.equal(this.streamsEnded[number], true, `Stream ${number} was not closed`)
+
+      assert.notEqual(this.streamsValues[number].length, 0,
+        `Stream ${number} is empty`)
+    }
+  })
+
 Then('the consumer receives the reply:',
   /**
    * @param {string} yaml

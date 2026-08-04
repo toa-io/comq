@@ -19,8 +19,11 @@ class Channel {
   /** @type {comq.Channel[]} */
   #pool
 
-  /** @type {Set<Promise<comq.Channel>>} */
-  #pending = new Set()
+  /** @type {Map<Promise<comq.Channel>, number>} */
+  #pending = new Map()
+
+  /** @type {Promex[]} */
+  #down = []
 
   /** @type {Map<comq.Channel, Promex>} */
   #bench = new Map()
@@ -48,11 +51,11 @@ class Channel {
   }
 
   async consume (queue, consumer) {
-    return await this.#any((channel) => channel.consume(queue, consumer))
+    return await this.#every((channel) => channel.consume(queue, consumer))
   }
 
   async subscribe (queue, group, consumer) {
-    await this.#any((channel) => channel.subscribe(queue, group, consumer))
+    await this.#every((channel) => channel.subscribe(queue, group, consumer))
   }
 
   async send (queue, buffer, options) {
@@ -86,8 +89,10 @@ class Channel {
    * @return {Promise<void>}
    */
   #create = async (connection, index) => {
+    this.#watch(connection, index)
+
     const pending = connection.createChannel(this.#type, index)
-    const channel = await this.#pend(pending)
+    const channel = await this.#pend(pending, index)
 
     this.#add(channel)
     this.#pipe(channel)
@@ -98,11 +103,30 @@ class Channel {
   }
 
   /**
+   * Tracks whether a shard is reachable, so that subscribing does not wait for
+   * one that is not. The pool itself is left alone: a channel is only benched
+   * when it actually fails to publish, otherwise a lost connection would
+   * interrupt the streams it is carrying.
+   *
+   * @param {comq.Connection} connection
+   * @param {number} index
+   */
+  #watch (connection, index) {
+    this.#down[index] = new Promex()
+
+    if (connection.connected === false) this.#down[index].resolve()
+
+    connection.diagnose('close', () => this.#down[index].resolve())
+    connection.diagnose('open', () => (this.#down[index] = new Promex()))
+  }
+
+  /**
    * @param {Promise<comq.Channel>} pending
+   * @param {number} index
    * @return {Promise<comq.Channel>}
    */
-  async #pend (pending) {
-    this.#pending.add(pending)
+  async #pend (pending, index) {
+    this.#pending.set(pending, index)
 
     const channel = await pending
 
@@ -116,8 +140,43 @@ class Channel {
    */
   #pipe (channel) {
     for (const event of events.channel) {
+      if (event === RETURN) continue // returns are retried before being reported
+
       channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, channel.index))
     }
+
+    channel.diagnose(RETURN, (message) => this.#returned(message, channel))
+  }
+
+  /**
+   * An unroutable message is retried on the shards that have not seen it yet,
+   * since a queue may be declared on some of them only. The return is reported
+   * once every shard has rejected the message.
+   *
+   * @param {comq.amqp.Message} message
+   * @param {comq.Channel} channel
+   */
+  #returned (message, channel) {
+    const report = () => this.#diagnostics.emit(RETURN, message, channel.index)
+    const attempt = (message.properties.headers?.[RETURN_HEADER] ?? 0) + 1
+    const rest = this.#pool.filter((one) => one !== channel)
+
+    // only replies are published to the default exchange, and only they are mandatory
+    const exhausted = message.fields.exchange !== DEFAULT ||
+      attempt >= this.#connections.length ||
+      rest.length === 0
+
+    if (exhausted) return report()
+
+    const properties = {
+      ...message.properties,
+      mandatory: true,
+      headers: { ...message.properties.headers, [RETURN_HEADER]: attempt }
+    }
+
+    const next = rest[Math.floor(Math.random() * rest.length)]
+
+    next.fire(message.fields.routingKey, message.content, properties).catch(report)
   }
 
   /**
@@ -171,12 +230,49 @@ class Channel {
   }
 
   /**
+   * Resolves once every available shard has settled, requiring at least one to
+   * succeed. Benched shards are applied when they come back, which must not
+   * hold up the caller.
+   *
    * @param {(channel: comq.Channel) => void} fn
+   * @return {Promise<any>}
    */
-  async #any (fn) {
-    const promises = this.#apply(fn)
+  async #every (fn) {
+    const promises = []
 
-    return await Promise.any(promises)
+    for (const channel of this.#channels) {
+      promises.push(this.#unless(fn(channel), channel.index))
+    }
+
+    for (const [pending, index] of this.#pending) {
+      promises.push(this.#unless(pending.then(fn), index))
+    }
+
+    for (const recover of this.#bench.values()) recover.then(fn).catch(noop)
+
+    const results = await Promise.allSettled(promises)
+    const fulfilled = results.find((result) => result.status === 'fulfilled')
+
+    if (fulfilled === undefined) {
+      const reasons = results.map((result) => result.reason)
+
+      throw new AggregateError(reasons, 'No shard is available')
+    }
+
+    return fulfilled.value
+  }
+
+  /**
+   * Gives up on a shard as soon as its connection is lost.
+   *
+   * @param {Promise<any>} promise
+   * @param {number} index
+   * @return {Promise<any>}
+   */
+  async #unless (promise, index) {
+    const down = this.#down[index]
+
+    return down === undefined ? await promise : await Promise.race([promise, down])
   }
 
   /**
@@ -197,7 +293,7 @@ class Channel {
     const promises = []
 
     for (const channel of this.#channels) promises.push(fn(channel))
-    for (const pending of this.#pending) promises.push(pending.then(fn))
+    for (const pending of this.#pending.keys()) promises.push(pending.then(fn))
     for (const recover of this.#bench.values()) promises.push(recover.then(fn))
 
     return promises
@@ -233,5 +329,11 @@ async function create (connections, type) {
 
   return channel
 }
+
+const DEFAULT = ''
+const RETURN = 'return'
+const RETURN_HEADER = 'x-return'
+
+function noop () {}
 
 exports.create = create

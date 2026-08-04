@@ -46,6 +46,10 @@ class Connection {
     this.#diagnostics.on('error', noop)
   }
 
+  get connected () {
+    return this.#connection !== undefined
+  }
+
   async open () {
     if (this.#opening !== null) return this.#opening
 
