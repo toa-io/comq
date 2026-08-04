@@ -1,3 +1,11 @@
+## [0.15.3](https://github.com/toa-io/comq/compare/v0.15.2...v0.15.3) (2026-08-04)
+
+
+### Bug Fixes
+
+* re-send requests left unanswered by a lost shard ([c534a01](https://github.com/toa-io/comq/commit/c534a0136e5f0189cdb6976cd9cffb9a2ca5a148))
+* re-send requests left unanswered by a lost shard ([#242](https://github.com/toa-io/comq/issues/242)) ([c821da8](https://github.com/toa-io/comq/commit/c821da895049bd78a907c6705477ebe74c160e1b))
+
 ## [0.15.2](https://github.com/toa-io/comq/compare/v0.15.1...v0.15.2) (2026-08-04)
 
 
