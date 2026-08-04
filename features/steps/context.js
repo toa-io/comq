@@ -89,7 +89,12 @@ class Context extends World {
   }
 
   #url (i, user, password) {
-    return PROTOCOL + user + ':' + password + '@' + getAddress(i)
+    const url = PROTOCOL + user + ':' + password + '@' + getAddress(i)
+    const heartbeat = global.COMQ_TESTING_AMQP_HEARTBEAT
+
+    // the watchdog measures silence, so it may only be shortened along with the
+    // interval at which a healthy broker is expected to say something
+    return heartbeat === undefined ? url : url + '?heartbeat=' + heartbeat
   }
 }
 
