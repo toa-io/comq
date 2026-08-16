@@ -27,11 +27,9 @@ declare namespace comq {
   interface IO extends _diagnostics.Diagnosable {
     reply(queue: string, produce: Producer): Promise<void>
 
-    request<Reply = any, Request = any>(queue: string, payload: Request, encoding?: _encoding.Encoding, timeout?: number): Promise<Reply> | Promise<Readable>
+    request<Reply = any, Request = any>(queue: string, payload: Request, encoding?: _encoding.Encoding): Promise<Reply> | Promise<Readable>
 
-    request<Reply = any, Request = any>(queue: string, payload: Request, timeout: number): Promise<Reply> | Promise<Readable>
-
-    request(queue: string, stream: Readable, encoding?: _encoding.Encoding, timeout?: number): Promise<Readable>
+    request(queue: string, stream: Readable, encoding?: _encoding.Encoding): Promise<Readable>
 
     consume<T = any>(exchange: string, group: string, consumer: Consumer<T>): Promise<void>
 
