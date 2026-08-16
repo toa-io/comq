@@ -1,3 +1,10 @@
+## [0.15.4](https://github.com/toa-io/comq/compare/v0.15.3...v0.15.4) (2026-08-16)
+
+
+### Bug Fixes
+
+* remove request() timeout ([#246](https://github.com/toa-io/comq/issues/246)) ([d432388](https://github.com/toa-io/comq/commit/d4323889bcad867a870d0ed351b92098f6aad551))
+
 ## [0.15.3](https://github.com/toa-io/comq/compare/v0.15.2...v0.15.3) (2026-08-04)
 
 
