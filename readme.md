@@ -3,9 +3,6 @@
 Production-grade communication via [AMQP](https://github.com/amqp-node/amqplib)
 for distributed, eventually consistent systems running on Node.js.
 
-Sooner or later a Request is answered, an Event is delivered, a Task is processed.
-There are no application-level timeouts — callers wait until the work completes.
-
 ## Features
 
 - [Dynamic topology](#topology)
