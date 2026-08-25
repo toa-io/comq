@@ -1,3 +1,11 @@
+## [0.15.5](https://github.com/toa-io/comq/compare/v0.15.4...v0.15.5) (2026-08-25)
+
+
+### Bug Fixes
+
+* recover from a lost connection reliably ([59b1fab](https://github.com/toa-io/comq/commit/59b1fab61d4f27ab6eb608693da6493b5b1f4ae5))
+* recover from a lost connection reliably ([#247](https://github.com/toa-io/comq/issues/247)) ([e4701cf](https://github.com/toa-io/comq/commit/e4701cfa384d5451c15d0a6bf53c82ce1da91ac5))
+
 ## [0.15.4](https://github.com/toa-io/comq/compare/v0.15.3...v0.15.4) (2026-08-16)
 
 
