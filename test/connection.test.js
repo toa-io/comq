@@ -5,7 +5,7 @@
 const { generate } = require('randomstring')
 
 const { timeout, promex, random } = require('@toa.io/generic')
-const { amqplib } = require('./amqplib.mock')
+const { amqplib, connect } = require('./amqplib.mock')
 const { channel: create } = require('./connection.mock')
 const mock = { amqplib, channel: { create } }
 
@@ -26,6 +26,7 @@ const url = generate()
 
 beforeEach(() => {
   jest.clearAllMocks()
+  amqplib.connect.mockImplementation(connect)
 
   connection = new Connection(url)
 })
@@ -36,12 +37,13 @@ describe('initial connection', () => {
   it('should connect', async () => {
     await connection.open()
 
-    expect(amqplib.connect).toHaveBeenCalledWith(url)
+    expect(amqplib.connect).toHaveBeenCalledWith(url, { timeout: expect.any(Number) })
   })
 
   it.each(/** @type {[string, Partial<Error>][]} */[
     ['Socket closed', { message: 'Socket closed abruptly during opening handshake' }],
     ['TLS disconnect', { message: 'Client network socket disconnected before secure TLS connection was established' }],
+    ['connect timeout', { message: 'connect ETIMEDOUT' }],
     ['ECONNREFUSED', { code: 'ECONNREFUSED' }],
     ['EAI_AGAIN', { code: 'EAI_AGAIN' }],
     ['ENOTFOUND', { code: 'ENOTFOUND' }],
@@ -156,6 +158,58 @@ describe('reconnection', () => {
     expect(errors).toContain(boom)
     expect(unhandled).not.toHaveBeenCalled()
   })
+
+  it('should reconnect when connection is lost while channels recover', async () => {
+    const channel = await connection.createChannel('request')
+
+    // the connection is lost right after the topology has been recovered on it
+    channel.recover.mockImplementationOnce(async (connection) => {
+      connection.emit('close', new Error('lost again'))
+    })
+
+    conn.emit('close', new Error('lost'))
+
+    await expect(connection.createChannel('event')).resolves.toBeDefined()
+
+    expect(amqplib.connect).toHaveBeenCalledTimes(3)
+  }, 10000)
+
+  it('should not wait for a connection that failed to recover to close', async () => {
+    const channel = await connection.createChannel('request')
+
+    channel.recover
+      .mockRejectedValueOnce(new Error('Channel closed'))
+      .mockResolvedValue(undefined)
+
+    // Close-Ok never arrives on a connection that has already been lost
+    conn.close.mockImplementation(() => new Promise(() => undefined))
+    conn.emit('close', new Error('lost'))
+
+    await timeout(0)
+
+    const failed = await amqplib.connect.mock.results[1].value
+
+    failed.close.mockImplementation(() => new Promise(() => undefined))
+
+    await expect(connection.createChannel('event')).resolves.toBeDefined()
+
+    expect(failed.connection.stream.destroy).toHaveBeenCalled()
+  }, 10000)
+
+  it('should emit error on a failed connection attempt', async () => {
+    const errors = []
+    const exception = { code: 'ECONNREFUSED' }
+
+    connection.diagnose('error', (error) => errors.push(error))
+    amqplib.connect.mockImplementationOnce(async () => { throw exception })
+
+    conn.emit('close', new Error('lost'))
+
+    // the attempt is retried, hence the channel is created on the next connection
+    await connection.createChannel('event')
+
+    expect(errors).toContain(exception)
+  }, 10000)
 
   it('should ignore close from a stale connection', async () => {
     const stale = conn
@@ -289,6 +343,28 @@ describe('watchdog', () => {
     expect(conn.connection.stream.destroy).toHaveBeenCalled()
   })
 
+  it('should not let a replaced socket disarm the watchdog', async () => {
+    jest.useFakeTimers()
+
+    await connection.open()
+
+    const stale = await amqplib.connect.mock.results[0].value
+
+    stale.emit('close', new Error('lost'))
+
+    await jest.advanceTimersByTimeAsync(1)
+
+    const live = await amqplib.connect.mock.results[1].value
+
+    await jest.advanceTimersByTimeAsync(30_000)
+
+    stale.connection.stream.emit('data', Buffer.alloc(0))
+
+    await jest.advanceTimersByTimeAsync(30_000)
+
+    expect(live.connection.stream.destroy).toHaveBeenCalled()
+  })
+
   it('should reset watchdog on socket data', async () => {
     jest.useFakeTimers()
 
@@ -311,6 +387,14 @@ describe('watchdog', () => {
 })
 
 describe('close', () => {
+  beforeEach(() => {
+    global.COMQ_TESTING_SHUTDOWN_TIMEOUT = 10
+  })
+
+  afterEach(() => {
+    delete global.COMQ_TESTING_SHUTDOWN_TIMEOUT
+  })
+
   it('should close connection', async () => {
     await connection.open()
     await connection.close()
@@ -331,6 +415,49 @@ describe('close', () => {
 
     expect(conn.close).toHaveBeenCalled()
   })
+
+  it('should not wait for Close-Ok that never arrives', async () => {
+    await connection.open()
+
+    /** @type {jest.MockedObject<comq.amqp.Connection>} */
+    const conn = await amqplib.connect.mock.results[0].value
+
+    conn.close.mockImplementation(() => new Promise(() => undefined))
+
+    await connection.close()
+
+    expect(conn.connection.stream.destroy).toHaveBeenCalled()
+  })
+
+  it('should open again after close', async () => {
+    await connection.open()
+    await connection.close()
+    await connection.open()
+
+    await expect(connection.createChannel('request')).resolves.toBeDefined()
+
+    expect(amqplib.connect).toHaveBeenCalledTimes(2)
+  })
+
+  it('should stop reconnecting', async () => {
+    await connection.open()
+
+    const conn = await amqplib.connect.mock.results[0].value
+    const attempts = []
+
+    connection.diagnose('error', (exception) => attempts.push(exception))
+    amqplib.connect.mockImplementation(async () => { throw { code: 'ECONNREFUSED' } }) // eslint-disable-line
+
+    conn.emit('close', new Error('lost'))
+
+    await connection.close()
+
+    const failed = attempts.length
+
+    await timeout(1500)
+
+    expect(attempts.length).toStrictEqual(failed)
+  }, 10000)
 })
 
 describe('diagnostics', () => {

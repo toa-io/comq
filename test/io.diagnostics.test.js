@@ -54,6 +54,13 @@ describe.each(['request', 'reply', 'event'])('%s channel events',
       })
   })
 
+it('should not throw on error without listeners', async () => {
+  const call = connection.diagnose.mock.calls.find(([event]) => event === 'error')
+  const emit = call[1]
+
+  expect(() => emit(new Error(generate()))).not.toThrow()
+})
+
 it.each(['open', 'close'])('should re-emit %s from connection',
   /**
    * @param {comq.diagnostics.Event} event
