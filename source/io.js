@@ -52,6 +52,9 @@ class IO {
   constructor (connection) {
     this.#connection = connection
 
+    // EventEmitter throws on 'error' with no listeners
+    this.#diagnostics.on('error', noop)
+
     for (const event of events.connection) {
       this.#connection.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args))
     }

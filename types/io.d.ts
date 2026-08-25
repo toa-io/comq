@@ -59,7 +59,7 @@ declare namespace comq {
 
     diagnose(event: 'open', listener: (index?: number) => void): void
 
-    diagnose(event: 'close', listener: (index?: number) => void): void
+    diagnose(event: 'close', listener: (error?: Error, index?: number) => void): void
 
     diagnose(event: 'error', listener: (error: Error, index?: number) => void): void
 
@@ -68,6 +68,8 @@ declare namespace comq {
     diagnose(event: 'drain', listener: (channel: _topology.type, index?: number) => void): void
 
     diagnose(event: 'remove', listener: (index?: number) => void): void
+
+    diagnose(event: 'lost', listener: (channel: _topology.type, index?: number) => void): void
 
     diagnose(event: 'recover', listener: (channel: _topology.type, index?: number) => void): void
 
