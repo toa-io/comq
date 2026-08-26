@@ -402,6 +402,7 @@ describe('close', () => {
     const amqp = await amqplib.connect.mock.results[0].value
 
     expect(amqp.close).toHaveBeenCalled()
+    expect(connection.closed).toStrictEqual(true)
   })
 
   it('should close after connection is (re)established', async () => {

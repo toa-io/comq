@@ -60,6 +60,10 @@ class Connection {
     return this.#connection !== undefined
   }
 
+  get closed () {
+    return this.#closed
+  }
+
   async open () {
     this.#closed = false
 

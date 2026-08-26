@@ -7,6 +7,7 @@ declare namespace comq {
 
   interface Connection {
     readonly connected?: boolean
+    readonly closed?: boolean
 
     open(): Promise<void>
 
