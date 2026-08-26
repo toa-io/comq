@@ -63,6 +63,8 @@ declare namespace comq {
 
     diagnose(event: 'error', listener: (error: Error, index?: number) => void): void
 
+    diagnose(event: 'reconnect', listener: (index?: number) => void): void
+
     diagnose(event: 'flow', listener: (channel: _topology.type, index?: number) => void): void
 
     diagnose(event: 'drain', listener: (channel: _topology.type, index?: number) => void): void

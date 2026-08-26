@@ -96,6 +96,40 @@ it('should not publish to a lost shard', async () => {
   expect(channels[1].send).not.toHaveBeenCalled()
 })
 
+it('should wait for a shard to recover when all are lost', async () => {
+  channel = await create(connections, type)
+
+  const channels = await getCreatedChannels()
+  const buffer = randomBytes(8)
+  const label = generate()
+  let sent = false
+
+  for (const connection of connections) {
+    const calls = connection.diagnose.mock.calls.filter((call) => call[0] === 'close')
+
+    for (const call of calls) call[1](new Error('gone'))
+  }
+
+  const sending = channel.send(label, buffer).then(() => { sent = true })
+
+  await immediate()
+
+  expect(sent).toStrictEqual(false)
+
+  for (const chan of channels) expect(chan.send).not.toHaveBeenCalled()
+
+  const open = connections[0].diagnose.mock.calls.filter((call) => call[0] === 'open')
+  const recover = channels[0].diagnose.mock.calls.filter((call) => call[0] === 'recover')
+
+  for (const call of open) call[1]()
+  for (const call of recover) call[1]()
+
+  await sending
+
+  expect(channels[0].send).toHaveBeenCalled()
+  expect(channels[1].send).not.toHaveBeenCalled()
+})
+
 // a lost shard is not benched, so it is used again as soon as it reconnects
 it('should publish to a recovered shard', async () => {
   channel = await create(connections, type)
