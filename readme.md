@@ -491,7 +491,8 @@ Subscribe to one of the diagnostic events:
   Optional [`error`](https://amqp-node.github.io/amqplib/channel_api.html#model_events) is passed
   as an argument.
 - `error`: an attempt to restore the connection has failed. The exception is passed as an argument.
-  Attempts continue, so this event is the only way to observe an ongoing outage.
+  Attempts continue until one succeeds.
+- `reconnect`: an attempt to restore the connection has started. Followed by `open` or `error`.
 - `flow`: back pressure is applied to a channel. [Channel type](./types/topology.d.ts) is passed as
   an argument.
 - `drain`: back pressure is removed from a channel. Channel type is passed.
@@ -520,9 +521,12 @@ established, there is no way to capture the initial `open` event.
 ```javascript
 io.diagnose('flow', (type) => console.log(`Back pressure was applied to the ${type} channel`))
 
-io.diagnose('open', () => console.log('AMQP connection established'))
-io.diagnose('close', (error) => console.log('AMQP connection closed', error?.message))
-io.diagnose('error', (error) => console.log('AMQP connection failed', error.message))
+io.diagnose('reconnect', (shard) => console.log('AMQP reconnecting', { shard }))
+io.diagnose('open', (shard) => console.log('AMQP connection established', { shard }))
+io.diagnose('close', (error, shard) => console.log('AMQP connection closed', { message: error?.message, shard }))
+io.diagnose('error', (error, shard) => console.log('AMQP connection failed', { message: error.message, shard }))
+io.diagnose('lost', (type, shard) => console.log('AMQP shard lost', { type, shard }))
+io.diagnose('recover', (type, shard) => console.log('AMQP channel recovered', { type, shard }))
 ```
 
 # Gratitude
