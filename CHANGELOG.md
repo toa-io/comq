@@ -1,3 +1,12 @@
+## [0.15.7](https://github.com/toa-io/comq/compare/v0.15.6...v0.15.7) (2026-08-26)
+
+
+### Bug Fixes
+
+* wait instead of publishing when every shard is down ([41cd715](https://github.com/toa-io/comq/commit/41cd715ad07c1b141f0eabd23b2d444c60855b65))
+* wait instead of publishing when every shard is down ([#250](https://github.com/toa-io/comq/issues/250)) ([968882c](https://github.com/toa-io/comq/commit/968882c342c51b129133ad27d761cfcbfb622fce))
+* wait instead of publishing when every shard is down ([#251](https://github.com/toa-io/comq/issues/251)) ([a6cfe8a](https://github.com/toa-io/comq/commit/a6cfe8a75128cb63ad1bbbbf0e1c57cb2fbfdc37)), closes [#250](https://github.com/toa-io/comq/issues/250) [#250](https://github.com/toa-io/comq/issues/250)
+
 ## [0.15.6](https://github.com/toa-io/comq/compare/v0.15.5...v0.15.6) (2026-08-26)
 
 
