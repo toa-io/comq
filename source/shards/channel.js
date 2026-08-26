@@ -111,6 +111,7 @@ class Channel {
    * when it actually fails to publish, otherwise a lost connection would
    * interrupt the streams it is carrying. Losing a shard is reported instead,
    * since a request awaiting its reply on it will never be answered.
+   * A connection closed on purpose is not a loss.
    *
    * @param {comq.Connection} connection
    * @param {number} index
@@ -121,10 +122,13 @@ class Channel {
 
     if (connection.connected === false) this.#down[index].resolve()
 
-    connection.diagnose('close', () => {
+    connection.diagnose('close', (error) => {
       this.#alive[index] = false
       this.#down[index].resolve()
-      this.#diagnostics.emit(LOST, index)
+
+      if (error !== undefined && connection.closed !== true) {
+        this.#diagnostics.emit(LOST, index)
+      }
     })
 
     connection.diagnose('open', () => {

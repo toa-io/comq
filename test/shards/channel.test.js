@@ -40,9 +40,43 @@ it('should report a lost shard', async () => {
 
   expect(calls.length).toBeGreaterThan(0)
 
-  for (const call of calls) call[1]()
+  for (const call of calls) call[1](new Error('gone'))
 
   expect(lost).toHaveBeenCalledWith(1)
+})
+
+it('should not report a lost shard when the connection is closed', async () => {
+  channel = await create(connections, type)
+
+  const lost = /** @type {jest.MockedFunction} */ jest.fn()
+
+  channel.diagnose('lost', lost)
+
+  connections[1].closed = true
+
+  const calls = connections[1].diagnose.mock.calls.filter((call) => call[0] === 'close')
+
+  expect(calls.length).toBeGreaterThan(0)
+
+  for (const call of calls) call[1](new Error('gone'))
+
+  expect(lost).not.toHaveBeenCalled()
+})
+
+it('should not report a lost shard when the connection is closed cleanly', async () => {
+  channel = await create(connections, type)
+
+  const lost = /** @type {jest.MockedFunction} */ jest.fn()
+
+  channel.diagnose('lost', lost)
+
+  const calls = connections[1].diagnose.mock.calls.filter((call) => call[0] === 'close')
+
+  expect(calls.length).toBeGreaterThan(0)
+
+  for (const call of calls) call[1]()
+
+  expect(lost).not.toHaveBeenCalled()
 })
 
 it('should not publish to a lost shard', async () => {

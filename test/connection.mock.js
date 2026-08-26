@@ -20,6 +20,7 @@ const channel = /** @type {jest.MockedFunction<(sharded?: boolean, index?: numbe
  */
 const connection = (sharded = false) => (/** @type {jest.MockedObject<comq.Connection>} */ {
   connected: true,
+  closed: false,
   createChannel: jest.fn(async (type, index) => channel(sharded, index)),
   open: jest.fn(async () => undefined),
   close: jest.fn(async () => undefined),
