@@ -299,7 +299,6 @@ If the specified encoding format is not supported, an exception will be thrown.
 The following encoding formats are supported:
 
 - `application/json`
-- `application/msgpack`
 - `application/octet-stream`
 - `text/plain`
 

@@ -1,7 +1,7 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { promex } = require('@toa.io/generic')
+const { Promex } = require('promex')
 
 const { track } = require('./track')
 
@@ -35,8 +35,8 @@ let test
 beforeEach(() => {
   jest.clearAllMocks()
 
-  done = promex()
-  undone = promex()
+  done = new Promex()
+  undone = new Promex()
   test = new Test()
 })
 

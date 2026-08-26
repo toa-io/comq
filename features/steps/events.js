@@ -3,7 +3,7 @@
 const stream = require('node:stream')
 const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
-const { timeout, quantity, match } = require('@toa.io/generic')
+const { timeout, quantity, match } = require('../../test/helpers')
 const { parse } = require('./yaml')
 const { Given, When, Then } = require('@cucumber/cucumber')
 

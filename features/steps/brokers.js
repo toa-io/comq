@@ -2,7 +2,7 @@
 
 const { execFile } = require('node:child_process')
 const { promisify } = require('node:util')
-const { timeout } = require('@toa.io/generic')
+const { timeout } = require('../../test/helpers')
 const { RabbitMQContainer } = require('@testcontainers/rabbitmq')
 const { getContainerRuntimeClient } = require('testcontainers')
 

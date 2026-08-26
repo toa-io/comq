@@ -1,6 +1,6 @@
 'use strict'
 
-const { random, flip } = require('@toa.io/generic')
+const { random, flip } = require('./helpers')
 
 const preset = () => ({
   prefetch: random(10),

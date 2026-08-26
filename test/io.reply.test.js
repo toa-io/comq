@@ -194,12 +194,12 @@ describe('encoding', () => {
 
   it('should set octet-stream for Buffer reply', async () => {
     const request = { [generate()]: generate() }
-    const content = encode(request, 'application/msgpack')
+    const content = encode(request, 'application/json')
 
     const properties = {
       replyTo: generate(),
       correlationId: generate(),
-      contentType: 'application/msgpack'
+      contentType: 'application/json'
     }
 
     const message = /** @type {comq.amqp.Message} */ { content, properties }

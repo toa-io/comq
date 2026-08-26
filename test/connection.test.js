@@ -4,7 +4,8 @@
 
 const { generate } = require('randomstring')
 
-const { timeout, promex, random } = require('@toa.io/generic')
+const { Promex } = require('promex')
+const { timeout, random } = require('./helpers')
 const { amqplib, connect } = require('./amqplib.mock')
 const { channel: create } = require('./connection.mock')
 const mock = { amqplib, channel: { create } }
@@ -339,7 +340,7 @@ describe('create channel', () => {
 
     jest.clearAllMocks()
 
-    const promise = promex()
+    const promise = new Promex()
 
     amqplib.connect.mockImplementationOnce(() => promise)
 

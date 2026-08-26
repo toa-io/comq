@@ -1,7 +1,7 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { timeout } = require('@toa.io/generic')
+const { timeout } = require('../../test/helpers')
 
 const { lazy } = require('./lazy')
 
