@@ -1,3 +1,11 @@
+## [0.15.6](https://github.com/toa-io/comq/compare/v0.15.5...v0.15.6) (2026-08-26)
+
+
+### Bug Fixes
+
+* do not report shards as lost on shutdown ([abbe0e8](https://github.com/toa-io/comq/commit/abbe0e8e1048509ff2c981b7aa33659c0829e821))
+* do not report shards as lost on shutdown ([#248](https://github.com/toa-io/comq/issues/248)) ([b269a5c](https://github.com/toa-io/comq/commit/b269a5cc78d8ca74036290abec234a1e87056e9c))
+
 ## [0.15.5](https://github.com/toa-io/comq/compare/v0.15.4...v0.15.5) (2026-08-25)
 
 
