@@ -318,26 +318,30 @@ class Channel {
   }
 
   /**
-   * The channels of the shards that are known to be connected, falling back to the
-   * whole pool while none is, so that a publish is attempted rather than dropped.
+   * The channels of the shards that are known to be connected.
+   * An empty result means every shard is down or benched — wait rather than
+   * publish: a destroyed socket accepts a write without complaining.
    *
    * @return {comq.Channel[]}
    */
   #reachable () {
-    const reachable = this.#pool.filter((channel) => this.#alive[channel.index] !== false)
-
-    return reachable.length === 0 ? this.#pool : reachable
+    return this.#pool.filter((channel) => this.#alive[channel.index] !== false)
   }
 
   /**
    * @param {(channel: comq.Channel) => void} fn
    */
   async #one (fn) {
-    if (this.#pool.length === 0) await this.#recovery
-
-    // publishing to a lost shard is silently accepted by the destroyed socket, so
-    // it must be avoided rather than retried: nothing would report the loss twice
+    // capture before the check: recover may replace `#recovery` in between
+    const waiting = this.#recovery
     const pool = this.#reachable()
+
+    if (pool.length === 0) {
+      await waiting
+
+      return this.#one(fn)
+    }
+
     const channel = pool[Math.floor(Math.random() * pool.length)]
 
     try {
@@ -345,7 +349,7 @@ class Channel {
     } catch {
       this.#remove(channel)
 
-      return await this.#one(fn)
+      return this.#one(fn)
     }
   }
 }
