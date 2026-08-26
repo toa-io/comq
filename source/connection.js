@@ -73,6 +73,11 @@ class Connection {
 
     await this.#opening
 
+    if (this.#closed) return
+
+    // close may have landed after this attempt succeeded but before `#opening` was cleared
+    if (this.#connection === undefined) return this.open()
+
     this.#running = true
   }
 
@@ -109,16 +114,18 @@ class Connection {
   #open = async (retry) => {
     if (this.#closed) return
 
+    // the initial connect finishes before the caller can subscribe
+    if (this.#running) this.#diagnostics.emit('reconnect')
+
     /** @type {comq.amqp.Connection} */
     let connection
 
     try {
-      connection = await amqp.connect(this.#url, { timeout: CONNECT_MS })
+      connection = await this.#connect()
     } catch (exception) {
       if (this.#closed) return
       if (!this.#transient(exception)) throw exception
 
-      // attempts are made until one succeeds, so an outage is observable only here
       this.#diagnostics.emit('error', exception)
 
       return retry
@@ -198,6 +205,43 @@ class Connection {
 
   #recover () {
     return this.#recovery
+  }
+
+  /**
+   * amqplib's `timeout` is a socket idle timer and starts only after DNS.
+   * After a machine wakes, `getaddrinfo` itself can hang, so the attempt is
+   * also bounded here.
+   *
+   * @return {Promise<comq.amqp.Connection>}
+   */
+  async #connect () {
+    const connecting = amqp.connect(this.#url, { timeout: CONNECT_MS })
+
+    let timer
+
+    const expired = new Promise((_resolve, reject) => {
+      timer = setTimeout(() => {
+        const exception = new Error('connect ETIMEDOUT')
+
+        exception.code = 'ETIMEDOUT'
+
+        reject(exception)
+      }, CONNECT_MS)
+
+      timer.unref()
+    })
+
+    expired.catch(noop)
+
+    try {
+      return await Promise.race([connecting, expired])
+    } catch (exception) {
+      connecting.then((connection) => this.#shutdown(connection), noop)
+
+      throw exception
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   /**

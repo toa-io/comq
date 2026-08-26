@@ -61,7 +61,7 @@ it('should not throw on error without listeners', async () => {
   expect(() => emit(new Error(generate()))).not.toThrow()
 })
 
-it.each(['open', 'close'])('should re-emit %s from connection',
+it.each(['open', 'close', 'error', 'reconnect'])('should re-emit %s from connection',
   /**
    * @param {comq.diagnostics.Event} event
    */

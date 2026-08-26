@@ -211,6 +211,41 @@ describe('reconnection', () => {
     expect(errors).toContain(exception)
   }, 10000)
 
+  it('should emit reconnect when restoring a lost connection', async () => {
+    const reconnect = jest.fn()
+
+    connection.diagnose('reconnect', reconnect)
+    conn.emit('close', new Error('lost'))
+
+    await connection.createChannel('event')
+
+    expect(reconnect).toHaveBeenCalled()
+  }, 10000)
+
+  it('should bound a connect that never settles', async () => {
+    jest.useFakeTimers()
+
+    try {
+      const errors = []
+
+      connection.diagnose('error', (exception) => errors.push(exception))
+      amqplib.connect.mockImplementation(() => new Promise(() => undefined))
+
+      conn.emit('close', new Error('lost'))
+
+      await jest.advanceTimersByTimeAsync(0)
+      await jest.advanceTimersByTimeAsync(30_000)
+
+      expect(errors).toEqual([expect.objectContaining({ code: 'ETIMEDOUT' })])
+
+      await jest.advanceTimersByTimeAsync(2_000)
+
+      expect(amqplib.connect.mock.calls.length).toBeGreaterThan(2)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('should ignore close from a stale connection', async () => {
     const stale = conn
     const closeHandler = stale.on.mock.calls.find(([event]) => event === 'close')[1]
@@ -474,6 +509,21 @@ describe('diagnostics', () => {
     await connection.open()
 
     expect(captured).toStrictEqual(true)
+  })
+
+  it('should not emit reconnect on the initial open', async () => {
+    const reconnect = jest.fn()
+
+    connection.diagnose('reconnect', reconnect)
+
+    jest.clearAllMocks()
+
+    connection = new Connection(url)
+    connection.diagnose('reconnect', reconnect)
+
+    await connection.open()
+
+    expect(reconnect).not.toHaveBeenCalled()
   })
 
   it('should re-emit `close` event', async () => {
