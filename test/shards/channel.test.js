@@ -2,7 +2,8 @@
 
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
-const { promex, sample, immediate, random, each } = require('@toa.io/generic')
+const { Promex } = require('promex')
+const { sample, immediate, random } = require('../helpers')
 
 const mock = require('../connection.mock')
 
@@ -130,6 +131,31 @@ it('should wait for a shard to recover when all are lost', async () => {
   expect(channels[1].send).not.toHaveBeenCalled()
 })
 
+it('should pause when no shard is left to publish to', async () => {
+  channel = await create(connections, type)
+
+  const pause = /** @type {jest.MockedFunction} */ jest.fn()
+  const resume = /** @type {jest.MockedFunction} */ jest.fn()
+
+  channel.diagnose('pause', pause)
+  channel.diagnose('resume', resume)
+
+  lose(connections[0])
+
+  // the other shard is still reachable
+  expect(pause).not.toHaveBeenCalled()
+
+  lose(connections[1])
+
+  expect(pause).toHaveBeenCalledTimes(1)
+  expect(resume).not.toHaveBeenCalled()
+
+  restore(connections[1])
+
+  expect(resume).toHaveBeenCalledTimes(1)
+  expect(pause).toHaveBeenCalledTimes(1)
+})
+
 // a lost shard is not benched, so it is used again as soon as it reconnects
 it('should publish to a recovered shard', async () => {
   channel = await create(connections, type)
@@ -150,11 +176,11 @@ it('should publish to a recovered shard', async () => {
 })
 
 it('should resolve when one of the connections has created a channel', async () => {
-  /** @type {toa.generic.Promex[]} */
+  /** @type {Promex[]} */
   const promises = []
 
   for (const conn of connections) {
-    const promise = promex()
+    const promise = new Promex()
 
     conn.createChannel.mockImplementationOnce(() => promise)
 
@@ -183,7 +209,7 @@ it('should resolve when one of the connections has created a channel', async () 
 it('should create failfast channels of given type', async () => {
   await create(connections, type)
 
-  each(connections, (conn, index) => {
+  connections.forEach((conn, index) => {
     expect(conn.createChannel).toHaveBeenCalledWith(type, index)
   })
 })
@@ -208,7 +234,7 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
   })
 
   it(`should not resolve ${method} until pending channels are created`, async () => {
-    const promise = promex()
+    const promise = new Promex()
 
     connections[0].createChannel.mockImplementationOnce(() => promise)
 
@@ -238,7 +264,7 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
   })
 
   it(`should resolve ${method} without a disconnected shard`, async () => {
-    const promise = promex()
+    const promise = new Promex()
 
     connections[0].createChannel.mockImplementationOnce(() => promise)
     connections[0].connected = false
@@ -260,7 +286,7 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
   })
 
   it(`should resolve ${method} when a shard disconnects`, async () => {
-    const promise = promex()
+    const promise = new Promex()
 
     connections[0].createChannel.mockImplementationOnce(() => promise)
 
@@ -413,7 +439,7 @@ describe('seal', () => {
 
     const channels = await getCreatedChannels()
     const chan = sample(channels)
-    const promise = promex()
+    const promise = new Promex()
     let sealed = false
 
     chan.seal.mockImplementationOnce(() => promise)
@@ -433,7 +459,7 @@ describe('seal', () => {
 
   it('should seal pending channel', async () => {
     const connection = sample(connections)
-    const promise = promex()
+    const promise = new Promex()
 
     connection.createChannel.mockImplementationOnce(() => promise)
 
@@ -654,6 +680,34 @@ function emitReturn (channel, message) {
   expect(calls.length).toBeGreaterThan(0)
 
   for (const call of calls) call[1](message)
+}
+
+/**
+ * @param {jest.MockedObject<comq.Connection>} connection
+ * @param {Error} [error]
+ */
+function lose (connection, error) {
+  emit(connection, 'close', error)
+}
+
+/**
+ * @param {jest.MockedObject<comq.Connection>} connection
+ */
+function restore (connection) {
+  emit(connection, 'open')
+}
+
+/**
+ * @param {jest.MockedObject<comq.Connection>} connection
+ * @param {comq.diagnostics.Event} event
+ * @param {any[]} args
+ */
+function emit (connection, event, ...args) {
+  const calls = connection.diagnose.mock.calls.filter((call) => call[0] === event)
+
+  expect(calls.length).toBeGreaterThan(0)
+
+  for (const call of calls) call[1](...args)
 }
 
 /**

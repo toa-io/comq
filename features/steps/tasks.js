@@ -2,7 +2,7 @@
 
 const assert = require('node:assert')
 const { Given, Then, When } = require('@cucumber/cucumber')
-const { quantity, timeout } = require('@toa.io/generic')
+const { quantity, timeout } = require('../../test/helpers')
 const { randomBytes } = require('node:crypto')
 const stream = require('node:stream')
 

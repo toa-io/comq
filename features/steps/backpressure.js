@@ -2,7 +2,7 @@
 
 const assert = require('node:assert')
 const { randomBytes } = require('node:crypto')
-const { quantity, timeout } = require('@toa.io/generic')
+const { quantity, timeout } = require('../../test/helpers')
 
 const { When } = require('@cucumber/cucumber')
 

@@ -20,6 +20,7 @@ After(
     )
 
     await this.disconnect()
+    await this.unplug()
   })
 
 AfterAll(async function () {

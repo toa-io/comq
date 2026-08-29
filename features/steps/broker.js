@@ -1,6 +1,6 @@
 'use strict'
 
-const { random } = require('@toa.io/generic')
+const { random } = require('../../test/helpers')
 
 const { Given } = require('@cucumber/cucumber')
 const { BROKERS_AMOUNT, actions } = require('./brokers')

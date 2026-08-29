@@ -1,7 +1,8 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { random, promex, immediate } = require('@toa.io/generic')
+const { Promex } = require('promex')
+const { random, immediate } = require('../helpers')
 
 const { Connection } = require('../../source/shards')
 
@@ -32,11 +33,11 @@ describe('open', () => {
   it('should resolve when all of the connections are established', async () => {
     expect.assertions(2)
 
-    /** @type {toa.generic.Promex[]} */
+    /** @type {Promex[]} */
     const promises = []
 
     for (const conn of connections) {
-      const promise = promex()
+      const promise = new Promex()
 
       conn.open.mockImplementation(() => promise)
       promises.push(promise)

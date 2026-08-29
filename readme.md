@@ -299,7 +299,6 @@ If the specified encoding format is not supported, an exception will be thrown.
 The following encoding formats are supported:
 
 - `application/json`
-- `application/msgpack`
 - `application/octet-stream`
 - `text/plain`
 
@@ -314,6 +313,12 @@ the connection is restored.
 
 When the established connection is lost, it will be automatically restored.
 Reconnection attempts will be made indefinitely, with intervals increasing up to 30 seconds.
+Unless the URL sets one, a 15 second heartbeat is requested, so that a connection that is gone
+without a word, such as after a machine wakes from sleep, is noticed within a minute instead of
+being left to whatever the broker suggests.
+A connection that stays silent for three heartbeats is destroyed regardless of what the broker and
+the operating system have reported, since neither is guaranteed to report anything at all.
+Requesting `heartbeat=0` disables both.
 If the broker rejects the connection, for example, due to access being denied, an exception will be thrown.
 Once reconnected, the topology will be recovered, and any unanswered requests and unconfirmed events will be
 retransmitted.
@@ -496,7 +501,7 @@ Subscribe to one of the diagnostic events:
 - `flow`: back pressure is applied to a channel. [Channel type](./types/topology.d.ts) is passed as
   an argument.
 - `drain`: back pressure is removed from a channel. Channel type is passed.
-- `remove`: channel is removed from the [pool](#sharded-connection).
+- `remove`: channel is removed from the [pool](#sharded-connection), having failed to publish.
 - `lost`: a shard has lost its connection, hence the requests awaiting their replies on it are
   re-sent. Channel type is passed.
 - `recover`: channel's topology is recovered. Channel type is passed.
@@ -504,7 +509,13 @@ Subscribe to one of the diagnostic events:
   exceptions. Channel type,
   raw [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_consume)
   and the exception are passed as arguments.
+- `return`: message is returned by the broker as unroutable. Channel type and the raw
+  [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_publish) are
+  passed as arguments. In the case of a [sharded connection](#sharded-connection), the message is
+  reported only once every shard has rejected it.
 - `pause`: channel is paused. Channel type is passed.
+  In the case of a [sharded connection](#sharded-connection), it means that there is no shard left
+  to publish to, be it because every one of them has rejected a publish or lost its connection.
 - `resume`: channel is resumed. Channel type is passed.
 
 In the case of a [sharded connection](#sharded-connection), an additional argument specifying the

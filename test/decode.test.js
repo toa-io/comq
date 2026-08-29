@@ -2,7 +2,6 @@
 
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
-const { pack } = require('msgpackr')
 
 const { decode } = require('../source/decode')
 
@@ -15,18 +14,6 @@ it('should decode application/json', async () => {
   const json = JSON.stringify(object)
   const content = Buffer.from(json)
   const contentType = 'application/json'
-  const properties = { contentType }
-  const message = /** @type {comq.amqp.Message} */ { content, properties }
-
-  const decoded = decode(message)
-
-  expect(decoded).toStrictEqual(object)
-})
-
-it('should decode application/msgpack', async () => {
-  const object = { [generate()]: generate() }
-  const content = pack(object)
-  const contentType = 'application/msgpack'
   const properties = { contentType }
   const message = /** @type {comq.amqp.Message} */ { content, properties }
 

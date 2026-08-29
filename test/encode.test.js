@@ -1,7 +1,6 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { pack } = require('msgpackr')
 
 const { encode } = require('../source/encode')
 
@@ -24,14 +23,6 @@ it('should encode as json', async () => {
   const expected = Buffer.from(json)
 
   expect(buffer).toStrictEqual(expected)
-})
-
-it('should encode as msgpack', async () => {
-  const value = { [generate()]: generate() }
-  const packed = pack(value)
-  const buffer = encode(value, 'application/msgpack')
-
-  expect(buffer).toStrictEqual(packed)
 })
 
 /** @type {[comq.Encoding, string, Buffer][]} */

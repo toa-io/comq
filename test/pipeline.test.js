@@ -3,7 +3,7 @@
 const { EventEmitter } = require('node:events')
 const stream = require('node:stream')
 const { pipeline, transform } = require('../source/pipeline')
-const { timeout } = require('@toa.io/generic')
+const { timeout } = require('./helpers')
 
 /** @type {Channel} */
 let channel

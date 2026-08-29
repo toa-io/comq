@@ -1,8 +1,7 @@
 declare namespace comq {
 
   type Encoding =
-    'application/msgpack'
-    | 'application/json'
+    'application/json'
     | 'application/octet-stream'
     | 'text/plain'
 

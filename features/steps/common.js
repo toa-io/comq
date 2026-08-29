@@ -1,7 +1,7 @@
 'use strict'
 
 const { When } = require('@cucumber/cucumber')
-const { timeout } = require('@toa.io/generic')
+const { timeout } = require('../../test/helpers')
 
 When('after {number}ms',
   /**

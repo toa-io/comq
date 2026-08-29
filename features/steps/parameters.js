@@ -39,6 +39,12 @@ defineParameterType({
 })
 
 defineParameterType({
+  name: 'paused-event',
+  regexp: /(paused|resumed)/,
+  transformer: (value) => value
+})
+
+defineParameterType({
   name: 'message',
   regexp: /(request|event)/,
   transformer: (value) => value

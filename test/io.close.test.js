@@ -2,7 +2,8 @@
 
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
-const { promex, immediate } = require('@toa.io/generic')
+const { Promex } = require('promex')
+const { immediate } = require('./helpers')
 
 const mock = require('./connection.mock')
 const { IO } = require('../source/io')
@@ -93,7 +94,7 @@ describe('close', () => {
   })
 
   it('should wait for event processing completion', async () => {
-    const promise = /** @type {Promise<void>} */ promex()
+    const promise = /** @type {Promise<void>} */ new Promex()
     const queue = generate()
     const group = generate()
     const consumer = jest.fn(async () => promise)
@@ -128,7 +129,7 @@ describe('close', () => {
   })
 
   it('should wait for request processing completion', async () => {
-    const promise = /** @type {Promise<void>} */ promex()
+    const promise = /** @type {Promise<void>} */ new Promex()
     const producer = jest.fn(async () => promise)
 
     await reply(/** @type {Function} */ producer)
