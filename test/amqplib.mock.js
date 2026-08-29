@@ -23,7 +23,16 @@ class Connection extends EventEmitter {
 
     const stream = new EventEmitter()
 
-    stream.destroy = jest.fn()
+    // amqplib listens for 'error' and 'end' on the socket only, so destroying it
+    // without an error leaves the connection unaware and silent forever
+    stream.destroy = jest.fn((error) => {
+      if (error === undefined || stream.destroyed === true) return
+
+      stream.destroyed = true
+
+      this.emit('error', error)
+      this.emit('close', error)
+    })
 
     this.connection = { stream }
 

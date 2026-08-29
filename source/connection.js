@@ -200,7 +200,14 @@ class Connection {
     }
 
     connection.removeAllListeners()
-    connection.connection?.stream?.destroy()
+
+    // amqplib keeps its heartbeater running on a connection it does not know is
+    // gone and emits 'error' on it, which throws once no listener is left
+    connection.on('error', noop)
+
+    // a socket destroyed without an error tells amqplib nothing, leaving its
+    // timers running and everything pending on it hanging forever
+    connection.connection?.stream?.destroy(silence())
   }
 
   #recover () {
@@ -255,7 +262,11 @@ class Connection {
 
     const reset = () => {
       clearTimeout(this.#heartbeatTimer)
-      this.#heartbeatTimer = setTimeout(() => socket.destroy(), timeoutMs)
+      // destroying a socket without an error tells amqplib nothing: it only
+      // listens for 'error' and 'end', so a bare destroy() leaves the connection
+      // silently dead — no 'close' event, no recovery, every pending operation
+      // hanging forever
+      this.#heartbeatTimer = setTimeout(() => socket.destroy(silence()), timeoutMs)
       this.#heartbeatTimer.unref()
     }
 
@@ -321,6 +332,17 @@ function expiration () {
   const timeoutMs = global.COMQ_TESTING_SHUTDOWN_TIMEOUT ?? SHUTDOWN_MS
 
   return delay(timeoutMs, undefined, { ref: false })
+}
+
+/**
+ * @return {Error}
+ */
+function silence () {
+  const exception = new Error('Connection is silent')
+
+  exception.code = 'ETIMEDOUT'
+
+  return exception
 }
 
 function noop () {}

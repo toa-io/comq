@@ -139,6 +139,29 @@ describe('reconnection', () => {
     expect(amqplib.connect.mock.calls.length).toBeGreaterThanOrEqual(3)
   }, 15000)
 
+  it('should keep an error sink on a dropped connection', async () => {
+    const channel = await connection.createChannel('request')
+
+    channel.recover
+      .mockRejectedValueOnce(new Error('Channel closed'))
+      .mockResolvedValue(undefined)
+
+    conn.emit('close', new Error('lost'))
+
+    await timeout(10)
+
+    const dropped = await amqplib.connect.mock.results[1].value
+
+    // amqplib goes on emitting on a connection it does not know is gone, and an
+    // 'error' with no listener left takes the process down
+    expect(() => dropped.emit('error', new Error('Heartbeat timeout'))).not.toThrow()
+
+    // let the attempt that follows the failed recovery settle
+    const start = Date.now()
+
+    while (channel.recover.mock.calls.length < 2 && Date.now() - start < 10000) await timeout(50)
+  }, 15000)
+
   it('should emit error when reconnect open fails', async () => {
     const errors = []
     const unhandled = jest.fn()
@@ -377,6 +400,18 @@ describe('watchdog', () => {
     await jest.advanceTimersByTimeAsync(60_000)
 
     expect(conn.connection.stream.destroy).toHaveBeenCalled()
+  })
+
+  it('should reconnect after the watchdog destroys a silent connection', async () => {
+    jest.useFakeTimers()
+
+    await connection.open()
+
+    await jest.advanceTimersByTimeAsync(60_000)
+
+    // a socket destroyed without an error is a socket amqplib never reports,
+    // which leaves the connection silently dead instead of recovering
+    expect(amqplib.connect).toHaveBeenCalledTimes(2)
   })
 
   it('should not let a replaced socket disarm the watchdog', async () => {
