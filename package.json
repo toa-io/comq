@@ -38,7 +38,7 @@
     "@types/jest": "^30.0.0",
     "conventional-changelog-conventionalcommits": "^8.0.0",
     "fast-glob": "^3.3.3",
-    "fuzzysort": "3.1.0",
+    "fuzzysort": "4.0.2",
     "husky": "^9.1.7",
     "jest": "^30.4.2",
     "js-yaml": "^5.2.3",
