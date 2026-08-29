@@ -37,7 +37,10 @@ class Connection extends EventEmitter {
     // a broker accepts the heartbeat the client asks for
     const heartbeat = Number(/[?&]heartbeat=(\d+)/.exec(url)?.[1] ?? 60)
 
-    this.connection = { stream, heartbeat }
+    // and negotiates the channel limit down to whatever the client asked for
+    const channelMax = Number(/[?&]channelMax=(\d+)/.exec(url)?.[1] ?? 2047)
+
+    this.connection = { stream, heartbeat, channelMax }
 
     // noinspection JSValidateTypes
     this.removeAllListeners = jest.spyOn(this, 'removeAllListeners')

@@ -498,6 +498,9 @@ Subscribe to one of the diagnostic events:
 - `error`: an attempt to restore the connection has failed. The exception is passed as an argument.
   Attempts continue until one succeeds.
 - `reconnect`: an attempt to restore the connection has started. Followed by `open` or `error`.
+- `exhausted`: the connection has no channel left to allocate. The negotiated channel limit is
+  passed as an argument. Reconnecting does not free a channel, so the operation that asked for
+  one is rejected rather than retried.
 - `flow`: back pressure is applied to a channel. [Channel type](./types/topology.d.ts) is passed as
   an argument.
 - `drain`: back pressure is removed from a channel. Channel type is passed.
@@ -533,6 +536,7 @@ established, there is no way to capture the initial `open` event.
 io.diagnose('flow', (type) => console.log(`Back pressure was applied to the ${type} channel`))
 
 io.diagnose('reconnect', (shard) => console.log('AMQP reconnecting', { shard }))
+io.diagnose('exhausted', (limit, shard) => console.log('AMQP channels exhausted', { limit, shard }))
 io.diagnose('open', (shard) => console.log('AMQP connection established', { shard }))
 io.diagnose('close', (error, shard) => console.log('AMQP connection closed', { message: error?.message, shard }))
 io.diagnose('error', (error, shard) => console.log('AMQP connection failed', { message: error.message, shard }))

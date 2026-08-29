@@ -14,6 +14,7 @@ After(
   async function () {
     delete global.COMQ_TESTING_WATCHDOG_INTERVAL
     delete global.COMQ_TESTING_AMQP_HEARTBEAT
+    delete global.COMQ_TESTING_AMQP_CHANNEL_MAX
 
     await Promise.all(
       Array.from({ length: BROKERS_AMOUNT }, (_, n) => actions.up(n))

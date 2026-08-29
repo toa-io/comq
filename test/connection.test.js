@@ -398,6 +398,65 @@ describe('create channel', () => {
   })
 })
 
+describe('channel exhaustion', () => {
+  const EXHAUSTED = 'No channels left to allocate'
+
+  /** @type {jest.MockedObject<comq.amqp.Connection>} */
+  let conn
+
+  beforeEach(async () => {
+    await connection.open()
+
+    conn = await amqplib.connect.mock.results[0].value
+  })
+
+  it('should reject rather than wait for a recovery that is not coming', async () => {
+    create.mockImplementation(async () => { throw new Error(EXHAUSTED) })
+
+    // the regression is a hang, so the assertion is that it settles at all
+    const settled = await Promise.race([
+      connection.createChannel('event').then(() => 'resolved', (e) => e.message),
+      timeout(100).then(() => 'pending')
+    ])
+
+    expect(settled).toStrictEqual(EXHAUSTED)
+  })
+
+  it('should not retry', async () => {
+    create.mockImplementation(async () => { throw new Error(EXHAUSTED) })
+
+    await connection.createChannel('event').catch(() => undefined)
+
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it('should report the limit the broker negotiated', async () => {
+    const listener = jest.fn()
+
+    await connection.diagnose('exhausted', listener)
+
+    create.mockImplementation(async () => { throw new Error(EXHAUSTED) })
+
+    await connection.createChannel('event').catch(() => undefined)
+
+    expect(listener).toHaveBeenCalledWith(conn.connection.channelMax)
+  })
+
+  it('should leave every other failure its recovery', async () => {
+    create.mockImplementation(async () => { throw new Error() })
+
+    setTimeout(() => {
+      create.mockImplementation(async () => generate())
+
+      conn.emit('close', new Error())
+    }, 1)
+
+    const channel = await connection.createChannel('request')
+
+    expect(channel).toStrictEqual(await create.mock.results[1].value)
+  })
+})
+
 describe('watchdog', () => {
   afterEach(() => {
     jest.useRealTimers()

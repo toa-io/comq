@@ -100,17 +100,27 @@ class Context extends World {
   #url (i, user, password) {
     const address = this.networks[i]?.address ?? getAddress(i)
     const url = PROTOCOL + user + ':' + password + '@' + address
-    const heartbeat = global.COMQ_TESTING_AMQP_HEARTBEAT
+    const query = []
 
     // the watchdog measures silence, so it may only be shortened along with the
     // interval at which a healthy broker is expected to say something
-    return heartbeat === undefined ? url : url + '?heartbeat=' + heartbeat
+    if (global.COMQ_TESTING_AMQP_HEARTBEAT !== undefined) {
+      query.push('heartbeat=' + global.COMQ_TESTING_AMQP_HEARTBEAT)
+    }
+
+    // a broker negotiates the channel limit down to what the client asks for,
+    // which is how exhaustion is reached without opening two thousand channels
+    if (global.COMQ_TESTING_AMQP_CHANNEL_MAX !== undefined) {
+      query.push('channelMax=' + global.COMQ_TESTING_AMQP_CHANNEL_MAX)
+    }
+
+    return query.length === 0 ? url : url + '?' + query.join('&')
   }
 }
 
 const PROTOCOL = 'amqp://'
 
 /** @type {comq.diagnostics.Event[]} */
-const EVENTS = ['open', 'close', 'flow', 'discard', 'pause', 'resume']
+const EVENTS = ['open', 'close', 'flow', 'discard', 'pause', 'resume', 'exhausted']
 
 exports.Context = Context
