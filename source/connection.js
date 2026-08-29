@@ -51,9 +51,6 @@ class Connection {
    */
   constructor (url) {
     this.#url = heartbeaten(url)
-
-    // EventEmitter throws on 'error' with no listeners
-    this.#diagnostics.on('error', noop)
   }
 
   get connected () {

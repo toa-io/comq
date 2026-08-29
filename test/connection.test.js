@@ -163,6 +163,18 @@ describe('reconnection', () => {
     while (channel.recover.mock.calls.length < 2 && Date.now() - start < 10000) await timeout(50)
   }, 15000)
 
+  it('should reconnect despite a listener that throws', async () => {
+    // a diagnostic listener has no business breaking the reconnection it reports
+    connection.diagnose('reconnect', () => { throw new Error('listener') })
+    connection.diagnose('open', () => { throw new Error('listener') })
+
+    conn.emit('close', new Error('lost'))
+
+    await expect(connection.createChannel('event')).resolves.toBeDefined()
+
+    expect(amqplib.connect).toHaveBeenCalledTimes(2)
+  }, 10000)
+
   it('should emit error when reconnect open fails', async () => {
     const errors = []
     const unhandled = jest.fn()

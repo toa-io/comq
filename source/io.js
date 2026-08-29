@@ -1,7 +1,6 @@
 'use strict'
 
 const stream = require('node:stream')
-const { EventEmitter } = require('node:events')
 const { randomBytes } = require('node:crypto')
 const { setTimeout } = require('node:timers/promises')
 const { Promex } = require('promex')
@@ -11,6 +10,7 @@ const { decode } = require('./decode')
 const { encode } = require('./encode')
 const { pipeline, transform } = require('./pipeline')
 const events = require('./events')
+const emitter = require('./emitter')
 const io = require('./.io')
 
 /**
@@ -44,16 +44,13 @@ class IO {
   /** @type {Set<comq.Destroyable>} */
   #replyPipes = new Set()
 
-  #diagnostics = new EventEmitter()
+  #diagnostics = emitter.create()
 
   /**
    * @param {comq.Connection} connection
    */
   constructor (connection) {
     this.#connection = connection
-
-    // EventEmitter throws on 'error' with no listeners
-    this.#diagnostics.on('error', noop)
 
     for (const event of events.connection) {
       this.#connection.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args))

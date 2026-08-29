@@ -19,9 +19,6 @@ class Connection {
   constructor (connections) {
     this.#connections = connections
 
-    // EventEmitter throws on 'error' with no listeners
-    this.#diagnostics.on('error', noop)
-
     connections.map(this.#pipe)
   }
 
@@ -74,7 +71,5 @@ class Connection {
     throw exception
   }
 }
-
-function noop () {}
 
 exports.Connection = Connection
