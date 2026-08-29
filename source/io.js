@@ -220,6 +220,10 @@ class IO {
     } else {
       this.#requests.diagnose('recover', this.#retransmit)
     }
+
+    // a reply that could not be routed is dropped by the broker, and the queue
+    // it was addressed to only exists again once this channel has recovered
+    this.#replies.diagnose('recover', this.#retransmit)
   }
 
   /**

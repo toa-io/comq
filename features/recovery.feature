@@ -84,6 +84,36 @@ Feature: Request-Reply Topology Recovery
     5
     """
 
+  Scenario: Sending another request while the broker is down
+
+  The reply queue is already being consumed from, so the request is published as soon as the
+  request channel recovers, which is before the reply queue has been declared again
+
+    Given function replying `add_numbers` queue:
+    """
+    ({ a, b }) => { return a + b }
+    """
+    When the consumer sends the following request to the `add_numbers` queue:
+    """yaml
+    a: 1
+    b: 2
+    """
+    Then the consumer receives the reply:
+    """yaml
+    3
+    """
+    When the broker has crashed
+    And the consumer sends the following request to the `add_numbers` queue:
+    """yaml
+    a: 2
+    b: 3
+    """
+    Then the broker is up
+    And the consumer receives the reply:
+    """yaml
+    5
+    """
+
   Scenario: Defining emitter while the broker is down
     Given the broker is down
     And `logger` consuming events from the `numbers_added` exchange is expected
