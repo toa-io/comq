@@ -27,6 +27,10 @@ declare namespace comq {
 
     seal (): Promise<void>
 
+    close (): Promise<void>
+
+    readonly closed: boolean
+
     diagnose (event: _diagnostics.Event, listener: Function): void
 
     forget (event: _diagnostics.Event, listener: Function): void

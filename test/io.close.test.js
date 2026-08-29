@@ -93,6 +93,27 @@ describe('close', () => {
     await expect(io.close()).resolves.not.toThrow()
   })
 
+  // a connection is shared and outlives its IOs, and it has a limited number of channels
+  it('should give the channels back', async () => {
+    await reply()
+    await io.close()
+
+    expect(requests.close).toHaveBeenCalled()
+    expect(events.close).toHaveBeenCalled()
+  })
+
+  it('should give them back before letting go of the connection', async () => {
+    await reply()
+
+    connection.close.mockImplementation(async () => {
+      expect(requests.close).toHaveBeenCalled()
+    })
+
+    await io.close()
+
+    expect.assertions(1)
+  })
+
   it('should wait for event processing completion', async () => {
     const promise = /** @type {Promise<void>} */ new Promex()
     const queue = generate()

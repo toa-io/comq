@@ -99,6 +99,7 @@ class Connection {
       const topology = presets[type]
       const channel = await channels.create(this.#connection, topology, index)
 
+      this.#channels = this.#channels.filter((channel) => !channel.closed)
       this.#channels.push(channel)
 
       return channel
@@ -140,6 +141,8 @@ class Connection {
     this.#diagnostics.emit('open')
 
     try {
+      this.#channels = this.#channels.filter((channel) => !channel.closed)
+
       for (const channel of this.#channels) await channel.recover(connection)
     } catch (exception) {
       this.#diagnostics.emit('error', exception)
@@ -207,7 +210,20 @@ class Connection {
     connection.connection?.stream?.destroy(silence())
   }
 
-  #recover () {
+  /**
+   * @param {Error} [exception]
+   * @return {Promise<void> | false}
+   */
+  #recover (exception) {
+    // a connection that has no channel left to give is not something reconnecting
+    // fixes, and `#recovery` on a connection that is perfectly well is a promise
+    // nobody ever resolves — returning `false` lets the caller see the refusal
+    if (exception?.message === EXHAUSTED) {
+      this.#diagnostics.emit('exhausted', this.#connection?.connection?.channelMax)
+
+      return false
+    }
+
     return this.#recovery
   }
 
@@ -332,6 +348,9 @@ const SOCKET_OPTIONS = {
 }
 
 const HEARTBEAT_SET = /[?&]heartbeat=/
+
+/** What amqplib says when the negotiated channel limit leaves no identifier free. */
+const EXHAUSTED = 'No channels left to allocate'
 
 const TRANSIENT_CODES = new Set([
   'ECONNREFUSED',

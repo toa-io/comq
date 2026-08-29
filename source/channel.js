@@ -42,6 +42,8 @@ class Channel {
 
   #diagnostics = emitter.create()
 
+  #closed = false
+
   /**
    * @param {comq.amqp.Connection} connection
    * @param {comq.Topology} topology
@@ -126,6 +128,21 @@ class Channel {
     }
   }
 
+  /**
+   * Gives the channel back. A connection has a limited number of them, and one whose
+   * IO is done with it would otherwise be held until the whole connection goes.
+   */
+  async close () {
+    if (this.#closed) return
+
+    this.#closed = true
+
+    await this.seal()
+
+    // a channel that went down with its connection is the outcome this asks for
+    await this.#channel?.close().catch(noop)
+  }
+
   async seal () {
     this.#sealed = true
 
@@ -140,6 +157,10 @@ class Channel {
 
   forget (event, listener) {
     this.#diagnostics.off(event, listener)
+  }
+
+  get closed () {
+    return this.#closed
   }
 
   async recover (connection) {
