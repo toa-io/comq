@@ -163,6 +163,12 @@ class IO {
     await this.seal()
     await this.#destroyStreams(this.#replyPipes)
     await track(this)
+
+    // a connection is shared and outlives its IOs, so the channels are given back
+    // here — held to the end of the connection, they would run it out of them
+    await Promise.all([this.#requests, this.#replies, this.#events]
+      .map((channel) => channel?.close()))
+
     await this.#connection.close()
   })
 

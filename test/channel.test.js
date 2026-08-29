@@ -503,6 +503,49 @@ describe('seal', () => {
   })
 })
 
+describe('close', () => {
+  const queue = generate()
+  const consumer = jest.fn()
+
+  beforeEach(async () => {
+    channel = await create(connection, topology)
+    chan = await getCreatedChannel()
+  })
+
+  it('should give the channel back', async () => {
+    await channel.close()
+
+    expect(chan.close).toHaveBeenCalled()
+    expect(channel.closed).toStrictEqual(true)
+  })
+
+  it('should stop consuming before giving it back', async () => {
+    await channel.consume(queue, consumer)
+
+    const { consumerTag: tag } = await chan.consume.mock.results[0].value
+
+    await channel.close()
+
+    expect(chan.cancel).toHaveBeenCalledWith(tag)
+    expect(chan.cancel.mock.invocationCallOrder[0])
+      .toBeLessThan(chan.close.mock.invocationCallOrder[0])
+  })
+
+  it('should give it back once', async () => {
+    await channel.close()
+    await channel.close()
+
+    expect(chan.close).toHaveBeenCalledTimes(1)
+  })
+
+  // one that went down with its connection is the outcome this asks for
+  it('should ignore one that is already gone', async () => {
+    chan.close.mockImplementationOnce(async () => { throw new Error() })
+
+    await expect(channel.close()).resolves.not.toThrow()
+  })
+})
+
 describe('back pressure', () => {
   const exchange = generate()
   const queue = generate()

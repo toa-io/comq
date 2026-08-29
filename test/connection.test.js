@@ -398,6 +398,47 @@ describe('create channel', () => {
   })
 })
 
+describe('closed channels', () => {
+  /** @type {jest.MockedObject<comq.amqp.Connection>} */
+  let conn
+
+  beforeEach(async () => {
+    // an earlier case leaves an implementation of its own behind
+    create.mockImplementation(async () => ({ recover: jest.fn(async () => undefined), closed: false }))
+
+    await connection.open()
+
+    conn = await amqplib.connect.mock.results[0].value
+  })
+
+  afterEach(async () => {
+    await connection.close()
+  })
+
+  // a channel given back is not one this connection has any more
+  it('should not recover one that was given back', async () => {
+    const channel = await connection.createChannel('event')
+
+    channel.closed = true
+
+    conn.emit('close', new Error())
+
+    await timeout(50)
+
+    expect(channel.recover).not.toHaveBeenCalled()
+  })
+
+  it('should recover one that is still in use', async () => {
+    const channel = await connection.createChannel('event')
+
+    conn.emit('close', new Error())
+
+    await timeout(50)
+
+    expect(channel.recover).toHaveBeenCalled()
+  })
+})
+
 describe('channel exhaustion', () => {
   const EXHAUSTED = 'No channels left to allocate'
 

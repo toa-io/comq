@@ -77,6 +77,14 @@ class Channel {
     return await this.#one((channel) => channel.fire(queue, buffer, options))
   }
 
+  async close () {
+    await this.#all((channel) => channel.close())
+  }
+
+  get closed () {
+    return [...this.#channels].every((channel) => channel.closed)
+  }
+
   async seal () {
     await this.#all((channel) => channel.seal())
   }

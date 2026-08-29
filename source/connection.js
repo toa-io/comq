@@ -99,6 +99,7 @@ class Connection {
       const topology = presets[type]
       const channel = await channels.create(this.#connection, topology, index)
 
+      this.#channels = this.#channels.filter((channel) => !channel.closed)
       this.#channels.push(channel)
 
       return channel
@@ -140,6 +141,8 @@ class Connection {
     this.#diagnostics.emit('open')
 
     try {
+      this.#channels = this.#channels.filter((channel) => !channel.closed)
+
       for (const channel of this.#channels) await channel.recover(connection)
     } catch (exception) {
       this.#diagnostics.emit('error', exception)
