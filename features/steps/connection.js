@@ -167,6 +167,19 @@ Then('the connection is {connection-event}',
     assert.equal(this.events[event], true, 'connection was not ' + key)
   })
 
+Then('the connection is lost within {number} second(s)',
+  /**
+   * @param {number} seconds
+   * @this {comq.features.Context}
+   */
+  async function (seconds) {
+    const deadline = Date.now() + seconds * 1000
+
+    while (this.events.close !== true && Date.now() < deadline) await timeout(50)
+
+    assert.equal(this.events.close, true, 'connection was not lost')
+  })
+
 Given('the connection has started sealing',
   /**
    * @this {comq.features.Context}

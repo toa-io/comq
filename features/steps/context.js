@@ -34,6 +34,9 @@ class Context extends World {
   streamsEnded = {}
   generatorDestroyed = false
 
+  /** @type {comq.features.Network[]} */
+  networks = []
+
   async connect (user, password) {
     const urls = this.#urls(user, password)
 
@@ -44,6 +47,12 @@ class Context extends World {
     const urls = this.#urls(user, password)
 
     await this.#connect(urls, assert)
+  }
+
+  async unplug () {
+    await Promise.all(this.networks.map((network) => network.close()))
+
+    this.networks = []
   }
 
   async disconnect () {
@@ -89,7 +98,8 @@ class Context extends World {
   }
 
   #url (i, user, password) {
-    const url = PROTOCOL + user + ':' + password + '@' + getAddress(i)
+    const address = this.networks[i]?.address ?? getAddress(i)
+    const url = PROTOCOL + user + ':' + password + '@' + address
     const heartbeat = global.COMQ_TESTING_AMQP_HEARTBEAT
 
     // the watchdog measures silence, so it may only be shortened along with the
