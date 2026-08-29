@@ -182,6 +182,20 @@ describe('send', () => {
     expect(requests.send).toHaveBeenCalledTimes(2)
   })
 
+  // a reply that could not be routed has been dropped by the broker
+  it('should resend unanswered Requests when the reply channel recovers', async () => {
+    expect(replies.diagnose).toHaveBeenCalledWith('recover', expect.any(Function))
+
+    const calls = replies.diagnose.mock.calls.filter((call) => call[0] === 'recover')
+    const listeners = calls.map((call) => call[1])
+
+    for (const listener of listeners) listener()
+
+    await immediate()
+
+    expect(requests.send).toHaveBeenCalledTimes(2)
+  })
+
   it('should resend unanswered Requests on sharded connection', async () => {
     jest.clearAllMocks()
 

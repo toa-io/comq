@@ -31,6 +31,9 @@ class Channel {
   /** @type {Map<comq.Channel, Promex>} */
   #bench = new Map()
 
+  /** @type {boolean} */
+  #paused = false
+
   /** @type {comq.topology.type} */
   #type
 
@@ -126,6 +129,9 @@ class Channel {
       this.#alive[index] = false
       this.#down[index].resolve()
 
+      // the channel stays in the pool, yet there is one less shard to publish to
+      this.#update()
+
       if (error !== undefined && connection.closed !== true) {
         this.#diagnostics.emit(LOST, index)
       }
@@ -134,6 +140,8 @@ class Channel {
     connection.diagnose('open', () => {
       this.#alive[index] = true
       this.#down[index] = new Promex()
+
+      this.#update()
     })
   }
 
@@ -159,6 +167,7 @@ class Channel {
     for (const event of events.channel) {
       if (event === RETURN) continue // returns are retried before being reported
       if (event === LOST) continue // a shard is lost with its connection, not its channel
+      if (event === REMOVE) continue // it is the pool that removes a channel, not the channel
 
       channel.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args, channel.index))
     }
@@ -214,20 +223,23 @@ class Channel {
     this.#bench.set(channel, new Promex())
     this.#channels.delete(channel)
     this.#update()
-    this.#diagnostics.emit('remove', channel.index)
+    this.#diagnostics.emit(REMOVE, channel.index)
   }
 
+  /**
+   * A shard leaves the pool when it rejects a publish, and stops being reachable
+   * when its connection is lost, which the pool is not told about. Both leave
+   * `#one` waiting, so both are reported the same way.
+   */
   #update () {
-    const from = this.#pool?.length
-    const to = this.#channels.size
-
     this.#pool = Array.from(this.#channels)
 
-    if (from === undefined) return
+    const paused = this.#reachable().length === 0
 
-    if (from !== 0 && to === 0) { this.#diagnostics.emit('pause') }
+    if (paused === this.#paused) return
 
-    if (from === 0 && to !== 0) { this.#diagnostics.emit('resume') }
+    this.#paused = paused
+    this.#diagnostics.emit(paused ? 'pause' : 'resume')
   }
 
   /**
@@ -369,6 +381,7 @@ async function create (connections, type) {
 
 const DEFAULT = ''
 const RETURN = 'return'
+const REMOVE = 'remove'
 const RETURN_HEADER = 'x-return'
 const LOST = 'lost'
 

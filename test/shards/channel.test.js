@@ -131,6 +131,31 @@ it('should wait for a shard to recover when all are lost', async () => {
   expect(channels[1].send).not.toHaveBeenCalled()
 })
 
+it('should pause when no shard is left to publish to', async () => {
+  channel = await create(connections, type)
+
+  const pause = /** @type {jest.MockedFunction} */ jest.fn()
+  const resume = /** @type {jest.MockedFunction} */ jest.fn()
+
+  channel.diagnose('pause', pause)
+  channel.diagnose('resume', resume)
+
+  lose(connections[0])
+
+  // the other shard is still reachable
+  expect(pause).not.toHaveBeenCalled()
+
+  lose(connections[1])
+
+  expect(pause).toHaveBeenCalledTimes(1)
+  expect(resume).not.toHaveBeenCalled()
+
+  restore(connections[1])
+
+  expect(resume).toHaveBeenCalledTimes(1)
+  expect(pause).toHaveBeenCalledTimes(1)
+})
+
 // a lost shard is not benched, so it is used again as soon as it reconnects
 it('should publish to a recovered shard', async () => {
   channel = await create(connections, type)
@@ -655,6 +680,34 @@ function emitReturn (channel, message) {
   expect(calls.length).toBeGreaterThan(0)
 
   for (const call of calls) call[1](message)
+}
+
+/**
+ * @param {jest.MockedObject<comq.Connection>} connection
+ * @param {Error} [error]
+ */
+function lose (connection, error) {
+  emit(connection, 'close', error)
+}
+
+/**
+ * @param {jest.MockedObject<comq.Connection>} connection
+ */
+function restore (connection) {
+  emit(connection, 'open')
+}
+
+/**
+ * @param {jest.MockedObject<comq.Connection>} connection
+ * @param {comq.diagnostics.Event} event
+ * @param {any[]} args
+ */
+function emit (connection, event, ...args) {
+  const calls = connection.diagnose.mock.calls.filter((call) => call[0] === event)
+
+  expect(calls.length).toBeGreaterThan(0)
+
+  for (const call of calls) call[1](...args)
 }
 
 /**

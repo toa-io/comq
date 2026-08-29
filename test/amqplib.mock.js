@@ -18,14 +18,26 @@ class Channel extends EventEmitter {
 }
 
 class Connection extends EventEmitter {
-  constructor () {
+  constructor (url = '') {
     super()
 
     const stream = new EventEmitter()
 
-    stream.destroy = jest.fn()
+    // amqplib listens for 'error' and 'end' on the socket only, so destroying it
+    // without an error leaves the connection unaware and silent forever
+    stream.destroy = jest.fn((error) => {
+      if (error === undefined || stream.destroyed === true) return
 
-    this.connection = { stream }
+      stream.destroyed = true
+
+      this.emit('error', error)
+      this.emit('close', error)
+    })
+
+    // a broker accepts the heartbeat the client asks for
+    const heartbeat = Number(/[?&]heartbeat=(\d+)/.exec(url)?.[1] ?? 60)
+
+    this.connection = { stream, heartbeat }
 
     // noinspection JSValidateTypes
     this.removeAllListeners = jest.spyOn(this, 'removeAllListeners')
@@ -39,7 +51,7 @@ class Connection extends EventEmitter {
   close = jest.fn(async () => undefined)
 }
 
-const connect = async () => new Connection()
+const connect = async (url) => new Connection(url)
 
 /** @type {jest.MockedObject<import('amqplib')>} */
 const amqplib = {

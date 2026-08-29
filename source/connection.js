@@ -50,10 +50,7 @@ class Connection {
    * @param {string} url
    */
   constructor (url) {
-    this.#url = url
-
-    // EventEmitter throws on 'error' with no listeners
-    this.#diagnostics.on('error', noop)
+    this.#url = heartbeaten(url)
   }
 
   get connected () {
@@ -200,7 +197,14 @@ class Connection {
     }
 
     connection.removeAllListeners()
-    connection.connection?.stream?.destroy()
+
+    // amqplib keeps its heartbeater running on a connection it does not know is
+    // gone and emits 'error' on it, which throws once no listener is left
+    connection.on('error', noop)
+
+    // a socket destroyed without an error tells amqplib nothing, leaving its
+    // timers running and everything pending on it hanging forever
+    connection.connection?.stream?.destroy(silence())
   }
 
   #recover () {
@@ -215,7 +219,7 @@ class Connection {
    * @return {Promise<comq.amqp.Connection>}
    */
   async #connect () {
-    const connecting = amqp.connect(this.#url, { timeout: CONNECT_MS })
+    const connecting = amqp.connect(this.#url, SOCKET_OPTIONS)
 
     let timer
 
@@ -248,18 +252,22 @@ class Connection {
    * @param {comq.amqp.Connection} connection
    * @param {number} [timeoutMs]
    */
-  #armWatchdog (connection, timeoutMs = global.COMQ_TESTING_WATCHDOG_INTERVAL ?? WATCHDOG_MS) {
+  #armWatchdog (connection, timeoutMs = tolerance(connection)) {
+    this.#disarmWatchdog()
+
     const socket = connection.connection?.stream
 
-    if (socket === undefined) return
+    if (socket === undefined || timeoutMs === undefined) return
 
     const reset = () => {
       clearTimeout(this.#heartbeatTimer)
-      this.#heartbeatTimer = setTimeout(() => socket.destroy(), timeoutMs)
+      // destroying a socket without an error tells amqplib nothing: it only
+      // listens for 'error' and 'end', so a bare destroy() leaves the connection
+      // silently dead — no 'close' event, no recovery, every pending operation
+      // hanging forever
+      this.#heartbeatTimer = setTimeout(() => socket.destroy(silence()), timeoutMs)
       this.#heartbeatTimer.unref()
     }
-
-    this.#disarmWatchdog()
 
     this.#heartbeatSocket = socket
     this.#heartbeatReset = reset
@@ -289,7 +297,25 @@ class Connection {
   }
 }
 
+/**
+ * The heartbeat to ask for when the caller has not, in seconds. A broker is free
+ * to suggest one that leaves a connection lost for minutes before anything
+ * notices, and RabbitMQ suggests 60 by default.
+ *
+ * @type {number}
+ */
+const HEARTBEAT_S = 15
+
 /** @type {number} */
+const KEEPALIVE_MS = 10_000
+
+/** How many heartbeats a connection may miss before it is destroyed. */
+const MISSED_HEARTBEATS = 3
+
+/** @type {number} */
+const WATCHDOG_MIN_MS = 15_000
+
+/** The watchdog interval used when the negotiated heartbeat is unknown. */
 const WATCHDOG_MS = 60_000
 
 /** @type {number} */
@@ -297,6 +323,15 @@ const CONNECT_MS = 30_000
 
 /** @type {number} */
 const SHUTDOWN_MS = 5_000
+
+const SOCKET_OPTIONS = {
+  timeout: CONNECT_MS,
+  // a peer that went away without a word is noticed by the kernel as well
+  keepAlive: true,
+  keepAliveDelay: KEEPALIVE_MS
+}
+
+const HEARTBEAT_SET = /[?&]heartbeat=/
 
 const TRANSIENT_CODES = new Set([
   'ECONNREFUSED',
@@ -321,6 +356,52 @@ function expiration () {
   const timeoutMs = global.COMQ_TESTING_SHUTDOWN_TIMEOUT ?? SHUTDOWN_MS
 
   return delay(timeoutMs, undefined, { ref: false })
+}
+
+/**
+ * amqplib reads the heartbeat from the URL only, hence it cannot be passed along
+ * with the socket options.
+ *
+ * @param {string} url
+ * @return {string}
+ */
+function heartbeaten (url) {
+  if (HEARTBEAT_SET.test(url)) return url
+
+  return url + (url.includes('?') ? '&' : '?') + 'heartbeat=' + HEARTBEAT_S
+}
+
+/**
+ * The watchdog measures silence, so it cannot be shorter than the interval at
+ * which a healthy broker is expected to say something, which is a heartbeat
+ * frame every half a heartbeat. A connection that has agreed to no heartbeats
+ * says nothing at all while it is idle, leaving nothing to measure.
+ *
+ * @param {comq.amqp.Connection} connection
+ * @return {number | undefined}
+ */
+function tolerance (connection) {
+  const override = global.COMQ_TESTING_WATCHDOG_INTERVAL
+
+  if (override !== undefined) return override
+
+  const heartbeat = connection.connection?.heartbeat
+
+  if (heartbeat === undefined) return WATCHDOG_MS
+  if (heartbeat === 0) return undefined
+
+  return Math.max(heartbeat * MISSED_HEARTBEATS * 1000, WATCHDOG_MIN_MS)
+}
+
+/**
+ * @return {Error}
+ */
+function silence () {
+  const exception = new Error('Connection is silent')
+
+  exception.code = 'ETIMEDOUT'
+
+  return exception
 }
 
 function noop () {}

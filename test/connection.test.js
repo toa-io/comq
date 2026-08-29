@@ -38,7 +38,8 @@ describe('initial connection', () => {
   it('should connect', async () => {
     await connection.open()
 
-    expect(amqplib.connect).toHaveBeenCalledWith(url, { timeout: expect.any(Number) })
+    expect(amqplib.connect).toHaveBeenCalledWith(expect.stringContaining(url),
+      expect.objectContaining({ timeout: expect.any(Number) }))
   })
 
   it.each(/** @type {[string, Partial<Error>][]} */[
@@ -138,6 +139,41 @@ describe('reconnection', () => {
     expect(channel.recover).toHaveBeenCalledTimes(2)
     expect(amqplib.connect.mock.calls.length).toBeGreaterThanOrEqual(3)
   }, 15000)
+
+  it('should keep an error sink on a dropped connection', async () => {
+    const channel = await connection.createChannel('request')
+
+    channel.recover
+      .mockRejectedValueOnce(new Error('Channel closed'))
+      .mockResolvedValue(undefined)
+
+    conn.emit('close', new Error('lost'))
+
+    await timeout(10)
+
+    const dropped = await amqplib.connect.mock.results[1].value
+
+    // amqplib goes on emitting on a connection it does not know is gone, and an
+    // 'error' with no listener left takes the process down
+    expect(() => dropped.emit('error', new Error('Heartbeat timeout'))).not.toThrow()
+
+    // let the attempt that follows the failed recovery settle
+    const start = Date.now()
+
+    while (channel.recover.mock.calls.length < 2 && Date.now() - start < 10000) await timeout(50)
+  }, 15000)
+
+  it('should reconnect despite a listener that throws', async () => {
+    // a diagnostic listener has no business breaking the reconnection it reports
+    connection.diagnose('reconnect', () => { throw new Error('listener') })
+    connection.diagnose('open', () => { throw new Error('listener') })
+
+    conn.emit('close', new Error('lost'))
+
+    await expect(connection.createChannel('event')).resolves.toBeDefined()
+
+    expect(amqplib.connect).toHaveBeenCalledTimes(2)
+  }, 10000)
 
   it('should emit error when reconnect open fails', async () => {
     const errors = []
@@ -374,9 +410,21 @@ describe('watchdog', () => {
 
     const conn = await amqplib.connect.mock.results[0].value
 
-    await jest.advanceTimersByTimeAsync(60_000)
+    await jest.advanceTimersByTimeAsync(46_000)
 
     expect(conn.connection.stream.destroy).toHaveBeenCalled()
+  })
+
+  it('should reconnect after the watchdog destroys a silent connection', async () => {
+    jest.useFakeTimers()
+
+    await connection.open()
+
+    await jest.advanceTimersByTimeAsync(46_000)
+
+    // a socket destroyed without an error is a socket amqplib never reports,
+    // which leaves the connection silently dead instead of recovering
+    expect(amqplib.connect).toHaveBeenCalledTimes(2)
   })
 
   it('should not let a replaced socket disarm the watchdog', async () => {
@@ -408,17 +456,88 @@ describe('watchdog', () => {
 
     const conn = await amqplib.connect.mock.results[0].value
 
-    await jest.advanceTimersByTimeAsync(50_000)
+    await jest.advanceTimersByTimeAsync(40_000)
 
     conn.connection.stream.emit('data', Buffer.alloc(0))
 
-    await jest.advanceTimersByTimeAsync(50_000)
+    await jest.advanceTimersByTimeAsync(40_000)
 
     expect(conn.connection.stream.destroy).not.toHaveBeenCalled()
 
     await jest.advanceTimersByTimeAsync(10_000)
 
     expect(conn.connection.stream.destroy).toHaveBeenCalled()
+  })
+
+  it('should derive the watchdog from the negotiated heartbeat', async () => {
+    jest.useFakeTimers()
+
+    const connection = new Connection('amqp://localhost?heartbeat=30')
+
+    await connection.open()
+
+    const conn = await amqplib.connect.mock.results[0].value
+
+    // the broker is only expected to say something every 15 seconds
+    await jest.advanceTimersByTimeAsync(60_000)
+
+    expect(conn.connection.stream.destroy).not.toHaveBeenCalled()
+
+    await jest.advanceTimersByTimeAsync(31_000)
+
+    expect(conn.connection.stream.destroy).toHaveBeenCalled()
+  })
+
+  it('should not arm the watchdog when heartbeats are disabled', async () => {
+    jest.useFakeTimers()
+
+    const connection = new Connection('amqp://localhost?heartbeat=0')
+
+    await connection.open()
+
+    const conn = await amqplib.connect.mock.results[0].value
+
+    // an idle connection that has agreed to no heartbeats is silent by design
+    await jest.advanceTimersByTimeAsync(600_000)
+
+    expect(conn.connection.stream.destroy).not.toHaveBeenCalled()
+  })
+})
+
+describe('heartbeat', () => {
+  it('should ask for a heartbeat', async () => {
+    const connection = new Connection('amqp://developer@localhost')
+
+    await connection.open()
+
+    expect(amqplib.connect).toHaveBeenCalledWith('amqp://developer@localhost?heartbeat=15',
+      expect.anything())
+  })
+
+  it('should append the heartbeat to an existing query', async () => {
+    const connection = new Connection('amqp://localhost?frameMax=8192')
+
+    await connection.open()
+
+    expect(amqplib.connect).toHaveBeenCalledWith('amqp://localhost?frameMax=8192&heartbeat=15',
+      expect.anything())
+  })
+
+  it.each(['amqp://localhost?heartbeat=5', 'amqp://localhost?heartbeat=0'])(
+    'should keep the heartbeat requested by the caller (%s)',
+    async (url) => {
+      const connection = new Connection(url)
+
+      await connection.open()
+
+      expect(amqplib.connect).toHaveBeenCalledWith(url, expect.anything())
+    })
+
+  it('should keep the socket alive', async () => {
+    await connection.open()
+
+    expect(amqplib.connect)
+      .toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ keepAlive: true }))
   })
 })
 

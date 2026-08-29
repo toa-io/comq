@@ -167,6 +167,27 @@ Then('the connection is {connection-event}',
     assert.equal(this.events[event], true, 'connection was not ' + key)
   })
 
+Then('the connection is lost within {number} second(s)',
+  /**
+   * @param {number} seconds
+   * @this {comq.features.Context}
+   */
+  async function (seconds) {
+    await emitted.call(this, 'close', seconds, 'connection was not lost')
+  })
+
+Then('publishing is {paused-event} within {number} second(s)',
+  /**
+   * @param {'paused' | 'resumed'} key
+   * @param {number} seconds
+   * @this {comq.features.Context}
+   */
+  async function (key, seconds) {
+    const event = PUBLISHING_EVENTS[key]
+
+    await emitted.call(this, event, seconds, 'publishing was not ' + key)
+  })
+
 Given('the connection has started sealing',
   /**
    * @this {comq.features.Context}
@@ -195,6 +216,25 @@ const connect = async (context, user, password) => {
   } catch (exception) {
     context.exception = exception instanceof AggregateError ? exception.errors[0] : exception
   }
+}
+
+/**
+ * @param {comq.diagnostics.Event} event
+ * @param {number} seconds
+ * @param {string} message
+ * @this {comq.features.Context}
+ */
+async function emitted (event, seconds, message) {
+  const deadline = Date.now() + seconds * 1000
+
+  while (this.events[event] !== true && Date.now() < deadline) await timeout(50)
+
+  assert.equal(this.events[event], true, message)
+}
+
+const PUBLISHING_EVENTS = {
+  paused: 'pause',
+  resumed: 'resume'
 }
 
 const CONNECTION_EVENTS = {
