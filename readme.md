@@ -313,6 +313,12 @@ the connection is restored.
 
 When the established connection is lost, it will be automatically restored.
 Reconnection attempts will be made indefinitely, with intervals increasing up to 30 seconds.
+Unless the URL sets one, a 15 second heartbeat is requested, so that a connection that is gone
+without a word, such as after a machine wakes from sleep, is noticed within a minute instead of
+being left to whatever the broker suggests.
+A connection that stays silent for three heartbeats is destroyed regardless of what the broker and
+the operating system have reported, since neither is guaranteed to report anything at all.
+Requesting `heartbeat=0` disables both.
 If the broker rejects the connection, for example, due to access being denied, an exception will be thrown.
 Once reconnected, the topology will be recovered, and any unanswered requests and unconfirmed events will be
 retransmitted.

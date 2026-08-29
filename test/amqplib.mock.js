@@ -18,7 +18,7 @@ class Channel extends EventEmitter {
 }
 
 class Connection extends EventEmitter {
-  constructor () {
+  constructor (url = '') {
     super()
 
     const stream = new EventEmitter()
@@ -34,7 +34,10 @@ class Connection extends EventEmitter {
       this.emit('close', error)
     })
 
-    this.connection = { stream }
+    // a broker accepts the heartbeat the client asks for
+    const heartbeat = Number(/[?&]heartbeat=(\d+)/.exec(url)?.[1] ?? 60)
+
+    this.connection = { stream, heartbeat }
 
     // noinspection JSValidateTypes
     this.removeAllListeners = jest.spyOn(this, 'removeAllListeners')
@@ -48,7 +51,7 @@ class Connection extends EventEmitter {
   close = jest.fn(async () => undefined)
 }
 
-const connect = async () => new Connection()
+const connect = async (url) => new Connection(url)
 
 /** @type {jest.MockedObject<import('amqplib')>} */
 const amqplib = {
