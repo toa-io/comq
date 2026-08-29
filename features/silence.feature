@@ -37,3 +37,10 @@ Feature: Silent Connection Tolerance
     When the consumer sends a request to the `echo` queue as the network goes silent
     Then the consumer receives the reply
     And the connection is lost within 10 seconds
+
+  Scenario: Reporting that there is nowhere left to publish
+    Given an active sharded connection
+    And a producer replying `echo` queue
+    When the network goes silent
+    Then publishing is paused within 10 seconds
+    And publishing is resumed within 10 seconds

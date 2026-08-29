@@ -111,6 +111,6 @@ class Context extends World {
 const PROTOCOL = 'amqp://'
 
 /** @type {comq.diagnostics.Event[]} */
-const EVENTS = ['open', 'close', 'flow', 'discard']
+const EVENTS = ['open', 'close', 'flow', 'discard', 'pause', 'resume']
 
 exports.Context = Context
