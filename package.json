@@ -36,7 +36,7 @@
     "@testcontainers/rabbitmq": "^12.1.0",
     "@types/amqplib": "^0.10.8",
     "@types/jest": "^30.0.0",
-    "conventional-changelog-conventionalcommits": "^8.0.0",
+    "conventional-changelog-conventionalcommits": "^10.4.0",
     "fast-glob": "^3.3.3",
     "fuzzysort": "4.0.2",
     "husky": "^9.1.7",
