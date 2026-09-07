@@ -64,16 +64,9 @@ class Connection {
   async open () {
     this.#closed = false
 
-    if (this.#opening !== null) return this.#opening
-
-    this.#opening = retry(this.#open).finally(() => { this.#opening = null })
-
-    await this.#opening
+    await this.#reopen()
 
     if (this.#closed) return
-
-    // close may have landed after this attempt succeeded but before `#opening` was cleared
-    if (this.#connection === undefined) return this.open()
 
     this.#running = true
   }
@@ -172,8 +165,27 @@ class Connection {
     this.#connection = undefined
 
     if (error !== undefined && !this.#closed) {
-      this.open().catch((exception) => this.#diagnostics.emit('error', exception))
+      this.#reopen().catch((exception) => this.#diagnostics.emit('error', exception))
     }
+  }
+
+  /**
+   * Establishes the connection, or joins the attempt under way. A lost connection is
+   * restored through here and not through `open()`: what a subclass makes of `open()` is
+   * its own — the singleton answers it with the first opening, made once and remembered,
+   * which is no way to make a second one.
+   *
+   * @return {Promise<void>}
+   */
+  async #reopen () {
+    this.#opening ??= retry(this.#open).finally(() => { this.#opening = null })
+
+    await this.#opening
+
+    if (this.#closed) return
+
+    // close may have landed after this attempt succeeded but before `#opening` was cleared
+    if (this.#connection === undefined) return this.#reopen()
   }
 
   /**

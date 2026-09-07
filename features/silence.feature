@@ -24,6 +24,22 @@ Feature: Silent Connection Tolerance
     When the consumer sends a request to the `echo` queue
     Then the consumer receives the reply
 
+  Scenario: Restoring a singleton connection that has gone silent
+    Given an active singleton connection
+    And a producer replying `echo` queue
+    When the network goes silent
+    Then the connection is lost within 10 seconds
+    When the consumer sends a request to the `echo` queue
+    Then the consumer receives the reply
+
+  Scenario: Restoring a sharded singleton connection whose every shard has gone silent
+    Given an active sharded singleton connection
+    And a producer replying `echo` queue
+    When the network goes silent
+    Then the connection is lost within 10 seconds
+    When the consumer sends a request to the `echo` queue
+    Then the consumer receives the reply
+
   Scenario: Answering a request sent as the connection goes silent
     Given an active connection to the broker
     And a producer replying `echo` queue
