@@ -14,3 +14,8 @@ updates:
     target-branch: "dev"
     labels:
       - "Bump"
+    ignore:
+      # a newer preset needs conventional-changelog-writer@9, which the
+      # semantic-release plugins do not use yet; the release fails to render its notes
+      - dependency-name: "conventional-changelog-conventionalcommits"
+        update-types: ["version-update:semver-major"]
