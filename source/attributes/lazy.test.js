@@ -297,3 +297,42 @@ describe('reset', () => {
     expect(initialize2).toHaveBeenCalledTimes(2)
   })
 })
+
+class Exposed {
+  do = lazy(this, this.initialize, async () => undefined)
+
+  async initialize (_) {}
+}
+
+// an initializer is a method shared by every instance of its class, so a record
+// kept on it would outlive the instances it was made for
+it('should keep no record on the initializer or the context', async () => {
+  const instance = new Exposed()
+
+  await instance.do(generate())
+  lazy.reset(instance)
+  await instance.do(generate())
+
+  expect(Object.getOwnPropertySymbols(Exposed.prototype.initialize)).toHaveLength(0)
+  expect(Object.getOwnPropertySymbols(instance)).toHaveLength(0)
+})
+
+it('should tell arguments apart by identity', async () => {
+  let calls = 0
+
+  class Counted {
+    do = lazy(this, this.initialize, async () => undefined)
+
+    async initialize (_) {
+      calls++
+    }
+  }
+
+  const instance = new Counted()
+
+  await instance.do(undefined)
+  await instance.do('undefined')
+  await instance.do(undefined)
+
+  expect(calls).toStrictEqual(2)
+})

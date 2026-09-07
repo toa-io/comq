@@ -18,6 +18,8 @@ declare namespace comq {
     createChannel(type: _topology.type, index: number): Promise<_channel.Channel>
 
     diagnose(event: _diagnostics.Event, listener: Function): void
+
+    forget(event: _diagnostics.Event, listener: Function): void
   }
 
   type Connect = (...urls: string[]) => Promise<_io.IO>

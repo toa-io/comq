@@ -255,6 +255,11 @@ These intervals are not configurable.
 
 An "end stream" message is sent to the `replyTo` queue when the Reply stream is finished.
 
+When the Consumer falls behind, a "pause" message is sent to the Producer's control queue,
+and the Producer stops pulling values from the iterator until a "resume" message follows.
+The Producer announces its support of these messages in the confirmation message,
+so they are never sent to a Producer that would not understand them.
+
 See also [Reply stream shutdown](#reply-stream-shutdown).
 
 ### Loss of tail
@@ -278,7 +283,8 @@ At the same time, there is no guarantee that the stream will be transmitted to t
 
 > When using the [Sharded connection](#sharded-connection), the order of yielded values is maintained through buffering.
 > However, there is a scenario in which some of the yielded values may be lost if a broker crashes.
-> In this case, the Reply stream will be destroyed once the buffer's maximum size is exceeded.
+> In this case, the Reply stream will be destroyed once the buffer's maximum size is exceeded
+> (1000 values or 16 MiB of encoded messages).
 > Also, buffered control messages can result in [stream idling](#stream-control).
 
 ## Encoding

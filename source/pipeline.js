@@ -5,12 +5,20 @@ const stream = require('node:stream/promises')
 
 function pipeline (source, transform, channel) {
   const destination = new Pipeline(transform)
+  const pause = source.pause.bind(source)
+  const resume = source.resume.bind(source)
 
-  // eslint-disable-next-line no-void
-  void stream.pipeline(source, destination)
+  channel.diagnose('pause', pause)
+  channel.diagnose('resume', resume)
 
-  channel.diagnose('pause', source.pause.bind(source))
-  channel.diagnose('resume', source.resume.bind(source))
+  // the source must not outlive the pipeline as a listener of the channel;
+  // a failure is delivered through the destination, the promise says nothing new
+  const detach = () => {
+    channel.forget('pause', pause)
+    channel.forget('resume', resume)
+  }
+
+  stream.pipeline(source, destination).then(detach, detach)
 
   return destination
 }

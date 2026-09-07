@@ -1,7 +1,6 @@
 'use strict'
 
 const stream = require('node:stream')
-const { randomBytes } = require('node:crypto')
 const { setTimeout } = require('node:timers/promises')
 const { Promex } = require('promex')
 const { memo, failsafe, lazy, track } = require('./attributes')
@@ -38,6 +37,9 @@ class IO {
   /** @type {Map<Promex, comq.Request>} */
   #pendingReplies = new Map()
 
+  /** @type {[comq.diagnostics.Event, Function][]} */
+  #forwarders = []
+
   /** @type {Set<comq.Destroyable>} */
   #replyStreams = new Set()
 
@@ -53,7 +55,10 @@ class IO {
     this.#connection = connection
 
     for (const event of events.connection) {
-      this.#connection.diagnose(event, (...args) => this.#diagnostics.emit(event, ...args))
+      const forwarder = (...args) => this.#diagnostics.emit(event, ...args)
+
+      this.#connection.diagnose(event, forwarder)
+      this.#forwarders.push([event, forwarder])
     }
   }
 
@@ -87,10 +92,11 @@ class IO {
           )
         }
 
-        const request = this.#createRequest(queue, payload, encoding)
+        const [buffer, contentType] = this.#encode(payload, encoding)
+        const request = this.#createRequest(queue, contentType)
         const reply = this.#createReply(request)
 
-        await this.#requests.send(queue, request.buffer, request.properties)
+        await this.#requests.send(queue, buffer, request.properties)
 
         return reply
       }))
@@ -168,6 +174,11 @@ class IO {
     // here — held to the end of the connection, they would run it out of them
     await Promise.all([this.#requests, this.#replies, this.#events]
       .map((channel) => channel?.close()))
+
+    // a connection that outlives its IO must not keep it as a listener
+    for (const [event, forwarder] of this.#forwarders) this.#connection.forget(event, forwarder)
+
+    this.#forwarders = []
 
     await this.#connection.close()
   })
@@ -274,7 +285,7 @@ class IO {
     (message) => {
       const payload = decode(message)
 
-      emitter.emit(message.properties.correlationId, payload, message.properties)
+      emitter.emit(message.properties.correlationId, payload, message.properties, message.content.length)
     }
 
   /**
@@ -289,20 +300,21 @@ class IO {
     })
 
   /**
+   * The request holds no copy of what was sent: a retransmission encodes the
+   * payload anew, and an unanswered request would otherwise keep two of it.
+   *
    * @param {string} queue
-   * @param {any} payload
-   * @param {comq.Encoding} [encoding]
+   * @param {comq.Encoding} contentType
    * @return {comq.Request}
    */
-  #createRequest (queue, payload, encoding) {
-    const [buffer, contentType] = this.#encode(payload, encoding)
+  #createRequest (queue, contentType) {
     const emitter = this.#emitters.get(queue)
-    const correlationId = randomBytes(8).toString('hex')
+    const correlationId = emitter.next()
 
     /** @type {comq.amqp.Properties} */
     const properties = { contentType, correlationId, replyTo: emitter.queue }
 
-    return { buffer, emitter, properties }
+    return { emitter, properties }
   }
 
   /**
@@ -312,7 +324,7 @@ class IO {
   #createReply (request) {
     const reply = this.#createPendingReply(request)
 
-    request.emitter.once(request.properties.correlationId, this.#getReplyResolver(request, reply))
+    request.emitter.on(request.properties.correlationId, this.#getReplyResolver(request, reply))
 
     return reply
   }
@@ -323,12 +335,12 @@ class IO {
    */
   #createPendingReply (request) {
     const reply = new Promex()
+    const settled = () => this.#pendingReplies.delete(reply)
 
     this.#pendingReplies.set(reply, request)
 
-    reply
-      .catch(noop)
-      .finally(() => this.#pendingReplies.delete(reply))
+    // one derived promise per request, and a rejection handled with it
+    reply.then(settled, settled)
 
     return reply
   }
@@ -338,11 +350,14 @@ class IO {
    * @param reply
    */
   #getReplyResolver (request, reply) {
-    return async (payload, properties) => {
+    return async (payload, properties, size) => {
       const isStream = properties.headers?.index !== undefined
 
+      // a reply is answered once; a reply stream takes the place of this resolver
+      request.emitter.off(request.properties.correlationId)
+
       if (isStream) {
-        const stream = this.#createReplyStream(request, payload, properties)
+        const stream = this.#createReplyStream(request, payload, properties, size)
 
         try {
           await stream.confirmation
@@ -358,10 +373,10 @@ class IO {
     }
   }
 
-  #createReplyStream (request, payload, properties) {
+  #createReplyStream (request, payload, properties, size) {
     const stream = new io.ReplyStream(request, this.#reply.bind(this))
 
-    stream.arrange(payload, properties)
+    stream.arrange(payload, properties, size)
     this.#addReplyStream(/** @type {comq.Destroyable} */ stream)
 
     return stream
@@ -453,7 +468,7 @@ class IO {
     for (const [reply, request] of this.#pendingReplies) {
       // detaching this attempt alone leaves the listeners of the reply streams
       // that are still flowing over the other shards in place
-      request.emitter.removeAllListeners(request.properties.correlationId)
+      request.emitter.off(request.properties.correlationId)
 
       // trigger failsafe attribute
       reply.reject(RETRANSMISSION)
@@ -483,7 +498,5 @@ const OCTETS = 'application/octet-stream'
 const DEFAULT = 'application/json'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
-
-function noop () {}
 
 exports.IO = IO
