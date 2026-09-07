@@ -46,6 +46,10 @@ class Connection {
     this.#diagnostics.on(event, listener)
   }
 
+  forget (event, listener) {
+    this.#diagnostics.off(event, listener)
+  }
+
   /**
    * @param {comq.Connection} connection
    * @param {number} index

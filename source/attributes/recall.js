@@ -36,7 +36,24 @@ async function replay (context) {
   await Promise.all(promises)
 }
 
+/**
+ * Forgets the recorded calls, and the arguments they hold on to.
+ *
+ * @param {object} context
+ */
+function reset (context) {
+  const methods = context[METHODS]
+
+  if (methods === undefined) return
+
+  for (const method of methods) method[CALLS] = undefined
+
+  context[METHODS] = undefined
+}
+
 const METHODS = Symbol('context methods')
 const CALLS = Symbol('method calls')
+
+recall.reset = reset
 
 exports.recall = recall

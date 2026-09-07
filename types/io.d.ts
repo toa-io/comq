@@ -10,8 +10,21 @@ declare namespace comq {
   type Producer<Input = any, Output = any> = (message: Input) => Output | Promise<Output>
   type Consumer<T = any> = (message: T, headers?: _amqp.Properties) => void | Promise<void>
 
-  interface ReplyEmitter extends EventEmitter {
+  type ReplyHandler = (payload: any, properties: _amqp.Properties, size?: number) => void
+
+  interface ReplyEmitter {
     readonly queue: string
+
+    /** A correlation identifier unique across every consumer of a producer. */
+    next(): string
+
+    on(correlationId: string, handler: ReplyHandler): void
+
+    off(correlationId: string, handler?: ReplyHandler): void
+
+    emit(correlationId: string, payload: any, properties: _amqp.Properties, size?: number): boolean
+
+    readonly pending: number
   }
 
   interface Destroyable extends EventEmitter {
@@ -19,7 +32,6 @@ declare namespace comq {
   }
 
   interface Request {
-    buffer: Buffer
     emitter: ReplyEmitter
     properties: _amqp.Properties
   }
