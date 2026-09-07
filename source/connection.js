@@ -20,8 +20,8 @@ class Connection {
   /** @type {comq.amqp.Connection} */
   #connection
 
-  /** @type {comq.Channel[]} */
-  #channels = []
+  /** @type {Set<comq.Channel>} */
+  #channels = new Set()
 
   /** @type {Promex} */
   #recovery = new Promex()
@@ -90,16 +90,23 @@ class Connection {
       if (this.#connection === undefined) await this.#recovery
 
       const topology = presets[type]
-      const channel = await channels.create(this.#connection, topology, index)
 
-      this.#channels = this.#channels.filter((channel) => !channel.closed)
-      this.#channels.push(channel)
+      // a closed channel held here would hold its IO, and a shared connection is
+      // in no hurry to make another channel that would have swept it out
+      const release = (channel) => this.#channels.delete(channel)
+      const channel = await channels.create(this.#connection, topology, index, release)
+
+      this.#channels.add(channel)
 
       return channel
     })
 
   async diagnose (event, listener) {
     this.#diagnostics.on(event, listener)
+  }
+
+  forget (event, listener) {
+    this.#diagnostics.off(event, listener)
   }
 
   #open = async (retry) => {
@@ -134,9 +141,10 @@ class Connection {
     this.#diagnostics.emit('open')
 
     try {
-      this.#channels = this.#channels.filter((channel) => !channel.closed)
-
-      for (const channel of this.#channels) await channel.recover(connection)
+      for (const channel of this.#channels) {
+        if (channel.closed) this.#channels.delete(channel)
+        else await channel.recover(connection)
+      }
     } catch (exception) {
       this.#diagnostics.emit('error', exception)
       this.#drop(connection)

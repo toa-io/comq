@@ -11,6 +11,7 @@ const channel = /** @type {jest.MockedFunction<(sharded?: boolean, index?: numbe
     subscribe: jest.fn(async () => undefined),
     publish: jest.fn(async () => undefined),
     diagnose: jest.fn(async () => undefined),
+    forget: jest.fn(() => undefined),
     seal: jest.fn(async () => undefined),
     close: jest.fn(async () => undefined),
     closed: false,
@@ -26,7 +27,8 @@ const connection = (sharded = false) => (/** @type {jest.MockedObject<comq.Conne
   createChannel: jest.fn(async (type, index) => channel(sharded, index)),
   open: jest.fn(async () => undefined),
   close: jest.fn(async () => undefined),
-  diagnose: jest.fn(() => undefined)
+  diagnose: jest.fn(() => undefined),
+  forget: jest.fn(() => undefined)
 })
 
 exports.connection = connection

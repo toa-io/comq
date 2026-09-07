@@ -93,3 +93,14 @@ const findChannel = (type) => {
 
   return connection.createChannel.mock.results[index].value
 }
+
+// a connection is shared and outlives its IOs, so a listener left on it would hold the IO
+it('should forget the connection listeners on close', async () => {
+  await io.close()
+
+  for (const [event, listener] of connection.diagnose.mock.calls) {
+    expect(connection.forget).toHaveBeenCalledWith(event, listener)
+  }
+
+  expect(connection.forget).toHaveBeenCalledTimes(connection.diagnose.mock.calls.length)
+})

@@ -44,17 +44,22 @@ class Channel {
 
   #closed = false
 
+  /** @type {(channel: comq.Channel) => void} */
+  #release
+
   /**
    * @param {comq.amqp.Connection} connection
    * @param {comq.Topology} topology
-   * @param {number} index
+   * @param {number} [index]
+   * @param {(channel: comq.Channel) => void} [release] called once the channel is given back
    */
-  constructor (connection, topology, index) {
+  constructor (connection, topology, index, release = noop) {
     this.index = index
 
     this.#connection = connection
     this.#topology = topology
     this.#failfast = index !== undefined
+    this.#release = release
 
     if (this.#failfast) failsafe.disable(this.send, this.publish)
   }
@@ -62,6 +67,9 @@ class Channel {
   async create () {
     if (this.#topology.confirms) this.#channel = await this.#connection.createConfirmChannel()
     else this.#channel = await this.#connection.createChannel()
+
+    // the consumers of the previous channel went down with it, their tags mean nothing here
+    this.#tags = []
 
     await this.#channel.prefetch(this.#topology.prefetch)
 
@@ -141,6 +149,8 @@ class Channel {
 
     // a channel that went down with its connection is the outcome this asks for
     await this.#channel?.close().catch(noop)
+
+    this.#release(this)
   }
 
   async seal () {
@@ -149,6 +159,10 @@ class Channel {
     const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
 
     await Promise.all(cancellations).catch(noop) // won't recover anyway
+
+    // a sealed channel is not going to consume again, so what it has consumed
+    // and the callbacks it was given are of no use anymore
+    recall.reset(this)
   }
 
   diagnose (event, listener) {
@@ -260,12 +274,12 @@ class Channel {
    */
   #confirmation () {
     const confirmation = new Promex()
+    const settled = () => this.#confirmations.delete(confirmation)
 
     this.#confirmations.add(confirmation)
 
-    confirmation
-      .catch(noop) // have no idea why, but this is required
-      .finally(() => this.#confirmations.delete(confirmation))
+    // one derived promise per publish, and a rejection handled with it
+    confirmation.then(settled, settled)
 
     return confirmation
   }
@@ -372,10 +386,11 @@ class Channel {
  * @param {comq.amqp.Connection} connection
  * @param {comq.Topology} topology
  * @param {number} [index]
+ * @param {(channel: comq.Channel) => void} [release]
  * @return {Promise<comq.Channel>}
  */
-async function create (connection, topology, index) {
-  const channel = new Channel(connection, topology, index)
+async function create (connection, topology, index, release) {
+  const channel = new Channel(connection, topology, index, release)
 
   await channel.create()
 

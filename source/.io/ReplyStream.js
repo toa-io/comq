@@ -2,7 +2,7 @@
 
 const { Readable } = require('node:stream')
 const { Promex } = require('promex')
-const { IDLE_INTERVAL, control } = require('./const')
+const { IDLE_INTERVAL, FLOW_HEADER, control } = require('./const')
 
 class ReplyStream extends Readable {
   confirmation = new Promex()
@@ -16,6 +16,7 @@ class ReplyStream extends Readable {
   /** @type {string} */
   #correlationId
 
+  /** The confirmation message, addressing the control queue of the producer. */
   #control
 
   #reply
@@ -26,9 +27,19 @@ class ReplyStream extends Readable {
 
   #buffered = 0
 
+  #bufferedBytes = 0
+
   #maxBufferSize
 
-  /** @type {Map<number, unknown>} */
+  #maxBufferBytes
+
+  /** Whether the producer honours `pause` and `resume`. */
+  #flow = false
+
+  /** Whether the producer has been asked to pause. */
+  #throttled = false
+
+  /** @type {Map<number, { payload: unknown, properties: comq.amqp.Properties, size: number }>} */
   #queue = new Map()
 
   /**
@@ -42,6 +53,7 @@ class ReplyStream extends Readable {
     this.#correlationId = request.properties.correlationId
     this.#idleInterval = global['COMQ_TESTING_IDLE_INTERVAL'] || IDLE_INTERVAL
     this.#maxBufferSize = global['COMQ_TESTING_MAX_BUFFER_SIZE'] || MAX_BUFFER_SIZE
+    this.#maxBufferBytes = global['COMQ_TESTING_MAX_BUFFER_BYTES'] || MAX_BUFFER_BYTES
     this.#reply = reply
 
     this.confirmation.catch(noop) // it is not awaited until the stream is handed over
@@ -65,15 +77,25 @@ class ReplyStream extends Readable {
     super._destroy(error, callback)
   }
 
-  _read (_) {}
+  /**
+   * Called once the consumer has room again.
+   */
+  _read (_) {
+    if (!this.#throttled) return
+
+    this.#throttled = false
+
+    void this.#reply(this.#control, control.resume)
+  }
 
   /**
    * @param {unknown} payload
    * @param {comq.amqp.Properties} properties
+   * @param {number} [size] of the encoded payload
    */
-  arrange (payload, properties) {
+  arrange (payload, properties, size = 0) {
     if (properties.headers.index !== this.#index) {
-      this._buffer(payload, properties)
+      this._buffer(payload, properties, size)
 
       return
     }
@@ -85,6 +107,7 @@ class ReplyStream extends Readable {
 
       while ((message = this.#queue.get(this.#index))) {
         this.#queue.delete(this.#index)
+        this.#bufferedBytes -= message.size
         this._add(message.payload, message.properties)
       }
 
@@ -104,18 +127,45 @@ class ReplyStream extends Readable {
     if (properties.type === 'control')
       this._control(payload, properties)
     else if (!this.push(payload))
-      this._clear()
+      this._throttle()
   }
 
-  _buffer (payload, properties) {
-    if (this.#buffered > this.#maxBufferSize) {
+  /**
+   * Values arriving out of order are held until the gap is filled. The hold is
+   * bounded by their number and, roughly, by their size: the size is that of
+   * the encoded message, which is what is known of a decoded value.
+   *
+   * @param {unknown} payload
+   * @param {comq.amqp.Properties} properties
+   * @param {number} size
+   * @private
+   */
+  _buffer (payload, properties, size) {
+    if (this.#buffered > this.#maxBufferSize || this.#bufferedBytes + size > this.#maxBufferBytes) {
       this.destroy()
 
       return
     }
 
     this.#buffered++
-    this.#queue.set(properties.headers.index, { payload, properties })
+    this.#bufferedBytes += size
+    this.#queue.set(properties.headers.index, { payload, properties, size })
+  }
+
+  /**
+   * The consumer is behind. Values in flight keep coming, and a producer that
+   * knows nothing of `pause` keeps going, in which case they pile up here rather
+   * than get lost: dropping the listener would leave the stream waiting for a
+   * value that has already passed.
+   *
+   * @private
+   */
+  _throttle () {
+    if (this.#throttled || !this.#flow) return
+
+    this.#throttled = true
+
+    void this.#reply(this.#control, control.pause)
   }
 
   /**
@@ -127,6 +177,7 @@ class ReplyStream extends Readable {
     switch (message) {
       case control.ok:
         this.#control = { properties }
+        this.#flow = properties.headers?.[FLOW_HEADER] === true
         this.confirmation.resolve()
         break
       case control.heartbeat:
@@ -147,11 +198,14 @@ class ReplyStream extends Readable {
 
   _clear () {
     clearTimeout(this.#timeout)
-    this.#emitter.removeAllListeners(this.#correlationId)
+    this.#emitter.off(this.#correlationId)
   }
 }
 
 const MAX_BUFFER_SIZE = 1000
+
+/** @type {number} */
+const MAX_BUFFER_BYTES = 16 * 1024 * 1024
 
 const UNCONFIRMED = 'Reply stream has been destroyed before confirmation'
 

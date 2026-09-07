@@ -90,3 +90,46 @@ it('should not re-call those thrown exceptions', async () => {
 
   expect(method).toHaveBeenCalledTimes(3)
 })
+
+describe('reset', () => {
+  it('should be', async () => {
+    expect(recall.reset).toBeDefined()
+  })
+
+  it('should forget recorded calls', async () => {
+    const context = {}
+    const func = recall(context, method)
+
+    await func(generate())
+
+    recall.reset(context)
+    method.mockClear()
+
+    await recall(context)
+
+    expect(method).not.toHaveBeenCalled()
+  })
+
+  it('should record again after reset', async () => {
+    const context = {}
+    const func = recall(context, method)
+
+    await func(generate())
+
+    recall.reset(context)
+
+    const args = [generate()]
+
+    await func(...args)
+    method.mockClear()
+
+    await recall(context)
+
+    expect(method).toHaveBeenCalledTimes(1)
+    expect(method).toHaveBeenCalledWith(...args)
+  })
+
+  it('should not throw on a context without records', async () => {
+    expect(() => recall.reset({})).not.toThrow()
+  })
+})

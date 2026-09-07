@@ -356,7 +356,7 @@ describe('create channel', () => {
       const preset = presets[type]
       const channel = await connection.createChannel(type)
 
-      expect(create).toHaveBeenCalledWith(conn, preset, undefined)
+      expect(create).toHaveBeenCalledWith(conn, preset, undefined, expect.any(Function))
       expect(channel).toStrictEqual(await create.mock.results[0].value)
     })
 
@@ -366,7 +366,7 @@ describe('create channel', () => {
 
     await connection.createChannel(type, index)
 
-    expect(create).toHaveBeenCalledWith(expect.anything(), expect.anything(), index)
+    expect(create).toHaveBeenCalledWith(expect.anything(), expect.anything(), index, expect.any(Function))
   })
 
   it('should create channel after exception', async () => {
@@ -466,6 +466,21 @@ describe('closed channels', () => {
     await timeout(50)
 
     expect(channel.recover).toHaveBeenCalled()
+  })
+
+  // a closed channel held by a shared connection would hold its IO until the
+  // connection happens to make another channel
+  it('should let go of one that has been given back', async () => {
+    const channel = await connection.createChannel('event')
+    const release = create.mock.calls[0][3]
+
+    release(channel)
+
+    conn.emit('close', new Error())
+
+    await timeout(50)
+
+    expect(channel.recover).not.toHaveBeenCalled()
   })
 })
 
@@ -793,5 +808,22 @@ describe('diagnostics', () => {
     for (let i = 0; i < 100; i++) {
       connection.diagnose('close', () => undefined)
     }
+  })
+})
+
+describe('forget', () => {
+  afterEach(async () => {
+    await connection.close()
+  })
+
+  it('should stop reporting to the listener', async () => {
+    const listener = /** @type {Function} */ jest.fn()
+
+    await connection.diagnose('open', listener)
+    connection.forget('open', listener)
+
+    await connection.open()
+
+    expect(listener).not.toHaveBeenCalled()
   })
 })

@@ -78,4 +78,25 @@ class Channel extends EventEmitter {
   diagnose (event, callback) {
     this.on(event, callback)
   }
+
+  forget (event, callback) {
+    this.off(event, callback)
+  }
 }
+
+// the source must not stay a listener of the channel once the pipeline is done
+it('should let go of the source once done', async () => {
+  const input = stream.Readable.from([1, 2, 3])
+  const pipe = pipeline(input, (x) => x, channel)
+
+  expect(channel.listenerCount('pause')).toBe(1)
+  expect(channel.listenerCount('resume')).toBe(1)
+
+  // eslint-disable-next-line no-void, no-unused-vars
+  for await (const _ of pipe) void 0
+
+  await timeout(0)
+
+  expect(channel.listenerCount('pause')).toBe(0)
+  expect(channel.listenerCount('resume')).toBe(0)
+})

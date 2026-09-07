@@ -1,17 +1,22 @@
 'use strict'
 
 const { EventEmitter } = require('node:events')
-const { control, HEARTBEAT_INTERVAL } = require('./const')
+const { Promex } = require('promex')
+const { control, FLOW_HEADER, HEARTBEAT_INTERVAL } = require('./const')
 
 /** @typedef {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} Reply */
 
 class ReplyPipe extends EventEmitter {
   #index = -1
   #interrupted = false
+  #closed = false
   #heartbeatInterval = global['COMQ_TESTING_HEARTBEAT_INTERVAL'] || HEARTBEAT_INTERVAL
 
   /** @type {ReturnType<setInterval> | null} */
   #interval = null
+
+  /** Closed while the consumer has asked for a pause. */
+  #gate = null
 
   /** @type {string} */
   #replyTo
@@ -51,7 +56,8 @@ class ReplyPipe extends EventEmitter {
 
     this.#properties = {
       chunk: { correlationId, ...CHUNK },
-      control: { correlationId, replyTo: feedback.queue, ...CONTROL }
+      control: { correlationId, replyTo: feedback.queue, ...CONTROL },
+      ok: { correlationId, replyTo: feedback.queue, ...CONTROL, headers: FLOW }
     }
 
     channel.diagnose('return', this.#onReturn)
@@ -59,11 +65,13 @@ class ReplyPipe extends EventEmitter {
   }
 
   async pipe () {
-    await this.#transmit(control.ok, this.#properties.control)
+    await this.#transmit(control.ok, this.#properties.ok)
 
-    this.#stream.on('data', this.#onData)
-    this.#stream.on('close', this.#close)
+    if (this.#closed) return
+
     this.#heartbeat()
+
+    void this.#pump()
   }
 
   destroy () {
@@ -71,11 +79,35 @@ class ReplyPipe extends EventEmitter {
     this.#stream.destroy()
   }
 
+  /**
+   * The source is pulled rather than listened to: a value is asked for once the
+   * previous one has been handed to the channel, so a paused channel or a paused
+   * consumer holds the source back instead of piling its output up here.
+   */
+  async #pump () {
+    try {
+      for await (const chunk of this.#stream) {
+        if (this.#gate !== null) await this.#gate
+        if (this.#closed) break
+
+        await this.#transmit(chunk, this.#properties.chunk)
+
+        if (this.#closed) break
+
+        this.#heartbeat()
+      }
+    } catch {
+      // the source has been destroyed, by this pipe or by whoever made it
+    }
+
+    this.#close()
+  }
+
   async #transmit (data, properties) {
     this.#index++
 
-    const ok = await this.#reply(data,
-      { ...properties, headers: { index: this.#index } })
+    const headers = { ...properties.headers, index: this.#index }
+    const ok = await this.#reply(data, { ...properties, headers })
 
     if (!ok) this.#interrupt()
   }
@@ -97,24 +129,27 @@ class ReplyPipe extends EventEmitter {
   #clear () {
     clearInterval(this.#interval)
 
-    this.#stream.removeAllListeners()
     this.#channel.forget('return', this.#onReturn)
     this.#feedback.off(this.#properties.control.correlationId, this.#control)
+    this.#resume()
+  }
+
+  #resume () {
+    this.#gate?.resolve()
+    this.#gate = null
   }
 
   #close = () => {
+    if (this.#closed) return
+
+    this.#closed = true
+
     this.emit('close')
     this.#clear()
 
     if (!this.#interrupted) {
       void this.#transmit(control.end, this.#properties.control)
     }
-  }
-
-  #onData = async (chunk) => {
-    await this.#transmit(chunk, this.#properties.chunk)
-
-    this.#heartbeat()
   }
 
   #onReturn = (message) => {
@@ -126,6 +161,12 @@ class ReplyPipe extends EventEmitter {
     switch (message) {
       case control.end:
         this.#interrupt()
+        break
+      case control.pause:
+        this.#gate ??= new Promex()
+        break
+      case control.resume:
+        this.#resume()
         break
       default:
         throw new Error(`Unknown control message: ${message}`)
@@ -154,5 +195,7 @@ const CHUNK = { mandatory: true }
 
 /** @type {comq.amqp.options.Publish} */
 const CONTROL = { type: 'control', mandatory: true }
+
+const FLOW = { [FLOW_HEADER]: true }
 
 exports.ReplyPipe = ReplyPipe

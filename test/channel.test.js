@@ -971,3 +971,61 @@ const getCreatedChannel = (conn) => {
 
   return (conn ?? connection)[method].mock.results[0].value
 }
+
+describe('consumer tags', () => {
+  const queue = generate()
+  const consumer = jest.fn()
+
+  beforeEach(async () => {
+    channel = await create(connection, topology)
+    chan = await getCreatedChannel()
+  })
+
+  // the consumers of a lost channel went down with it, and their tags would pile
+  // up with every reconnection to be cancelled on a channel that never had them
+  it('should cancel the consumers of the current channel only', async () => {
+    await channel.consume(queue, consumer)
+
+    const replacement = await amqplib.connect()
+
+    await channel.recover(replacement)
+
+    const repl = await getCreatedChannel(replacement)
+
+    expect(repl.consume).toHaveBeenCalledTimes(1)
+
+    const { consumerTag } = await repl.consume.mock.results[0].value
+
+    await channel.seal()
+
+    expect(repl.cancel).toHaveBeenCalledTimes(1)
+    expect(repl.cancel).toHaveBeenCalledWith(consumerTag)
+  })
+
+  it('should let go of the recorded subscriptions once sealed', async () => {
+    await channel.consume(queue, consumer)
+    await channel.seal()
+
+    const replacement = await amqplib.connect()
+
+    await channel.recover(replacement)
+
+    const repl = await getCreatedChannel(replacement)
+
+    expect(repl.consume).not.toHaveBeenCalled()
+  })
+})
+
+describe('release', () => {
+  it('should be called once the channel is closed', async () => {
+    const release = jest.fn()
+
+    channel = await create(connection, topology, undefined, release)
+
+    expect(release).not.toHaveBeenCalled()
+
+    await channel.close()
+
+    expect(release).toHaveBeenCalledWith(channel)
+  })
+})

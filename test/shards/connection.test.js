@@ -132,3 +132,18 @@ describe.each(/** @type {comq.diagnostics.Event[]} */ ['open', 'close'])('diagno
       expect(listener).toHaveBeenCalledWith(event, ...args, index)
     })
   })
+
+describe('forget', () => {
+  it('should stop re-emitting to the listener', async () => {
+    const listener = /** @type {Function} */ jest.fn()
+
+    connection.diagnose('open', listener)
+    connection.forget('open', listener)
+
+    const call = connections[0].diagnose.mock.calls.find((call) => call[0] === 'open')
+
+    call[1]()
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+})
