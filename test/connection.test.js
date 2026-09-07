@@ -184,7 +184,7 @@ describe('reconnection', () => {
 
     const boom = new Error('reconnect failed')
 
-    connection.open = jest.fn(async () => { throw boom })
+    amqplib.connect.mockRejectedValueOnce(boom)
 
     conn.emit('close', new Error('broker down'))
 
@@ -195,6 +195,33 @@ describe('reconnection', () => {
     expect(errors).toContain(boom)
     expect(unhandled).not.toHaveBeenCalled()
   })
+
+  // the singleton answers `open()` with the first opening, made once and remembered
+  it('should reconnect a connection whose open() is remembered', async () => {
+    class Remembered extends Connection {
+      #opened = null
+
+      async open () {
+        this.#opened ??= super.open()
+
+        await this.#opened
+      }
+    }
+
+    const remembered = new Remembered(generate())
+
+    await remembered.open()
+
+    const first = await amqplib.connect.mock.results.at(-1).value
+
+    first.emit('close', new Error('lost'))
+
+    await expect(remembered.createChannel('event')).resolves.toBeDefined()
+
+    expect(amqplib.connect).toHaveBeenCalledTimes(3)
+
+    await remembered.close()
+  }, 10000)
 
   it('should reconnect when connection is lost while channels recover', async () => {
     const channel = await connection.createChannel('request')

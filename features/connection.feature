@@ -18,6 +18,20 @@ Feature: Connection Tolerance
     When the broker is up
     Then the connection is restored
 
+  Scenario: Restoring singleton connection after broker restart
+    Given an active singleton connection
+    When the broker is down
+    Then the connection is lost
+    When the broker is up
+    Then the connection is restored
+
+  Scenario: Restoring sharded singleton connection after broker crash
+    Given an active sharded singleton connection
+    When the broker has crashed
+    Then the connection is lost
+    When the broker is up
+    Then the connection is restored
+
   Scenario: Connecting with wrong credentials
     When I attempt to connect to the broker as "someone" with password "whatever"
     Then an exception is thrown: "Handshake terminated by server: 403 (ACCESS-REFUSED)"
