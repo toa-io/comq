@@ -194,6 +194,9 @@ describe('reconnection', () => {
 
     expect(errors).toContain(boom)
     expect(unhandled).not.toHaveBeenCalled()
+
+    // the attempt is retried in the background, and would connect in a later case
+    await connection.close()
   })
 
   // the singleton answers `open()` with the first opening, made once and remembered
