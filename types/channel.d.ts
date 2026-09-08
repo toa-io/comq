@@ -19,9 +19,15 @@ declare namespace comq {
 
     subscribe (exchange: string, queue: string, consumer: channels.Consumer): Promise<void>
 
+    /** consumes `queue`, bound to a routed `exchange` under `key` */
+    bound (exchange: string, queue: string, key: string, consumer: channels.Consumer): Promise<void>
+
     send (queue: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
     publish (exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
+
+    /** publishes to a routed exchange under `key`, where `publish` fans out */
+    route (exchange: string, key: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 
     fire (queue: string, buffer: Buffer, options?: Options.Publish): Promise<boolean>
 
