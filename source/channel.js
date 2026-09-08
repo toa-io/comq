@@ -101,6 +101,24 @@ class Channel {
           if (!this.#sealed) await this.#consume(queue, callback)
         })))
 
+  /**
+   * Consumes a named queue bound to a direct exchange under a routing key, where `subscribe`
+   * binds to a fanout and takes everything published to it.
+   */
+  bound = recall(this,
+    failsafe(this, this.#recover,
+      lazy(this, [this.#assertRouted, this.#assertKeyedQueue],
+        /**
+         * @param {string} exchange
+         * @param {string} queue
+         * @param {string} key
+         * @param {comq.channels.Consumer} callback
+         * @returns {Promise<void>}
+         */
+        async (exchange, queue, key, callback) => {
+          if (!this.#sealed) await this.#consume(queue, callback)
+        })))
+
   send = failsafe(this, this.#recover,
     lazy(this, this.#assertQueue,
       /**
@@ -121,6 +139,21 @@ class Channel {
        */
       async (exchange, buffer, options) => {
         await this.#publish(exchange, DEFAULT, buffer, options)
+      }))
+
+  /**
+   * Publishes to a direct exchange under a routing key, where `publish` fans out.
+   */
+  route = failsafe(this, this.#recover,
+    lazy(this, this.#assertRouted,
+      /**
+       * @param {string} exchange
+       * @param {string} key
+       * @param {Buffer} buffer
+       * @param {comq.amqp.options.Publish} [options]
+       */
+      async (exchange, key, buffer, options) => {
+        await this.#publish(exchange, key, buffer, options)
       }))
 
   async fire (queue, buffer, options) {
@@ -228,6 +261,33 @@ class Channel {
     const options = { durable: this.#topology.durable }
 
     await this.#channel.assertExchange(exchange, 'fanout', options)
+  }
+
+  /**
+   * A routed exchange is `direct`: a message reaches the queues bound under the key it was
+   * published with, and none of the others.
+   *
+   * @param {string} exchange
+   * @returns {Promise<void>}
+   */
+  async #assertRouted (exchange) {
+    /** @type {comq.amqp.options.Exchange} */
+    const options = { durable: this.#topology.durable }
+
+    await this.#channel.assertExchange(exchange, 'direct', options)
+  }
+
+  /**
+   * @param {string} exchange
+   * @param {string} queue
+   * @param {string} key
+   * @returns {Promise<string[]>}
+   */
+  async #assertKeyedQueue (exchange, queue, key) {
+    queue = (await this.#assertQueue(queue))[0]
+    await this.#channel.bindQueue(queue, exchange, key)
+
+    return [exchange, queue, key]
   }
 
   /**

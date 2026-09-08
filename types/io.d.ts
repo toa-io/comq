@@ -63,6 +63,20 @@ declare namespace comq {
 
     enqueue(exchange: string, stream: Readable, properties?: _amqp.Properties): Promise<void>
 
+    /**
+     * Publishes to a routed (`direct`) exchange under a key, where `emit` fans out: the
+     * message reaches the queues bound under that key and no others.
+     */
+    route(exchange: string, key: string, payload: any, encoding?: _encoding.Encoding): Promise<void>
+
+    route(exchange: string, key: string, payload: any, properties?: _amqp.Properties): Promise<void>
+
+    /**
+     * Consumes a named durable queue bound to a routed exchange under a key, where `consume`
+     * takes everything published to a fanout.
+     */
+    subscribe<T = any>(exchange: string, queue: string, key: string, consumer: Consumer<T>): Promise<void>
+
     process<T = any>(queue: string, processor: Consumer<T>): Promise<void>
 
     seal(): Promise<void>
