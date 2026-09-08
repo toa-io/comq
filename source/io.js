@@ -132,20 +132,46 @@ class IO {
         )
       }
 
-      /** @type {comq.amqp.options.Publish} */
-      const properties = {}
-
-      if (typeof encoding === 'object') { // properties passed
-        Object.assign(properties, encoding)
-
-        encoding = /** @type {comq.Encoding} */ properties.contentType
-      }
-
-      const [buffer, contentType] = this.#encode(payload, encoding)
-
-      properties.contentType = contentType
+      const [buffer, properties] = this.#properties(payload, encoding)
 
       await this.#events[method](exchange, buffer, properties)
+    })
+
+  /**
+   * Publishes to a routed exchange under a key, where `emit` fans out. The exchange is
+   * `direct`, so a message reaches the queues bound under that key and no others.
+   */
+  route = lazy(this, this.#createEventChannel,
+    /**
+     * @param {string} exchange
+     * @param {string} key
+     * @param {any} payload
+     * @param {comq.Encoding | comq.amqp.options.Publish} [encoding]
+     * @returns {Promise<void>}
+     */
+    async (exchange, key, payload, encoding) => {
+      const [buffer, properties] = this.#properties(payload, encoding)
+
+      await this.#events.route(exchange, key, buffer, properties)
+    })
+
+  /**
+   * Consumes a named durable queue bound to a routed exchange under a key, where `consume`
+   * takes everything published to a fanout. The queue is named rather than derived, because
+   * what is bound to it is a key rather than an exchange.
+   */
+  subscribe = lazy(this, this.#createEventChannel,
+    /**
+     * @param {string} exchange
+     * @param {string} queue
+     * @param {string} key
+     * @param {comq.Consumer} callback
+     * @returns {Promise<void>}
+     */
+    async (exchange, queue, key, callback) => {
+      const consumer = this.#getEventConsumer(callback)
+
+      await this.#events.bound(exchange, queue, key, consumer)
     })
 
   process = lazy(this, this.#createEventChannel,
@@ -198,6 +224,30 @@ class IO {
 
   async #createEventChannel () {
     this.#events = await this.#createChannel('event')
+  }
+
+  /**
+   * What a publication carries, from what its caller passed as an encoding or as properties.
+   *
+   * @param {any} payload
+   * @param {comq.Encoding | comq.amqp.options.Publish} [encoding]
+   * @returns {[Buffer, comq.amqp.options.Publish]}
+   */
+  #properties (payload, encoding) {
+    /** @type {comq.amqp.options.Publish} */
+    const properties = {}
+
+    if (typeof encoding === 'object') { // properties passed
+      Object.assign(properties, encoding)
+
+      encoding = /** @type {comq.Encoding} */ properties.contentType
+    }
+
+    const [buffer, contentType] = this.#encode(payload, encoding)
+
+    properties.contentType = contentType
+
+    return [buffer, properties]
   }
 
   async #consumeReplies (queue) {

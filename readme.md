@@ -7,7 +7,7 @@ for distributed, eventually consistent systems running on Node.js.
 
 - [Dynamic topology](#topology)
 - [Request](#request)-[reply](#reply) (RPC)
-- Events ([pub](#emission)/[sub](#consumption))
+- Events ([pub](#emission)/[sub](#consumption)), fanned out or [routed](#routing)
 - [Tasks](#tasks)
 - [Pipelines](#pipelines)
 - [Reply streams](#reply-streams)
@@ -66,6 +66,9 @@ the `replyTo` property of the Request. The `correlationId` property of the Reply
 value as in the Request.
 
 **Event** is an AMQP message published to an exchange.
+
+**Key** is the routing key an Event is published with, and the one a queue is bound under. An
+Event published to a fanout exchange carries none.
 
 **Task** is an AMQP message sent to a queue without a `replyTo` property set.
 
@@ -156,6 +159,36 @@ asserted.
 
 ```javascript
 await io.emit('numbers_added', { a: 1, b: 2 })
+```
+
+## Routing
+
+`async IO.route(exchange: string, key: string, payload: any, encoding?: string): void`
+
+`async IO.subscribe(exchange: string, queue: string, key: string, consumer): void`
+
+Publish and consume Events addressed by a Key, where [Emission](#emission)
+and [Consumption](#consumption) fan out.
+
+`route` asserts a
+[direct exchange](https://www.rabbitmq.com/tutorials/amqp-concepts.html#exchange-direct) (once per
+unique `exchange`) and publishes the encoded Event to it under the `key`. `subscribe` asserts the
+same exchange and a durable `queue`, binds it under the `key` (once per unique `exchange`, `queue`
+and `key`), and starts consuming. **An Event reaches the queues bound under the Key it carries,
+and no others.**
+
+The queue is named rather than derived from a Consumer group, because what identifies it here is
+the Key it is bound under rather than the exchange it belongs to. It is also durable, so what is
+published while nothing is consuming is held rather than dropped.
+
+### Example
+
+```javascript
+await io.subscribe('records', 'records.orders', 'store.orders',
+  (record) => console.log(record))
+
+await io.route('records', 'store.orders', { id: 1, status: 'paid' })
+await io.route('records', 'store.customers', { id: 2 }) // not delivered to the above
 ```
 
 ## Tasks
@@ -409,6 +442,9 @@ requests and are expecting replies.
 
 - Exchanges and queues for Events, and queues for Requests
   are _durable_.
+- An exchange is asserted as _fanout_ for [Emission](#emission)
+  and [Consumption](#consumption), and as _direct_ for [Routing](#routing). One name is one or
+  the other: asserting it as both is what the broker refuses.
 - Queues for Replies are _exclusive_ and _auto deleted_.
 
 See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.html#channel_assertQueue).
