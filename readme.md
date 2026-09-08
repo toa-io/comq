@@ -181,6 +181,9 @@ The queue is named rather than derived from a Consumer group, because what ident
 the Key it is bound under rather than the exchange it belongs to. It is also durable, so what is
 published while nothing is consuming is held rather than dropped.
 
+Over a [sharded connection](#sharded-connection) they behave as the rest does: `route` publishes
+to one shard, and `subscribe` consumes the queue on every one of them.
+
 ### Example
 
 ```javascript
