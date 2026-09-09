@@ -1,9 +1,12 @@
 # Fix comq's poison-message handling
 
-> **A proposal, open for discussion — nothing here is implemented.** It covers what comq does
-> today when a consumer callback rejects, why that is wrong, and what to build instead.
-> Revised after review in [#272](https://github.com/toa-io/comq/discussions/272); the questions
-> it originally left open are resolved at the end. Comments still welcome.
+> **A proposal — reviewed and agreed, not yet implemented.** It covers what comq does today
+> when a consumer callback rejects, why that is wrong, and what to build instead. Reviewed from
+> the consumer side in [#272](https://github.com/toa-io/comq/discussions/272) and revised: the
+> retry queue became shared and delay-named, the delay became configurable, and message
+> provenance moved to where it survives a retry. The questions this originally left open are
+> resolved at the end. Still worth comments — but the design is settled, so raise objections
+> rather than expecting them.
 
 When a consumer callback rejects, comq is supposed to retry the message a few times and then
 give up on it. What it actually does is kill the process, and take every other consumer in that
