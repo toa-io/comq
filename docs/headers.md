@@ -28,6 +28,7 @@ the message properties.
 | `x-comq-key` | a retried or parked message | The routing key it was originally published with. |
 | `x-comq-queue` | a parked message | The queue it was consumed from. |
 | `x-comq-reason` | a parked message | The `message` of the exception that ended its attempts. |
+| `x-comq-cause` | a parked message | The `message` of that exception's `cause`, when it has one — a verdict is usually thrown with the failure that prompted it. |
 | `x-comq-at` | a parked message | When it was parked, as `Date.now()`. |
 
 `x-comq-exchange` and `x-comq-key` are recorded on the first failure rather than read at parking
