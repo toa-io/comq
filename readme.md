@@ -610,9 +610,7 @@ const io = await comq.connect(url, {
 ```
 
 `delay` is the one meant to be set. [The rest](./types/topology.d.ts) describe what a Request, a
-Reply and an Event *are*,
-and changing them changes that: they are overridable because the presets are one mechanism, not
-because every combination of them works.
+Reply and an Event *are*, and changing them changes that.
 
 > Changing `delay` declares new retry queues rather than redeclaring the existing ones, so a
 > rolling deploy that changes it has no window in which either version fails. The queues left
