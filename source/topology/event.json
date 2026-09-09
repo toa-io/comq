@@ -4,6 +4,10 @@
   "durable": true,
   "acknowledgments": true,
   "persistent": true,
-  "attempts": 5,
-  "delay": 30000
+  "delay": [
+    1000,
+    5000,
+    15000,
+    20000
+  ]
 }

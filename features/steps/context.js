@@ -132,6 +132,6 @@ const PROTOCOL = 'amqp://'
 const EVENTS = ['open', 'close', 'flow', 'discard', 'retry', 'pause', 'resume', 'exhausted']
 
 /** @type {comq.topology.Overrides} */
-const TOPOLOGY = { event: { delay: 100 }, request: { delay: 100 } }
+const TOPOLOGY = { event: { delay: [50, 100, 150] }, request: { delay: [50, 100, 150] } }
 
 exports.Context = Context

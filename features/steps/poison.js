@@ -57,7 +57,7 @@ Then('the parked message is kept, and says it came from the {token} exchange',
     assert.equal(headers['x-comq-exchange'], exchange,
       `The parked message says it came from '${headers['x-comq-exchange']}'`)
 
-    assert.equal(headers['x-comq-attempt'], 5, 'The parked message was not retried five times')
+    assert.equal(headers['x-comq-attempt'], 4, 'The parked message was not retried to exhaustion')
   })
 
 Then('{token} has received {int} event(s)',

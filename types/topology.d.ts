@@ -23,14 +23,14 @@ declare namespace comq {
     persistent: boolean
 
     /**
-     * How many times a message is delivered to its consumer before it is parked — the
-     * first delivery included, as with `maxAttempts` rather than `maxRetries`. The
-     * default of `5` is one delivery and four retries.
+     * How long a failed message waits before it is delivered again, in milliseconds:
+     * one entry per retry, so **the length of the ladder is the number of retries** and
+     * four rungs is five attempts. A bare number is a ladder of one, hence a single retry.
+     *
+     * Each distinct value is a retry queue of its own, because the wait is the queue's
+     * `x-message-ttl` rather than the message's, and a queue holds one of those.
      */
-    attempts: number
-
-    /** Milliseconds a failed message waits in the retry queue before it is delivered again. */
-    delay: number
+    delay: number | number[]
   }
 
 }

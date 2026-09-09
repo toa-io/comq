@@ -337,19 +337,24 @@ class Channel {
   async #assertRetryQueue () {
     if (!this.#topology.acknowledgments) return
 
-    const name = this.#retryQueue
+    // one queue per distinct wait, declared here rather than when a message first fails:
+    // asserting a queue from inside the failure handler is the least likely moment for it
+    // to succeed, and a failure there would spin the message without ever delaying it
+    for (const delay of new Set(this.#delays)) {
+      const name = RETRY_PREFIX + delay
 
-    await this.#channel.assertExchange(name, 'fanout', DURABLE)
+      await this.#channel.assertExchange(name, 'fanout', DURABLE)
 
-    await this.#assertQueue(name, {
-      ...DURABLE,
-      arguments: {
-        'x-message-ttl': this.#topology.delay,
-        'x-dead-letter-exchange': DEFAULT
-      }
-    })
+      await this.#assertQueue(name, {
+        ...DURABLE,
+        arguments: {
+          'x-message-ttl': delay,
+          'x-dead-letter-exchange': DEFAULT
+        }
+      })
 
-    await this.#channel.bindQueue(name, name, DEFAULT)
+      await this.#channel.bindQueue(name, name, DEFAULT)
+    }
   }
 
   /**
@@ -367,9 +372,21 @@ class Channel {
     await this.#assertQueue(parkedQueueOf(queue), options)
   }
 
-  /** The retry queue and the exchange it is published through share a name. */
-  get #retryQueue () {
-    return RETRY_PREFIX + this.#topology.delay
+  /** The waits between attempts, as a ladder even when it is one rung. */
+  get #delays () {
+    const delay = this.#topology.delay
+
+    return Array.isArray(delay) ? delay : [delay]
+  }
+
+  /**
+   * The queue a message waits in after its nth attempt, and the exchange it is published
+   * through: they share a name.
+   *
+   * @param {number} attempt the attempt that just failed, counting from one
+   */
+  #retryQueueOf (attempt) {
+    return RETRY_PREFIX + this.#delays[attempt - 1]
   }
 
   // endregion
@@ -467,7 +484,8 @@ class Channel {
       // the header is which attempt this delivery is, and the first does not carry one
       const attempt = message.properties.headers?.[ATTEMPT_HEADER] ?? 1
 
-      if (attempt >= this.#topology.attempts) await this.#park(queue, message, exception)
+      // one rung per retry: a message that has climbed the ladder has nowhere left to wait
+      if (attempt > this.#delays.length) await this.#park(queue, message, exception)
       else await this.#retry(queue, message, attempt, exception)
     } catch {
       // the message could not be moved: give the delivery back rather than lose it
@@ -486,7 +504,7 @@ class Channel {
 
     // the copy is placed before the original is released: a message the broker holds
     // twice can be recovered, one it no longer holds at all cannot
-    await this.#publish(this.#retryQueue, queue, message.content, properties)
+    await this.#publish(this.#retryQueueOf(attempt), queue, message.content, properties)
 
     this.#channel.ack(message)
 

@@ -1067,8 +1067,7 @@ describe('failed messages', () => {
     topology.durable = true
     topology.confirms = true
     topology.persistent = false
-    topology.attempts = 5
-    topology.delay = DELAY
+    topology.delay = [DELAY, DELAY, DELAY, DELAY] // four rungs, hence five attempts
 
     channel = await create(connection, topology)
     chan = await getCreatedChannel()
@@ -1375,6 +1374,87 @@ describe('failed messages', () => {
     })
   })
 
+  describe('backoff', () => {
+    const LADDER = [1000, 5000, 25000]
+
+    /** @returns {string[]} the retry queues asserted, in order */
+    const asserted = () => chan.assertQueue.mock.calls
+      .map(([name]) => name)
+      .filter((name) => name.startsWith('comq.retry.'))
+
+    beforeEach(async () => {
+      jest.clearAllMocks()
+
+      topology.delay = LADDER
+
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+    })
+
+    it('should declare a queue and an exchange per rung', async () => {
+      await channel.consume(queue, consumer)
+
+      expect(asserted()).toStrictEqual(LADDER.map((delay) => 'comq.retry.' + delay))
+
+      for (const delay of LADDER) {
+        const name = 'comq.retry.' + delay
+
+        expect(chan.assertExchange).toHaveBeenCalledWith(name, 'fanout', expect.anything())
+        expect(chan.bindQueue).toHaveBeenCalledWith(name, name, '')
+
+        const [, options] = chan.assertQueue.mock.calls.find(([asserted]) => asserted === name)
+
+        expect(options.arguments['x-message-ttl']).toStrictEqual(delay)
+      }
+    })
+
+    it('should declare a repeated rung once', async () => {
+      jest.clearAllMocks()
+
+      topology.delay = [1000, 5000, 1000]
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+
+      await channel.consume(queue, consumer)
+
+      expect(asserted()).toStrictEqual(['comq.retry.1000', 'comq.retry.5000'])
+    })
+
+    it('should climb the ladder', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(delivery({}))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 2 } }))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 3 } }))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 4 } }))
+
+      expect(publications().map(([exchange]) => exchange)).toStrictEqual([
+        'comq.retry.1000',
+        'comq.retry.5000',
+        'comq.retry.25000',
+        '' // parked
+      ])
+    })
+
+    it('should take a number as a ladder of one', async () => {
+      jest.clearAllMocks()
+
+      topology.delay = 1000
+
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+
+      await channel.consume(queue, consumer)
+
+      await deliver(delivery({}))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 2 } }))
+
+      expect(asserted()).toStrictEqual(['comq.retry.1000'])
+      expect(publications().map(([exchange, key]) => exchange || key))
+        .toStrictEqual(['comq.retry.1000', 'comq.parked.' + queue])
+    })
+  })
+
   describe('parking', () => {
     const exhausted = () => delivery({ headers: { 'x-comq-attempt': 5 } })
 
@@ -1449,33 +1529,32 @@ describe('failed messages', () => {
     })
 
     it('should count the first delivery as an attempt', async () => {
-      // `attempts` is the number of deliveries, not the number of retries after one
+      // a ladder of one rung is a single retry, so the second delivery is the last
       jest.clearAllMocks()
 
-      topology.attempts = 1
+      topology.delay = 1000
       channel = await create(connection, topology)
       chan = await getCreatedChannel()
 
       await channel.consume(queue, consumer)
 
-      await deliver(delivery({})) // no header: this is the first and only attempt
+      await deliver(delivery({}))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 2 } }))
 
-      const [exchange, key] = publications()[0]
+      const targets = publications().map(([, key]) => key)
 
-      expect(exchange).toStrictEqual('')
-      expect(key).toStrictEqual('comq.parked.' + queue)
+      expect(targets).toStrictEqual([queue, 'comq.parked.' + queue])
     })
 
-    it('should give a message exactly as many deliveries as configured', async () => {
+    it('should give a message one delivery more than the ladder has rungs', async () => {
       jest.clearAllMocks()
 
-      topology.attempts = 3
+      topology.delay = [1000, 2000]
       channel = await create(connection, topology)
       chan = await getCreatedChannel()
 
       await channel.consume(queue, consumer)
 
-      // the ladder the broker would walk: no header, then what each retry published
       await deliver(delivery({}))
       await deliver(delivery({ headers: { 'x-comq-attempt': 2 } }))
       await deliver(delivery({ headers: { 'x-comq-attempt': 3 } }))

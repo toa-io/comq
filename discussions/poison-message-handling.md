@@ -172,7 +172,7 @@ const headers = {
 RabbitMQ maintains `x-death[0].count`, and it counts *deaths* where `x-comq-attempt` counts
 *deliveries*: on a parked message with the default settings they read `4` and `5`. They will not
 agree, and a move to quorum queues changes `x-death` semantics besides. `x-comq-attempt` is
-authoritative — it is comq's, and it is what `attempts` is compared against; `x-death` is the
+authoritative — it is comq's, and it is what the ladder is measured against; `x-death` is the
 broker's own record, useful for its timestamps.
 
 
@@ -381,18 +381,19 @@ message blocks every shorter one behind it. A uniform per-queue TTL means expiry
 enqueue order. Exponential backoff, if ever wanted, needs one queue per tier — a separate design.
 
 **Attempt count: the default stays 5.** `MAX_REDELIVERIES = 5` ([:481](../source/channel.js#L481))
-already exists — added by the same `1df2afe` — and becomes the default of a `topology.attempts`
-setting. Note its actual arithmetic, because the readme gets it wrong: the counter is the
+already exists — added by the same `1df2afe` — and is replaced by the length of the backoff
+ladder, so the count and the waits cannot disagree. Note its actual arithmetic, because the readme gets it wrong: the counter is the
 `x-comq-attempt` header, absent on first delivery, so it reads `0` and the message is retried.
-`attempts` counts **deliveries, not retries** — the convention `maxAttempts` follows and
-`maxRetries` does not — so `5` is one delivery and four retries. The header is the attempt
-number, counting from one, and the first delivery does not carry it: a consumer reads
-`headers?.['x-comq-attempt'] ?? 1`.
+There is no separate attempt count: `delay` is a **backoff ladder with one rung per retry**, so
+its length decides how many there are and four rungs is five attempts. A count kept beside the
+ladder would be a second source of truth able to disagree with it.
 
-The original code named the setting for attempts and counted retries, which made `5` mean six
-deliveries and left [readme.md:466](../readme.md#L466) — "causes exceptions five times in a row,
-it is discarded" — off by one. Counting deliveries makes that sentence true rather than
-correcting it.
+The header is the attempt number, counting from one, and the first delivery does not carry it: a
+consumer reads `headers?.['x-comq-attempt'] ?? 1`.
+
+The original code kept a `MAX_REDELIVERIES` named for attempts while counting retries, which made
+`5` mean six deliveries and left [readme.md:466](../readme.md#L466) — "causes exceptions five
+times in a row, it is discarded" — off by one.
 
 > **The retry queue inherits the at-most-once caveat described in Part 1.** The return hop is
 > broker dead-lettering, which on classic queues republishes without publisher confirms — so a
@@ -403,36 +404,34 @@ correcting it.
 > A known limitation; it belongs in the docs (§8), not left implicit. Moving comq to quorum
 > queues would close it; see Part 1.
 
-### Delay and attempts are both public
+### The backoff ladder is public
 
-Both are `Topology` fields, defaulted per channel type and overridable per deployment.
+`delay` is a `Topology` field, defaulted per channel type and overridable per deployment. It is
+a list with **one rung per retry**, so its length is the number of retries and there is no
+separate count to fall out of step with it.
 
-| | `event` | `request` | why |
+| | ladder | attempts | total |
 |---|---|---|---|
-| `delay` | `30000` | `5000` | |
-| `attempts` | `5` | `5` | |
+| `event` | 1s, 5s, 15s, 20s | 5 | 41s |
+| `request` | 1s, 3s, 5s, 10s | 5 | 19s |
 
-**Events: 30s.** Five deliveries then span two minutes, which is the shape of the
-failures worth retrying — a database primary stepping down, a storage reconnect, a third-party
-blip, or nothing listening on the queue yet during a rolling deploy. None of those are
-five-second events, and a ladder that covers only five seconds parks everything that was merely
-slow, which makes the parking queue mean "something was briefly slow" instead of "something is
-wrong".
+**Events.** A fast first rung catches a momentary blip without making it wait out a long one,
+and the ladder then backs off toward the failures worth retrying — a database primary stepping
+down, a storage reconnect, a third-party blip, or nothing listening on the queue yet during a
+rolling deploy. None of those are five-second events, and a ladder covering only a few seconds
+parks everything that was merely slow, which makes the parking queue mean "something was briefly
+slow" instead of "something is wrong".
 
-**Requests: 5s.** The failure durations are identical; what differs is that a request has
-someone blocked on it with no timeout. Exhausting the attempts on a request means the caller
-gets **no answer at all**, ever — so giving up early is not a cheaper failure, it is an
-unbounded one, and a caller that would otherwise hang forever would rather wait twenty-five
-seconds. What bounds how much coverage to buy is that a reply arriving long after the caller
-gave up lands in an exclusive reply queue that may no longer exist and comes back unroutable.
-Short *total* ladder rather than a generous per-step one.
+**Requests are shorter, and deliberately so.** The failure durations are identical; what differs
+is that a request has someone blocked on it with no timeout. Exhausting the attempts means the
+caller gets **no answer at all**, ever — so giving up early is not a cheaper failure, it is an
+unbounded one. What bounds how much coverage to buy is that a reply arriving long after the
+caller gave up lands in an exclusive reply queue that may no longer exist, and comes back
+unroutable.
 
-`attempts` stays 5 on both. On requests it does not change the hang — only how long a successful
-retry takes, and how many pointless invocations precede a park.
-
-Both defaults being different is free: `event.json` and `request.json` already differ on four
-other settings. It does mean two shared retry queues by default, `comq.retry.30000` and
-`comq.retry.5000`, which falls out of the naming scheme rather than needing anything.
+Different defaults per channel type are free: `event.json` and `request.json` already differ on
+four other settings. Two ladders that share no value mean eight retry queues and eight exchanges
+for a whole application — still constant in the number of queues consumed.
 
 And it removes a constraint that should never have set a production number: the feature suite
 can run at 100ms without either default being chosen for it. The original `1000` was picked for
@@ -530,8 +529,8 @@ async #assertParkedQueue (queue) {
 Plus `RETRY_PREFIX = 'comq.retry.'`, `PARKED_PREFIX = 'comq.parked.'` and
 `parkedQueueOf = (queue) => PARKED_PREFIX + queue`, where `MAX_REDELIVERIES` sits today
 ([:481](../source/channel.js#L481)) — that constant moves into the topology presets as the
-default for `attempts`, and `RETRY_DELAY` never becomes a constant at all; it is
-`topology.delay` from the start.
+`RETRY_DELAY` never becomes a constant at all; it is `topology.delay` from the start, and
+`MAX_REDELIVERIES` disappears into the ladder's length.
 
 ### 3. `#consume` declares them and threads the queue name
 
@@ -641,7 +640,7 @@ Two things worth being explicit about:
   hardcoded re-emit list.
 - [features/steps/context.js:124](../features/steps/context.js#L124) — add `'retry'` to `EVENTS`.
 
-### 5b. Make `delay` and `attempts` configurable
+### 5b. Make the backoff ladder configurable
 
 Small and self-contained; the reasoning and the defaults are under *Delay and attempts are both
 public*.
@@ -785,8 +784,8 @@ the "configure a DLX yourself" workaround) with prose covering: the retry queue 
 `x-message-ttl` + `x-dead-letter-exchange` as the delay mechanism; `x-comq-attempt` visible to
 consumers; **five attempts by default** — the first delivery and four retries — then `discard`,
 which is what [readme.md:466](../readme.md#L466) already claimed, and noting that both
-the count and the delay are topology settings (`attempts`, `delay`) with per-channel-type
-defaults; **the channel keeps consuming**; ordering not
+the ladder is a topology setting (`delay`) with per-channel-type defaults, and its length is
+the number of retries; **the channel keeps consuming**; ordering not
 preserved across a failure; at-least-once / consumers must be idempotent; retries confirmed for
 Events but best-effort for Requests (`confirms: false`, `persistent: false`), and a discarded
 Request is never answered — the caller waits indefinitely, which with a limited prefetch can
@@ -884,7 +883,7 @@ if (park) await this.#park(queue, message, exception)
 else await this.#retry(queue, message, attempt, exception)
 ```
 
-`Retry` still respects `topology.attempts` — a consumer can say "worth another attempt" without
+`Retry` still respects the ladder — a consumer can say "worth another attempt" without
 being able to say "forever". comq keeps its own count, which is what the proposal's "no
 counts" asks for.
 

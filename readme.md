@@ -431,17 +431,17 @@ Each channel type has a preset, and the trailing argument of `connect` overrides
 
 ```javascript
 const io = await comq.connect(url, {
-  event: { delay: 60000 },
-  request: { attempts: 2 }
+  event: { delay: [5000, 60000] },  // two retries
+  request: { delay: 1000 }          // one
 })
 ```
 
-`delay` and `attempts` govern [retries](#retries); the rest of
-[the settings](./types/topology.d.ts) are not meant to be changed.
+`delay` governs [retries](#retries); the rest of [the settings](./types/topology.d.ts) are not
+meant to be changed.
 
-> Changing `delay` declares a new retry queue rather than redeclaring the existing one, so a
-> rolling deploy that changes it has no window in which either version fails. The queue left
-> behind is empty and can be removed once nothing is publishing to it.
+> Changing `delay` declares new retry queues rather than redeclaring the existing ones, so a
+> rolling deploy that changes it has no window in which either version fails. The queues left
+> behind are empty and can be removed once nothing is publishing to them.
 
 ### Channels
 
@@ -470,8 +470,8 @@ requests and are expecting replies.
 
 comq declares two kinds of queue of its own, for [failed messages](#retries):
 
-- `comq.retry.<delay>`, with a fanout exchange of the same name, one pair per distinct `delay`
-  and shared by every queue that uses it.
+- `comq.retry.<delay>`, with a fanout exchange of the same name, one pair per distinct rung of
+  the [backoff ladder](#retries), shared by every queue that uses it.
 - `comq.parked.<queue>`, one per consumed queue, declared to live as long as it does.
 
 See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.html#channel_assertQueue).
@@ -494,16 +494,26 @@ and outlives a restart of this process without holding a delivery against the
 [prefetch limit](#channels).
 
 Each attempt increments the [`x-comq-attempt`](./docs/headers.md) header, which the consumer
-receives among the message properties. Once a message has had `attempts` of them it is *parked*.
-`attempts` counts deliveries rather than retries — as `maxAttempts` does and `maxRetries` does
-not — so the default of `5` is the first delivery and four retries.
+receives among the message properties. `delay` is a backoff ladder with **one rung per retry**,
+so its length decides how many there are: the four rungs of the default are five attempts, and
+once a message has climbed it there is nowhere left to wait and it is *parked*.
 
 The channel keeps consuming throughout. A message one consumer cannot handle stops neither the
 other consumers nor that consumer's next message; only the message that failed is delayed.
 
-`delay` and `attempts` are [topology](#topology) settings, defaulting to 30s and 5 for Events and
-to 5s and 5 for Requests. One retry queue and one exchange are declared per distinct delay and
-shared by every queue that uses it, so their number does not grow with the number of queues.
+`delay` is a [topology](#topology) setting:
+
+| | ladder | attempts | total |
+|---|---|---|---|
+| Event | 1s, 5s, 15s, 20s | 5 | 41s |
+| Request | 1s, 3s, 5s, 10s | 5 | 19s |
+
+Requests are shorter because a caller is blocked on one with no timeout, and a Reply arriving
+long after it gave up has nowhere useful to land. Nobody waits on an Event.
+
+One retry queue and one exchange are declared per distinct wait and shared by every queue that
+uses them, so their number grows with the length of the ladder rather than with the number of
+queues.
 
 #### Parked messages
 
@@ -552,11 +562,11 @@ See:
 
 ### Cheatsheet
 
-| Message | Prefetch  | Confirms | Queue     | Acknowledgment | Persistent | Retry delay | Attempts |
-|---------|-----------|----------|-----------|----------------|------------|-------------|----------|
-| Request | limited   | no       | durable   | manual         | no         | 5s          | 5        |
-| Reply   | unlimited | no       | exclusive | automatic      | no         | —           | —        |
-| Event   | limited   | yes      | durable   | manual         | yes        | 30s         | 5        |
+| Message | Prefetch  | Confirms | Queue     | Acknowledgment | Persistent | Retries          |
+|---------|-----------|----------|-----------|----------------|------------|------------------|
+| Request | limited   | no       | durable   | manual         | no         | 1s, 3s, 5s, 10s  |
+| Reply   | unlimited | no       | exclusive | automatic      | no         | —                |
+| Event   | limited   | yes      | durable   | manual         | yes        | 1s, 5s, 15s, 20s |
 
 ## Graceful shutdown
 

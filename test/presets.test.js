@@ -9,8 +9,7 @@ it('should define request preset', async () => {
     durable: true,
     acknowledgments: true,
     persistent: false,
-    attempts: 5,
-    delay: 5000
+    delay: [1000, 3000, 5000, 10000]
   })
 })
 
@@ -31,7 +30,6 @@ it('should define event preset', async () => {
     durable: true,
     acknowledgments: true,
     persistent: true,
-    attempts: 5,
-    delay: 30000
+    delay: [1000, 5000, 15000, 20000]
   })
 })
