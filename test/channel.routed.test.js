@@ -93,7 +93,7 @@ describe('bound', () => {
 
     const { queue: asserted } = await chan.assertQueue.mock.results[0].value
 
-    expect(chan.bindQueue).toHaveBeenCalledTimes(1)
+    expect(bindings()).toHaveLength(1)
     expect(chan.bindQueue).toHaveBeenCalledWith(asserted, exchange, key)
   })
 
@@ -107,13 +107,17 @@ describe('bound', () => {
     await channel.bound(exchange, queue, key, consumer)
     await channel.bound(exchange, queue, key, consumer)
 
-    expect(chan.bindQueue).toHaveBeenCalledTimes(1)
+    expect(bindings()).toHaveLength(1)
   })
 
   it('should bind again for another key', async () => {
     await channel.bound(exchange, queue, key, consumer)
     await channel.bound(exchange, generate(), generate(), consumer)
 
-    expect(chan.bindQueue).toHaveBeenCalledTimes(2)
+    expect(bindings()).toHaveLength(2)
   })
+
+  /** The bindings of the caller, less the one comq makes for its own retry queue. */
+  const bindings = () =>
+    chan.bindQueue.mock.calls.filter(([, exchange]) => !exchange.startsWith('comq.'))
 })

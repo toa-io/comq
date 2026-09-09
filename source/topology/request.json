@@ -3,5 +3,7 @@
   "confirms": false,
   "durable": true,
   "acknowledgments": true,
-  "persistent": false
+  "persistent": false,
+  "attempts": 5,
+  "delay": 5000
 }

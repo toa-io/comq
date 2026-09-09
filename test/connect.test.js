@@ -40,7 +40,7 @@ describe('single connection', () => {
   })
 
   it('should pass active connection', async () => {
-    expect(Connection).toHaveBeenCalledWith(url)
+    expect(Connection).toHaveBeenCalledWith(url, {})
 
     /** @type {jest.MockedObject<comq.Connection>} */
     const instance = Connection.mock.instances[0]
@@ -62,10 +62,39 @@ describe('sharded connection', () => {
   })
 
   it('should pass single connection instances', async () => {
-    urls.forEach((url) => expect(Connection).toHaveBeenCalledWith(url))
+    urls.forEach((url) => expect(Connection).toHaveBeenCalledWith(url, {}))
 
     const instances = Connection.mock.instances
 
     expect(shards.Connection).toHaveBeenCalledWith(instances)
+  })
+})
+
+describe('topology overrides', () => {
+  it('should pass the trailing argument to the connection', async () => {
+    const overrides = { event: { delay: 100 } }
+
+    await connect(url, overrides)
+
+    expect(Connection).toHaveBeenCalledWith(url, overrides)
+  })
+
+  it('should pass them to every shard', async () => {
+    const urls = [generate(), generate()]
+    const overrides = { request: { attempts: 1 } }
+
+    await connect(...urls, overrides)
+
+    urls.forEach((url) => expect(Connection).toHaveBeenCalledWith(url, overrides))
+    expect(shards.Connection).toHaveBeenCalled()
+  })
+
+  it('should not take a url as overrides', async () => {
+    const urls = [generate(), generate()]
+
+    await connect(...urls)
+
+    expect(Connection).toHaveBeenCalledTimes(2)
+    urls.forEach((url) => expect(Connection).toHaveBeenCalledWith(url, {}))
   })
 })

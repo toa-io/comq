@@ -9,10 +9,14 @@ class SingletonConnection extends Connection {
   /** @type {Promise<void>} */
   #opened = null
 
-  constructor (url) {
+  /**
+   * @param {string} url
+   * @param {comq.topology.Overrides} [overrides] of the first caller: an instance is shared
+   */
+  constructor (url, overrides = {}) {
     if (instances.has(url)) return instances.get(url)
 
-    super(url)
+    super(url, overrides)
 
     this.#url = url
 

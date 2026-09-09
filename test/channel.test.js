@@ -4,7 +4,7 @@
 
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
-const { flip, random, timeout } = require('./helpers')
+const { flip, random, timeout, immediate } = require('./helpers')
 
 const backpressure = require('./backpressure')
 const { amqplib } = require('./amqplib.mock')
@@ -347,9 +347,12 @@ describe.each(['group', 'exclusive'])('%s subscribe', (option) => {
   })
 
   it('should assert fanout exchange', async () => {
-    expect(chan.assertExchange).toHaveBeenCalledTimes(1)
+    // the retry exchange is asserted alongside it when the channel acknowledges
+    const calls = chan.assertExchange.mock.calls.filter(([name]) => name === exchange)
 
-    const [name, type, options] = chan.assertExchange.mock.calls[0]
+    expect(calls).toHaveLength(1)
+
+    const [name, type, options] = calls[0]
 
     expect(name).toStrictEqual(exchange)
     expect(type).toStrictEqual('fanout')
@@ -385,7 +388,10 @@ describe.each(['group', 'exclusive'])('%s subscribe', (option) => {
   it('should bind queue to exchange', async () => {
     const { queue } = await chan.assertQueue.mock.results[0].value
 
-    expect(chan.bindQueue).toHaveBeenCalledTimes(1)
+    // comq binds its own retry queue too, when the channel acknowledges
+    const bindings = chan.bindQueue.mock.calls.filter(([, name]) => !name.startsWith('comq.'))
+
+    expect(bindings).toHaveLength(1)
     expect(chan.bindQueue).toHaveBeenCalledWith(queue, exchange, '')
   })
 
@@ -1027,5 +1033,467 @@ describe('release', () => {
     await channel.close()
 
     expect(release).toHaveBeenCalledWith(channel)
+  })
+})
+
+describe('failed messages', () => {
+  const DELAY = 1000
+  const RETRY = 'comq.retry.' + DELAY
+
+  let queue
+  let exception
+  let consumer
+
+  /** @returns {comq.amqp.Message} */
+  const delivery = (properties = {}, fields = {}) => ({
+    content: randomBytes(8),
+    properties,
+    fields: { exchange: generate(), routingKey: generate(), ...fields }
+  })
+
+  /** The consumer amqplib was given, which is comq's wrapper rather than the callback. */
+  const deliver = async (message) => {
+    const callback = /** @type {Function} */ chan.consume.mock.calls[0][1]
+
+    return await callback(message)
+  }
+
+  const publications = () => chan.publish.mock.calls
+
+  beforeEach(async () => {
+    jest.clearAllMocks()
+
+    topology.acknowledgments = true
+    topology.durable = true
+    topology.confirms = true
+    topology.persistent = false
+    topology.attempts = 5
+    topology.delay = DELAY
+
+    channel = await create(connection, topology)
+    chan = await getCreatedChannel()
+
+    queue = generate()
+    exception = new Error(generate())
+    consumer = jest.fn(async () => { throw exception })
+  })
+
+  describe('topology', () => {
+    it('should assert the retry queue and its exchange', async () => {
+      await channel.consume(queue, consumer)
+
+      expect(chan.assertExchange).toHaveBeenCalledWith(RETRY, 'fanout', expect.objectContaining({ durable: true }))
+
+      expect(chan.assertQueue).toHaveBeenCalledWith(RETRY, expect.objectContaining({
+        durable: true,
+        arguments: {
+          'x-message-ttl': DELAY,
+          'x-dead-letter-exchange': ''
+        }
+      }))
+
+      expect(chan.bindQueue).toHaveBeenCalledWith(RETRY, RETRY, '')
+    })
+
+    it('should not set a dead letter routing key', async () => {
+      // the message keeps its own, which names the queue it came from;
+      // a fixed one would make the queue serve a single source
+      await channel.consume(queue, consumer)
+
+      const [, options] = chan.assertQueue.mock.calls.find(([name]) => name === RETRY)
+
+      expect(options.arguments['x-dead-letter-routing-key']).toBeUndefined()
+    })
+
+    it('should assert the parked queue', async () => {
+      await channel.consume(queue, consumer)
+
+      expect(chan.assertQueue).toHaveBeenCalledWith('comq.parked.' + queue,
+        expect.objectContaining({ durable: true }))
+    })
+
+    it('should assert the source queue first', async () => {
+      await channel.consume(queue, consumer)
+
+      expect(chan.assertQueue.mock.calls[0][0]).toStrictEqual(queue)
+    })
+
+    it('should assert the retry topology once per channel', async () => {
+      await channel.consume(generate(), consumer)
+      await channel.consume(generate(), consumer)
+      await channel.consume(generate(), consumer)
+
+      const exchanges = chan.assertExchange.mock.calls.filter(([name]) => name === RETRY)
+      const queues = chan.assertQueue.mock.calls.filter(([name]) => name === RETRY)
+
+      expect(exchanges).toHaveLength(1)
+      expect(queues).toHaveLength(1)
+    })
+
+    it('should assert a parked queue per consumed queue', async () => {
+      const one = generate()
+      const another = generate()
+
+      await channel.consume(one, consumer)
+      await channel.consume(another, consumer)
+
+      expect(chan.assertQueue).toHaveBeenCalledWith('comq.parked.' + one, expect.anything())
+      expect(chan.assertQueue).toHaveBeenCalledWith('comq.parked.' + another, expect.anything())
+    })
+
+    it('should not assert either without acknowledgments', async () => {
+      jest.clearAllMocks()
+
+      topology.acknowledgments = false
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+
+      await channel.consume(queue, consumer)
+
+      const internal = chan.assertQueue.mock.calls.filter(([name]) => name.startsWith('comq.'))
+
+      expect(internal).toHaveLength(0)
+      expect(chan.assertExchange).not.toHaveBeenCalled()
+    })
+
+    it('should declare the parked queue exclusive for an exclusive queue', async () => {
+      jest.clearAllMocks()
+
+      topology.durable = false
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+
+      await channel.consume(queue, consumer)
+
+      const [, options] = chan.assertQueue.mock.calls
+        .find(([name]) => name === 'comq.parked.' + queue)
+
+      expect(options).toMatchObject({ exclusive: true })
+    })
+
+    it('should re-assert after recovery', async () => {
+      await channel.consume(queue, consumer)
+
+      const replacement = await amqplib.connect()
+
+      await channel.recover(replacement)
+
+      const repl = await getCreatedChannel(replacement)
+
+      expect(repl.assertExchange).toHaveBeenCalledWith(RETRY, 'fanout', expect.anything())
+      expect(repl.assertQueue).toHaveBeenCalledWith('comq.parked.' + queue, expect.anything())
+    })
+  })
+
+  describe('retry', () => {
+    it('should publish to the retry exchange keyed by the source queue', async () => {
+      await channel.consume(queue, consumer)
+
+      const message = delivery()
+
+      await deliver(message)
+
+      const [exchange, key] = publications()[0]
+
+      expect(exchange).toStrictEqual(RETRY)
+      expect(key).toStrictEqual(queue)
+    })
+
+    it('should not republish to the exchange the message came from', async () => {
+      await channel.consume(queue, consumer)
+
+      const message = delivery()
+
+      await deliver(message)
+
+      const [exchange] = publications()[0]
+
+      // a fanout source exchange would otherwise redeliver the retry to every subscriber
+      expect(exchange).not.toStrictEqual(message.fields.exchange)
+    })
+
+    it('should publish before acknowledging', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(delivery())
+
+      expect(chan.publish.mock.invocationCallOrder[0])
+        .toBeLessThan(chan.ack.mock.invocationCallOrder[0])
+    })
+
+    it('should wait for the confirmation before acknowledging', async () => {
+      await channel.consume(queue, consumer)
+
+      let confirm
+
+      chan.publish.mockImplementationOnce((_0, _1, _2, _3, callback) => { confirm = callback })
+
+      const pending = deliver(delivery())
+
+      await immediate()
+
+      expect(chan.ack).not.toHaveBeenCalled()
+
+      confirm(null)
+      await pending
+
+      expect(chan.ack).toHaveBeenCalled()
+    })
+
+    it('should increment the attempt', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(delivery({ headers: { 'x-attempt': 2 } }))
+
+      const [, , , options] = publications()[0]
+
+      expect(options.headers['x-attempt']).toStrictEqual(3)
+    })
+
+    it('should tolerate a message without headers', async () => {
+      // a message published by something that is not comq carries no field table
+      await channel.consume(queue, consumer)
+
+      await expect(deliver(delivery({}))).resolves.not.toThrow()
+
+      const [, , , options] = publications()[0]
+
+      expect(options.headers['x-attempt']).toStrictEqual(1)
+    })
+
+    it('should record the origin on the first failure', async () => {
+      await channel.consume(queue, consumer)
+
+      const message = delivery()
+
+      await deliver(message)
+
+      const [, , , options] = publications()[0]
+
+      expect(options.headers['x-comq-exchange']).toStrictEqual(message.fields.exchange)
+      expect(options.headers['x-comq-key']).toStrictEqual(message.fields.routingKey)
+    })
+
+    it('should keep the recorded origin on later failures', async () => {
+      // a returned retry arrives through the default exchange, so its own fields
+      // no longer say where it was published
+      await channel.consume(queue, consumer)
+
+      const origin = generate()
+      const message = delivery(
+        { headers: { 'x-attempt': 1, 'x-comq-exchange': origin, 'x-comq-key': generate() } },
+        { exchange: '' })
+
+      await deliver(message)
+
+      const [, , , options] = publications()[0]
+
+      expect(options.headers['x-comq-exchange']).toStrictEqual(origin)
+    })
+
+    it('should publish persistent from a transient topology', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(delivery())
+
+      const [, , , options] = publications()[0]
+
+      expect(options.persistent).toStrictEqual(true)
+    })
+
+    it('should not mutate the message', async () => {
+      await channel.consume(queue, consumer)
+
+      const message = delivery({})
+
+      await deliver(message)
+
+      expect(message.properties.headers).toBeUndefined()
+    })
+
+    it('should emit the `retry` event', async () => {
+      const listener = jest.fn()
+
+      channel.diagnose('retry', listener)
+
+      await channel.consume(queue, consumer)
+
+      const message = delivery()
+
+      await deliver(message)
+
+      expect(listener).toHaveBeenCalledWith(message, exception, 1)
+    })
+
+    it('should not throw', async () => {
+      // amqplib drops the promise it gets back, so a rejection ends the process
+      await channel.consume(queue, consumer)
+
+      await expect(deliver(delivery())).resolves.not.toThrow()
+    })
+
+    it('should not seal the channel', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(delivery())
+
+      expect(chan.cancel).not.toHaveBeenCalled()
+    })
+
+    it('should keep consuming', async () => {
+      const another = generate()
+
+      await channel.consume(queue, consumer)
+      await deliver(delivery())
+
+      await expect(channel.consume(another, jest.fn())).resolves.not.toThrow()
+
+      expect(chan.consume).toHaveBeenCalledWith(another, expect.any(Function), expect.anything())
+    })
+
+    it('should ignore an exception thrown after the channel closed', async () => {
+      await channel.consume(queue, consumer)
+
+      consumer.mockImplementationOnce(async () => { throw new Error('Channel closed') })
+
+      await expect(deliver(delivery())).resolves.not.toThrow()
+
+      expect(chan.publish).not.toHaveBeenCalled()
+      expect(chan.ack).not.toHaveBeenCalled()
+      expect(chan.nack).not.toHaveBeenCalled()
+    })
+
+    it('should tolerate a rejection that is not an Error', async () => {
+      await channel.consume(queue, consumer)
+
+      consumer.mockImplementationOnce(async () => { throw undefined }) // eslint-disable-line
+
+      await expect(deliver(delivery())).resolves.not.toThrow()
+
+      expect(chan.publish).toHaveBeenCalled()
+    })
+  })
+
+  describe('parking', () => {
+    const exhausted = () => delivery({ headers: { 'x-attempt': 5 } })
+
+    it('should publish to the parked queue once the attempts are spent', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(exhausted())
+
+      const [exchange, key] = publications()[0]
+
+      expect(exchange).toStrictEqual('')
+      expect(key).toStrictEqual('comq.parked.' + queue)
+    })
+
+    it('should not retry once the attempts are spent', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(exhausted())
+
+      expect(publications()).toHaveLength(1)
+      expect(chan.nack).not.toHaveBeenCalled()
+    })
+
+    it('should publish before acknowledging', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(exhausted())
+
+      expect(chan.publish.mock.invocationCallOrder[0])
+        .toBeLessThan(chan.ack.mock.invocationCallOrder[0])
+    })
+
+    it('should record where the message came from', async () => {
+      await channel.consume(queue, consumer)
+
+      const origin = generate()
+      const message = delivery({ headers: { 'x-attempt': 5, 'x-comq-exchange': origin } })
+
+      await deliver(message)
+
+      const [, , , options] = publications()[0]
+
+      expect(options.headers['x-comq-exchange']).toStrictEqual(origin)
+      expect(options.headers['x-comq-queue']).toStrictEqual(queue)
+      expect(options.headers['x-comq-reason']).toStrictEqual(exception.message)
+      expect(options.headers['x-comq-at']).toStrictEqual(expect.any(Number))
+    })
+
+    it('should keep replyTo and correlationId', async () => {
+      // a parked Request remains answerable while its caller is still waiting
+      await channel.consume(queue, consumer)
+
+      const replyTo = generate()
+      const correlationId = generate()
+
+      await deliver(delivery({ headers: { 'x-attempt': 5 }, replyTo, correlationId }))
+
+      const [, , , options] = publications()[0]
+
+      expect(options.replyTo).toStrictEqual(replyTo)
+      expect(options.correlationId).toStrictEqual(correlationId)
+    })
+
+    it('should publish persistent from a transient topology', async () => {
+      await channel.consume(queue, consumer)
+
+      await deliver(exhausted())
+
+      const [, , , options] = publications()[0]
+
+      expect(options.persistent).toStrictEqual(true)
+    })
+
+    it('should respect a configured attempt count', async () => {
+      jest.clearAllMocks()
+
+      topology.attempts = 1
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+
+      await channel.consume(queue, consumer)
+
+      await deliver(delivery({ headers: { 'x-attempt': 1 } }))
+
+      const [, key] = publications()[0]
+
+      expect(key).toStrictEqual('comq.parked.' + queue)
+    })
+  })
+
+  describe('when the message cannot be moved', () => {
+    it('should give the delivery back', async () => {
+      await channel.consume(queue, consumer)
+
+      chan.publish.mockImplementation(() => { throw new Error(generate()) })
+
+      await expect(deliver(delivery())).resolves.not.toThrow()
+
+      expect(chan.nack).toHaveBeenCalledWith(expect.anything(), false, true)
+      expect(chan.ack).not.toHaveBeenCalled()
+    })
+
+    it('should give it back when the confirmation is rejected', async () => {
+      await channel.consume(queue, consumer)
+
+      chan.publish.mockImplementationOnce((_0, _1, _2, _3, callback) => callback(new Error(generate())))
+
+      await expect(deliver(delivery())).resolves.not.toThrow()
+
+      expect(chan.nack).toHaveBeenCalledWith(expect.anything(), false, true)
+      expect(chan.ack).not.toHaveBeenCalled()
+    })
+
+    it('should not throw when giving it back also fails', async () => {
+      await channel.consume(queue, consumer)
+
+      chan.publish.mockImplementation(() => { throw new Error(generate()) })
+      chan.nack.mockImplementation(() => { throw new Error('Channel closed') })
+
+      await expect(deliver(delivery())).resolves.not.toThrow()
+    })
   })
 })

@@ -39,7 +39,7 @@ it('should return instance of IO', async () => {
 
 it('should create singleton connection', async () => {
   expect(SingletonConnection).toHaveBeenCalled()
-  expect(SingletonConnection).toHaveBeenCalledWith(url)
+  expect(SingletonConnection).toHaveBeenCalledWith(url, {})
   expect(IO).toHaveBeenCalledWith(SingletonConnection.mock.instances[0])
 })
 
@@ -50,7 +50,7 @@ it('should create sharded connection', async () => {
 
   io = await assert(...urls)
 
-  for (const url of urls) expect(SingletonConnection).toHaveBeenCalledWith(url)
+  for (const url of urls) expect(SingletonConnection).toHaveBeenCalledWith(url, {})
 
   expect(shards.Connection).toHaveBeenCalledWith(SingletonConnection.mock.instances)
   expect(IO).toHaveBeenCalledWith(shards.Connection.mock.instances[0])

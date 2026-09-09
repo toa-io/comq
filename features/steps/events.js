@@ -44,7 +44,10 @@ Given('(that )events from the {token} exchange are causing exceptions',
    * @this {comq.features.Context}
    */
   async function (exchange) {
-    await this.io.consume(exchange, 'exceptions', () => {
+    await this.io.consume(exchange, 'exceptions', (payload, properties) => {
+      // absent on the first delivery, so the ladder reads 0, 1, 2 ...
+      this.attempts.push(properties.headers?.['x-attempt'] ?? 0)
+
       throw new Error('Expected exception')
     })
   })
@@ -181,6 +184,7 @@ async function consume (group, exchange) {
   const consumer = async (payload, properties) => {
     this.consumed[group] = { payload, properties }
     this.eventsConsumedCount++
+    this.counts[group] = (this.counts[group] ?? 0) + 1
   }
 
   return group === undefined
