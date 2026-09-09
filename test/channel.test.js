@@ -916,7 +916,7 @@ describe('diagnostics', () => {
 
     const callback = /** @type {Function} */ chan.consume.mock.calls[0][1]
     const content = randomBytes(8)
-    const properties = { headers: { 'x-attempt': 5 } }
+    const properties = { headers: { 'x-comq-attempt': 5 } }
     const message = /** @type {comq.amqp.Message} */ { content, properties }
 
     await callback(message)
@@ -1243,11 +1243,11 @@ describe('failed messages', () => {
     it('should increment the attempt', async () => {
       await channel.consume(queue, consumer)
 
-      await deliver(delivery({ headers: { 'x-attempt': 2 } }))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 2 } }))
 
       const [, , , options] = publications()[0]
 
-      expect(options.headers['x-attempt']).toStrictEqual(3)
+      expect(options.headers['x-comq-attempt']).toStrictEqual(3)
     })
 
     it('should tolerate a message without headers', async () => {
@@ -1258,7 +1258,7 @@ describe('failed messages', () => {
 
       const [, , , options] = publications()[0]
 
-      expect(options.headers['x-attempt']).toStrictEqual(1)
+      expect(options.headers['x-comq-attempt']).toStrictEqual(1)
     })
 
     it('should record the origin on the first failure', async () => {
@@ -1281,7 +1281,7 @@ describe('failed messages', () => {
 
       const origin = generate()
       const message = delivery(
-        { headers: { 'x-attempt': 1, 'x-comq-exchange': origin, 'x-comq-key': generate() } },
+        { headers: { 'x-comq-attempt': 1, 'x-comq-exchange': origin, 'x-comq-key': generate() } },
         { exchange: '' })
 
       await deliver(message)
@@ -1375,7 +1375,7 @@ describe('failed messages', () => {
   })
 
   describe('parking', () => {
-    const exhausted = () => delivery({ headers: { 'x-attempt': 5 } })
+    const exhausted = () => delivery({ headers: { 'x-comq-attempt': 5 } })
 
     it('should publish to the parked queue once the attempts are spent', async () => {
       await channel.consume(queue, consumer)
@@ -1410,7 +1410,7 @@ describe('failed messages', () => {
       await channel.consume(queue, consumer)
 
       const origin = generate()
-      const message = delivery({ headers: { 'x-attempt': 5, 'x-comq-exchange': origin } })
+      const message = delivery({ headers: { 'x-comq-attempt': 5, 'x-comq-exchange': origin } })
 
       await deliver(message)
 
@@ -1429,7 +1429,7 @@ describe('failed messages', () => {
       const replyTo = generate()
       const correlationId = generate()
 
-      await deliver(delivery({ headers: { 'x-attempt': 5 }, replyTo, correlationId }))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 5 }, replyTo, correlationId }))
 
       const [, , , options] = publications()[0]
 
@@ -1456,7 +1456,7 @@ describe('failed messages', () => {
 
       await channel.consume(queue, consumer)
 
-      await deliver(delivery({ headers: { 'x-attempt': 1 } }))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 1 } }))
 
       const [, key] = publications()[0]
 

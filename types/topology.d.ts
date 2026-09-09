@@ -24,7 +24,7 @@ declare namespace comq {
 
     /**
      * How many times a message that caused an exception is retried before it is parked.
-     * The count is the `x-attempt` header, which the first delivery does not carry, so
+     * The count is the `x-comq-attempt` header, which the first delivery does not carry, so
      * the default of `5` is one delivery followed by five retries: six in all.
      */
     attempts: number

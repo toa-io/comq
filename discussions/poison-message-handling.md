@@ -140,7 +140,7 @@ comes back through the *default* exchange, so by the time it is parked:
 "exchange": "",
 "routingKey": "orders..billing",
 "headers": {
-  "x-attempt": 1,
+  "x-comq-attempt": 1,
   "x-death": [{ "reason": "expired", "queue": "comq.retry.30000",
                 "exchange": "comq.retry.30000", "routing-keys": ["orders..billing"] }],
   "x-first-death-exchange": "comq.retry.30000"
@@ -159,7 +159,7 @@ only for the first-delivery `Park` path where nothing has been written yet:
 
 ```js
 const headers = {
-  ...message.properties.headers,          // x-attempt and, after one retry, the origin
+  ...message.properties.headers,          // x-comq-attempt and, after one retry, the origin
   'x-comq-queue': queue,                  // threaded in by Part 2 §3
   'x-comq-exchange': message.properties.headers?.['x-comq-exchange'] ?? message.fields.exchange,
   'x-comq-key': message.properties.headers?.['x-comq-key'] ?? message.fields.routingKey,
@@ -170,8 +170,8 @@ const headers = {
 
 **Two attempt counters will be on the message, and the docs must say which is authoritative.**
 RabbitMQ maintains `x-death[0].count`, and after five retries it reads `5` alongside comq's own
-`x-attempt: 5`. They agree today, but nothing should be built on that — a move to quorum queues
-changes `x-death` semantics, and `x-attempt` is comq's. `x-attempt` is authoritative; `x-death`
+`x-comq-attempt: 5`. They agree today, but nothing should be built on that — a move to quorum queues
+changes `x-death` semantics, and `x-comq-attempt` is comq's. `x-comq-attempt` is authoritative; `x-death`
 is the broker's own record and is useful for the timestamps.
 
 
@@ -382,7 +382,7 @@ enqueue order. Exponential backoff, if ever wanted, needs one queue per tier —
 **Attempt count: the default stays 5.** `MAX_REDELIVERIES = 5` ([:481](../source/channel.js#L481))
 already exists — added by the same `1df2afe` — and becomes the default of a `topology.attempts`
 setting. Note its actual arithmetic, because the readme gets it wrong: the counter is the
-`x-attempt` header, absent on first delivery, so it reads `0` and the message is retried.
+`x-comq-attempt` header, absent on first delivery, so it reads `0` and the message is retried.
 `5 >= 5` first holds on the **sixth** delivery, so the consumer is invoked **six times** (one
 original plus five retries). [readme.md:466](../readme.md#L466) — "causes exceptions five times
 in a row, it is discarded" — is off by one *today*; correct it in §8 rather than changing the
@@ -461,7 +461,7 @@ Two extra defects found while designing, fixed in the same pass:
 - **A retry published to a deleted queue is silently dropped**, and publisher confirms still
   ack it. `mandatory: true` makes the broker return it so the `return` diagnostic fires, but
   asynchronously. Document "do not delete `comq.retry.*` on a running system".
-- **`x-attempt` becomes user-visible** — consumers receive it in `properties.headers` and can
+- **`x-comq-attempt` becomes user-visible** — consumers receive it in `properties.headers` and can
   tell which attempt they're on. Worth documenting as a feature. RabbitMQ also appends
   `x-death` on the way back and rewrites `routingKey` to the source queue name.
 
@@ -570,7 +570,7 @@ Replace `#getAcknowledgingConsumer` / `#requeue` ([:370-400](../source/channel.j
 // process down.
 async #failed (queue, message, exception) {
   try {
-    const attempt = message.properties.headers?.[REDELIVERY_HEADER] ?? 0
+    const attempt = message.properties.headers?.[ATTEMPT_HEADER] ?? 0
 
     if (attempt >= this.#topology.attempts) await this.#park(queue, message, exception)
     else await this.#retry(queue, message, attempt, exception)
@@ -586,7 +586,7 @@ async #retry (queue, message, attempt, exception) {
     // so message.fields no longer describes where it was published
     ...origin(message),
     ...message.properties.headers,
-    [REDELIVERY_HEADER]: attempt + 1
+    [ATTEMPT_HEADER]: attempt + 1
   }
 
   // persistent regardless of the source topology: a retried Request would otherwise be
@@ -691,7 +691,7 @@ Failure path — the regression tests that matter:
   process-crash regression)*
 - **does not seal** — `chan.cancel` not called, `seal` spy not called, and a subsequent
   `channel.consume(...)` still works *(proves `#sealed` is still false)*
-- increments `x-attempt`; does not mutate `message.properties`; emits `retry` with the attempt
+- increments `x-comq-attempt`; does not mutate `message.properties`; emits `retry` with the attempt
 - **publishes persistent even from a non-persistent topology** — `topology.persistent = false`
   (the request preset), assert the publish options carry `persistent: true`, for both the retry
   and the parking publish. *(a parked Request would otherwise not survive a broker restart)*
@@ -702,7 +702,7 @@ Failure path — the regression tests that matter:
 - consumer throwing `'Channel closed'` → no publish, no nack, no ack (complements the existing
   test at [:144](../test/channel.test.js#L144), which covers `ack` throwing)
 - consumer doing `throw undefined` → resolves *(covers the `exception?.message` guard)*
-- **terminal**: `x-attempt: 5` → published to `comq.parked.<queue>`, **not** to the retry queue;
+- **terminal**: `x-comq-attempt: 5` → published to `comq.parked.<queue>`, **not** to the retry queue;
   published before acking, same order assertion as above; carries the `x-comq-*` headers
   including an `x-comq-exchange` that names the original exchange rather than `''`; `nack` not
   called. Restores
@@ -722,7 +722,7 @@ Both scenarios drop `@manual`. Two structural facts shape this:
   through a retry queue will land in the next scenario's consumer. **Use a distinct exchange
   name per scenario** — do not share `poison`.
 - [features/steps/events.js:41](../features/steps/events.js#L41) builds the throwing consumer.
-  Change it to record `properties.headers?.['x-attempt']` into a new `this.attempts` array,
+  Change it to record `properties.headers?.['x-comq-attempt']` into a new `this.attempts` array,
   which turns the whole retry loop into an end-to-end assertion against a real broker.
 
 ```gherkin
@@ -756,14 +756,14 @@ Steps needed:
 - `Then the event is attempted {int} times` (new, `features/steps/poison.js`) — poll
   `this.attempts` to a deadline, then `assert.deepEqual(this.attempts, [0, 1, 2, 3, 4, 5])`.
   Asserts count, header increment, and that the delay round-trips through the broker. Six
-  entries, per the arithmetic above — the first delivery has no `x-attempt` header.
+  entries, per the arithmetic above — the first delivery has no `x-comq-attempt` header.
 - `Then the message is discarded` — **already exists** at
   [features/steps/poison.js:7](../features/steps/poison.js#L7) and is currently orphaned (no
   feature file references it). It becomes live; change its `await timeout(300)` to a polling
   wait, via a new `until(predicate, ms)` helper in `test/helpers.js` next to `timeout`.
 - `Then the message is parked` (new) — the real end-to-end assertion, and only possible because
   Part 1 gives comq a queue it owns: `io.process('comq.parked.<queue>', …)` and assert the payload
-  arrives, carrying `x-attempt: 5` and the `x-comq-*` headers. Under today's code, and under a
+  arrives, carrying `x-comq-attempt: 5` and the `x-comq-*` headers. Under today's code, and under a
   broker-side DLX, there would be nothing to consume. Prefer this over the diagnostic-flag step
   wherever both would work — it proves the message actually survived, not just that comq
   believes it did.
@@ -776,7 +776,7 @@ Steps needed:
 
 Replace [readme.md:464-470](../readme.md#L464) (which currently documents the sealed channel and
 the "configure a DLX yourself" workaround) with prose covering: the retry queue and its name;
-`x-message-ttl` + `x-dead-letter-exchange` as the delay mechanism; `x-attempt` visible to
+`x-message-ttl` + `x-dead-letter-exchange` as the delay mechanism; `x-comq-attempt` visible to
 consumers; **six attempts by default** — one original plus five retries — then `discard`,
 correcting the existing off-by-one at [readme.md:466](../readme.md#L466), and noting that both
 the count and the delay are topology settings (`attempts`, `delay`) with per-channel-type
@@ -805,9 +805,9 @@ one pair per distinct `delay`, shared by every source queue — and the per-queu
 so the queue list an operator sees is documented rather than discovered.
 
 Add `retry` to the diagnostics list at [readme.md:556](../readme.md#L556), and to
-`docs/headers.md`: `x-attempt`, the `x-comq-*` parking headers, and a note that a retried message
+`docs/headers.md`: `x-comq-attempt`, the `x-comq-*` parking headers, and a note that a retried message
 also carries the broker's `x-death` — whose `count` is a *second* attempt counter that happens to
-agree with `x-attempt` today. Say which is authoritative (`x-attempt`, comq's own; `x-death` is
+agree with `x-comq-attempt` today. Say which is authoritative (`x-comq-attempt`, comq's own; `x-death` is
 the broker's record and is useful for its timestamps), because two counters on one message is
 otherwise a debugging trap.
 
@@ -840,7 +840,7 @@ otherwise a debugging trap.
    timing in the suite, against a 30s per-step cucumber timeout.
 3. The end-to-end proof is that `features/events.poison.feature` becomes ordinary automatic
    scenarios: a consumer that throws, a message that comes back five times with an incrementing
-   `x-attempt` (six deliveries in total), a message that ends up disposed rather than silently
+   `x-comq-attempt` (six deliveries in total), a message that ends up disposed rather than silently
    gone, and — the point of the whole exercise — a *sibling* consumer still alive afterwards.
 4. Confirm the process no longer exits: today, running the poison scenario ends the node
    process. After the change it should complete the scenario.
@@ -1076,7 +1076,7 @@ correct claims that get made about this area.
   ([channel.js:68](../source/channel.js#L68)) — there is no confirm to await on the request channel.
   Requests are also `persistent: false`, so a requeued request does not survive a broker restart
   regardless. This is why Part 2 fixes requests structurally but calls them best-effort.
-- **`MAX_REDELIVERIES = 5` means six deliveries, not five.** The counter is the `x-attempt`
+- **`MAX_REDELIVERIES = 5` means six deliveries, not five.** The counter is the `x-comq-attempt`
   header, absent on the first delivery, so it reads `0` and the message is retried; `5 >= 5`
   first holds on the sixth. [readme.md:466](../readme.md#L466) says "five times in a row" and is off
   by one today.

@@ -46,7 +46,7 @@ Given('(that )events from the {token} exchange are causing exceptions',
   async function (exchange) {
     await this.io.consume(exchange, 'exceptions', (payload, properties) => {
       // absent on the first delivery, so the ladder reads 0, 1, 2 ...
-      this.attempts.push(properties.headers?.['x-attempt'] ?? 0)
+      this.attempts.push(properties.headers?.['x-comq-attempt'] ?? 0)
 
       throw new Error('Expected exception')
     })

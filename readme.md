@@ -493,8 +493,8 @@ acknowledges the original. The retry queue has no consumer: it holds the message
 and outlives a restart of this process without holding a delivery against the
 [prefetch limit](#channels).
 
-Each attempt increments the `x-attempt` header, which the consumer receives among the message
-properties. After `attempts` retries — six deliveries in all, by default: the first, which
+Each attempt increments the [`x-comq-attempt`](./docs/headers.md) header, which the consumer
+receives among the message properties. After `attempts` retries — six deliveries in all, by default: the first, which
 carries no header, then five more — the message is *parked*.
 
 The channel keeps consuming throughout. A message one consumer cannot handle stops neither the

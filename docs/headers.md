@@ -23,7 +23,7 @@ the message properties.
 
 | Header | On | Meaning |
 |---|---|---|
-| `x-attempt` | a retried message | Which attempt this delivery is. Absent on the first. |
+| `x-comq-attempt` | a retried message | Which attempt this delivery is. Absent on the first. |
 | `x-comq-exchange` | a retried or parked message | The exchange it was originally published to. |
 | `x-comq-key` | a retried or parked message | The routing key it was originally published with. |
 | `x-comq-queue` | a parked message | The queue it was consumed from. |
@@ -34,7 +34,16 @@ the message properties.
 time: a message returning from the retry queue arrives through the default exchange, so by then
 its own delivery fields describe that hop rather than where it was published.
 
+AMQP defines no retry counter, so `x-comq-attempt` is comq's own rather than a convention —
+implementations that roll their own commonly use `x-retry-count` or `x-retries`, and none of
+those are standard either. It is prefixed for the same reason as the rest: an unprefixed name
+would be free to collide with the application's own headers, or with another library's.
+
+> Before this, the header was named `x-attempt`. A message already in flight under the old name
+> is read as a first delivery and gets a full ladder of attempts rather than the remainder of
+> one.
+
 A retried message also carries RabbitMQ's own [`x-death`](https://www.rabbitmq.com/docs/dlx), and
-`x-death[0].count` is a second attempt counter that happens to agree with `x-attempt`. **`x-attempt`
+`x-death[0].count` is a second attempt counter that happens to agree with `x-comq-attempt`. **`x-comq-attempt`
 is the authoritative one** — it is comq's, and it is the number the `attempts` setting is compared
 against. `x-death` is the broker's record, and is useful for its timestamps.

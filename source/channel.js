@@ -464,7 +464,7 @@ class Channel {
    */
   async #failed (queue, message, exception) {
     try {
-      const attempt = message.properties.headers?.[REDELIVERY_HEADER] ?? 0
+      const attempt = message.properties.headers?.[ATTEMPT_HEADER] ?? 0
 
       if (attempt >= this.#topology.attempts) await this.#park(queue, message, exception)
       else await this.#retry(queue, message, attempt, exception)
@@ -481,7 +481,7 @@ class Channel {
    * @param {Error} exception
    */
   async #retry (queue, message, attempt, exception) {
-    const properties = this.#carry(message, { [REDELIVERY_HEADER]: attempt + 1 })
+    const properties = this.#carry(message, { [ATTEMPT_HEADER]: attempt + 1 })
 
     // the copy is placed before the original is released: a message the broker holds
     // twice can be recovered, one it no longer holds at all cannot
@@ -615,15 +615,20 @@ const EXCLUSIVE = { exclusive: true }
 
 const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 
-const REDELIVERY_HEADER = 'x-attempt'
-
 const RETRY_PREFIX = 'comq.retry.'
 const PARKED_PREFIX = 'comq.parked.'
 
 const parkedQueueOf = (queue) => PARKED_PREFIX + queue
 
-// what a person looking at a parked message needs, and nothing else: the broker's own
-// `x-death` names the retry queue rather than where the message came from
+// Everything comq writes onto a message, under its own prefix: AMQP defines no retry
+// counter, so this one is comq's invention rather than a convention, and an unprefixed
+// name would be free to collide with the application's own headers or another library's.
+//
+// What a person looking at a parked message needs, and nothing else. The broker's own
+// `x-death` is no substitute: it names the retry queue rather than where the message
+// came from, and its `count` is a second counter that agrees with this one until it
+// does not.
+const ATTEMPT_HEADER = 'x-comq-attempt'
 const ORIGIN_EXCHANGE_HEADER = 'x-comq-exchange'
 const ORIGIN_KEY_HEADER = 'x-comq-key'
 const PARKED_QUEUE_HEADER = 'x-comq-queue'

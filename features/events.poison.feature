@@ -8,7 +8,7 @@ Feature: Poison events
 
   Scenario: A poison event is retried and then parked
 
-    Six deliveries: the first, then five retries. The counter is the `x-attempt`
+    Six deliveries: the first, then five retries. The counter is the `x-comq-attempt`
     header, which the first delivery does not carry.
 
     Given that events from the `poison_retried` exchange are causing exceptions
