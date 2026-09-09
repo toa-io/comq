@@ -234,6 +234,37 @@ publish → exchange comq.retry.30000, routingKey = <source queue>
 expiry  → default exchange, routing key preserved → <source queue>
 ```
 
+**How one queue returns messages to many destinations.** The routing key is a property of the
+*message*, not of the queue: it is set at publish time, travels with the message, and RabbitMQ
+reuses it when dead-lettering. Tracing an event that failed in `orders..billing`:
+
+| step | exchange | routingKey | lands in |
+|---|---|---|---|
+| comq publishes the retry | `comq.retry.30000` (fanout) | `orders..billing` | `comq.retry.30000` |
+| waits out the TTL | — | `orders..billing` (carried) | — |
+| TTL fires, dead-lettered | `''` (default) | `orders..billing` (**reused**) | `orders..billing` |
+
+Three broker behaviours carry it:
+
+1. **A fanout exchange ignores the routing key when routing** — it delivers to whatever is bound,
+   which is the single retry queue — but preserves the key on the message. The key is therefore
+   free to name the destination rather than being consumed by the routing.
+2. **No `x-dead-letter-routing-key` on the retry queue.** Set, that argument *overrides* the
+   message's key with one fixed value — which is precisely what makes a retry queue per-source.
+   Unset, the broker reuses whatever key the message already carries, so each message returns to
+   its own source queue.
+3. **The default exchange has an implicit binding to every queue by name**, so a key of
+   `orders..billing` reaches the queue `orders..billing`. Standard AMQP; comq declares nothing
+   for it.
+
+This is also the mechanical reason the message cannot be published to the retry queue directly:
+through the default exchange its key would be the retry queue's own name, and on expiry it would
+route back to itself — the cycle the broker drops silently at the first TTL.
+
+And it is why the origin has to be captured on the first failure: after the round-trip the
+message's `fields.exchange` is `''` and its `fields.routingKey` is the source queue, so the
+exchange it was originally published to is genuinely gone from the message.
+
 One queue and one exchange **per distinct delay**, shared by every source queue — not one pair
 per consumed queue. The delay comes from the channel topology, so the count does not depend on
 how many queues are consumed.
