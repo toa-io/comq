@@ -6,9 +6,8 @@
 > became shared and delay-named, the delay became configurable, and message provenance moved to
 > where it survives a retry.
 >
-> **Parts 1 and 2 are implemented.** Part 3 — the `Retry` / `Park` verdict API — is decided but
-> not yet scheduled; see the end. Text below is written as a proposal because that is what it
-> was; it describes what the code now does, except where Part 3 says otherwise.
+> **All three parts are implemented.** Text below is written as a proposal because that is what
+> it was; it describes what the code now does.
 
 When a consumer callback rejects, comq is supposed to retry the message a few times and then
 give up on it. What it actually does is kill the process, and take every other consumer in that
@@ -1111,10 +1110,15 @@ Nothing blocking. The three questions this document opened are resolved:
 - **The noun** — `Park` / `comq.parked.<queue>`. See Part 1.
 - **`Park` on an `io.reply` producer** — rejected as a category error, treated at runtime as a
   bare rejection plus a diagnostic. See Part 3.
-- **Whether Part 3 is built** — **decided, not yet scheduled.** Parts 1 and 2 are the emergency
-  and do not depend on it; a consumer of comq gets retry-then-park by upgrading and writing no
-  code. But the parking queue takes its noun from a verdict class that would not otherwise
-  exist, and without verdicts a message a contract has already refused costs every attempt —
-  two minutes at the event default — and then lands in the parking queue beside the
-  messages that genuinely failed. "Decided, not yet scheduled" rather than "open", because
-  people read this deciding whether to build on it.
+- **Whether Part 3 is built** — built. Parts 1 and 2 shipped first as the emergency, and a
+  consumer of comq got retry-then-park by upgrading and writing no code; the verdicts followed
+  as an additive minor.
+
+One thing the design did not settle, found while building it: it placed the `Park`-from-a-Producer
+rejection in `#failed`, which cannot implement it — `Channel` takes a topology but not its type
+([channel.js:64](../source/channel.js#L64)), so it cannot tell the request channel from the event
+one. It lives in `#getRequestConsumer` ([io.js:297](../source/io.js#L297)) instead, which knows by
+construction that it is wrapping a `Producer`. And rather than emit a diagnostic nobody may be
+subscribed to, it rethrows with an explanation, which reaches the parked message as its
+`x-comq-reason` and both existing diagnostics as their exception — louder, and no new event name
+to document.

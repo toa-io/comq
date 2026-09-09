@@ -10,6 +10,7 @@ const backpressure = require('./backpressure')
 const { amqplib } = require('./amqplib.mock')
 const fixtures = require('./channel.fixtures')
 const { create } = require('../source/channel')
+const { Retry, Park } = require('../source/verdicts')
 
 it('should be', async () => {
   expect(create).toBeDefined()
@@ -1581,6 +1582,109 @@ describe('failed messages', () => {
       const targets = publications().map(([, key]) => key)
 
       expect(targets).toStrictEqual([queue, queue, 'comq.parked.' + queue])
+    })
+  })
+
+  describe('verdicts', () => {
+    it('should park on the first delivery when the consumer says to', async () => {
+      await channel.consume(queue, consumer)
+
+      consumer.mockImplementationOnce(async () => { throw new Park(generate()) })
+
+      await deliver(delivery({}))
+
+      const [exchange, key] = publications()[0]
+
+      expect(exchange).toStrictEqual('')
+      expect(key).toStrictEqual('comq.parked.' + queue)
+      expect(publications()).toHaveLength(1)
+    })
+
+    it('should not retry a parked message even with the ladder untouched', async () => {
+      await channel.consume(queue, consumer)
+
+      consumer.mockImplementationOnce(async () => { throw new Park(generate()) })
+
+      await deliver(delivery({}))
+
+      const [, , , options] = publications()[0]
+
+      // parked on the first delivery, so it never climbed a rung
+      expect(options.headers['x-comq-attempt']).toBeUndefined()
+    })
+
+    it('should treat Retry exactly as a bare rejection', async () => {
+      await channel.consume(queue, consumer)
+
+      consumer.mockImplementationOnce(async () => { throw new Retry(generate()) })
+
+      await deliver(delivery({}))
+
+      const [exchange] = publications()[0]
+
+      expect(exchange).toStrictEqual('comq.retry.' + DELAY)
+    })
+
+    it('should record the verdict message as the reason', async () => {
+      await channel.consume(queue, consumer)
+
+      const reason = generate()
+
+      consumer.mockImplementationOnce(async () => { throw new Park(reason) })
+
+      await deliver(delivery({}))
+
+      const [, , , options] = publications()[0]
+
+      expect(options.headers['x-comq-reason']).toStrictEqual(reason)
+    })
+
+    it('should record the cause alongside the reason', async () => {
+      await channel.consume(queue, consumer)
+
+      const reason = generate()
+      const cause = new Error(generate())
+
+      consumer.mockImplementationOnce(async () => { throw new Park(reason, { cause }) })
+
+      await deliver(delivery({}))
+
+      const [, , , options] = publications()[0]
+
+      expect(options.headers['x-comq-reason']).toStrictEqual(reason)
+      expect(options.headers['x-comq-cause']).toStrictEqual(cause.message)
+    })
+
+    it('should emit `discard` for a parked verdict', async () => {
+      const listener = jest.fn()
+
+      channel.diagnose('discard', listener)
+
+      await channel.consume(queue, consumer)
+
+      const park = new Park(generate())
+
+      consumer.mockImplementationOnce(async () => { throw park })
+
+      const message = delivery({})
+
+      await deliver(message)
+
+      expect(listener).toHaveBeenCalledWith(message, park)
+    })
+
+    it('should honour a Park thrown by another copy of comq', async () => {
+      await channel.consume(queue, consumer)
+
+      const foreign = new Error(generate())
+
+      foreign[Symbol.for('comq.verdict')] = 'park'
+
+      consumer.mockImplementationOnce(async () => { throw foreign })
+
+      await deliver(delivery({}))
+
+      expect(publications()[0][1]).toStrictEqual('comq.parked.' + queue)
     })
   })
 

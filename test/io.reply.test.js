@@ -10,6 +10,7 @@ const mock = require('./connection.mock')
 const { encodings } = require('./encodings')
 
 const { IO } = require('../source/io')
+const { Retry, Park } = require('../source/verdicts')
 
 /** @type {comq.IO} */
 let io
@@ -240,3 +241,68 @@ const findChannel = (type) => {
 
   return connection.createChannel.mock.results[index].value
 }
+
+describe('verdicts', () => {
+  /** @type {jest.MockedObject<comq.Channel>} */
+  let requests
+
+  const message = () => /** @type {comq.amqp.Message} */ ({
+    content: randomBytes(10),
+    properties: { replyTo: generate(), contentType: 'text/plain' }
+  })
+
+  const findChannel = async (type) => {
+    const index = connection.createChannel.mock.calls.findIndex(([argument]) => argument === type)
+
+    return await connection.createChannel.mock.results[index].value
+  }
+
+  beforeEach(async () => {
+    await io.reply(queue, produce)
+
+    requests = await findChannel('request')
+  })
+
+  it('should refuse Park from a producer', async () => {
+    // a Request has a caller awaiting a reply, so a verdict is a category error there
+    const park = new Park(generate())
+
+    produce.mockImplementationOnce(async () => { throw park })
+
+    const consumer = requests.consume.mock.calls[0][1]
+
+    await expect(consumer(message())).rejects.toThrow(/not applicable to a reply producer/)
+  })
+
+  it('should keep the Park as the cause of what it throws instead', async () => {
+    const park = new Park(generate())
+
+    produce.mockImplementationOnce(async () => { throw park })
+
+    const consumer = requests.consume.mock.calls[0][1]
+    const exception = await consumer(message()).catch((error) => error)
+
+    // the explanation reaches the parked message as its reason, and this as its cause
+    expect(exception.cause).toStrictEqual(park)
+  })
+
+  it('should pass an ordinary rejection through untouched', async () => {
+    const failure = new Error(generate())
+
+    produce.mockImplementationOnce(async () => { throw failure })
+
+    const consumer = requests.consume.mock.calls[0][1]
+
+    await expect(consumer(message())).rejects.toStrictEqual(failure)
+  })
+
+  it('should pass Retry through untouched', async () => {
+    const retry = new Retry(generate())
+
+    produce.mockImplementationOnce(async () => { throw retry })
+
+    const consumer = requests.consume.mock.calls[0][1]
+
+    await expect(consumer(message())).rejects.toStrictEqual(retry)
+  })
+})

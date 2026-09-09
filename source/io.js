@@ -4,6 +4,7 @@ const stream = require('node:stream')
 const { setTimeout } = require('node:timers/promises')
 const { Promex } = require('promex')
 const { memo, failsafe, lazy, track } = require('./attributes')
+const { verdictOf, PARK } = require('./verdicts')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
@@ -302,7 +303,7 @@ class IO {
        */
       async (request) => {
         const payload = decode(request)
-        const reply = await producer(payload)
+        const reply = await produce(producer, payload)
 
         if (request.properties.replyTo === undefined) return
 
@@ -548,5 +549,30 @@ const OCTETS = 'application/octet-stream'
 const DEFAULT = 'application/json'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
+
+/**
+ * A verdict answers what should happen to a message now that it has failed and nobody
+ * is waiting for it. A Producer has a caller waiting, and what it is owed is a reply,
+ * so `Park` is a category error there rather than a policy choice — comq's own type
+ * vocabulary already draws the line between a Consumer and a Producer.
+ *
+ * It cannot be caught at wiring time, since nothing there knows what a producer will
+ * throw. Caught here instead and re-thrown as an ordinary rejection, which retries and
+ * eventually parks, carrying an explanation the parked message keeps as its reason.
+ *
+ * @param {comq.Producer} producer
+ * @param {any} payload
+ */
+async function produce (producer, payload) {
+  try {
+    return await producer(payload)
+  } catch (exception) {
+    if (verdictOf(exception) !== PARK) throw exception
+
+    throw new Error('Park is not applicable to a reply producer: a Request has a caller ' +
+      'awaiting a reply, so it is retried and parked on the count like any other failure',
+    { cause: exception })
+  }
+}
 
 exports.IO = IO
