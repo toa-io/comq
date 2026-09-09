@@ -21,6 +21,8 @@ class Context extends World {
   attempts = []
   counts = {}
   parked = {}
+  awaited
+  answer
   processed
   enqueued
   tasksProcessedCount = 0
@@ -69,6 +71,8 @@ class Context extends World {
     this.attempts = []
     this.counts = {}
     this.parked = {}
+    this.awaited = undefined
+    this.answer = undefined
   }
 
   /**
