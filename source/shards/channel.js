@@ -64,12 +64,20 @@ class Channel {
     await this.#every((channel) => channel.subscribe(queue, group, consumer))
   }
 
+  async bound (exchange, queue, key, consumer) {
+    await this.#every((channel) => channel.bound(exchange, queue, key, consumer))
+  }
+
   async send (queue, buffer, options) {
     await this.#one((channel) => channel.send(queue, buffer, options))
   }
 
   async publish (exchange, buffer, options) {
     await this.#one((channel) => channel.publish(exchange, buffer, options))
+  }
+
+  async route (exchange, key, buffer, options) {
+    await this.#one((channel) => channel.route(exchange, key, buffer, options))
   }
 
   async fire (queue, buffer, options) {

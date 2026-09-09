@@ -718,3 +718,36 @@ async function getCreatedChannels () {
 
   return await Promise.all(promises)
 }
+
+describe('routed', () => {
+  const exchange = generate()
+  const queue = generate()
+  const key = generate()
+  const buffer = randomBytes(8)
+  const consumer = jest.fn()
+
+  /** @type {jest.MockedObject<comq.Channel>[]} */
+  let channels
+
+  beforeEach(async () => {
+    channel = await create(connections, type)
+    channels = await getCreatedChannels()
+  })
+
+  it('should bind using all channels', async () => {
+    await channel.bound(exchange, queue, key, consumer)
+
+    for (const chan of channels) {
+      expect(chan.bound).toHaveBeenCalledWith(exchange, queue, key, consumer)
+    }
+  })
+
+  it('should route to a single channel', async () => {
+    await channel.route(exchange, key, buffer)
+
+    const used = channels.filter((chan) => chan.route.mock.calls.length > 0)
+
+    expect(used).toHaveLength(1)
+    expect(used[0].route).toHaveBeenCalledWith(exchange, key, buffer, undefined)
+  })
+})

@@ -17,3 +17,9 @@ Feature: Routed events
     When a message is routed to the `records` exchange under the `placed` key
     Then `orders` receives the event
     And `customers` receives nothing
+
+  Scenario: Routing over a sharded connection
+    Given an active sharded connection
+    And that `orders` is bound to the `records` exchange under the `placed` key
+    When a message is routed to the `records` exchange under the `placed` key
+    Then `orders` receives the event
