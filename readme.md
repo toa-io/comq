@@ -571,12 +571,6 @@ queues on a running system.
 > it — and it keeps `replyTo` and `correlationId`, so a Reply can still be produced from it by
 > hand while the caller is alive — but comq itself sends no Reply and reports no error to the
 > caller.
->
-> **comq has no request timeout, and no way to withdraw a Request**: `IO.request` waits for as
-> long as it takes. Racing it against a timer of your own lets *your* handler give up, which
-> frees the prefetch slot it was holding — but comq goes on expecting that Reply, keeping the
-> handler and the unsettled promise for it, because nothing has told it to stop. An unanswered
-> Request is therefore a small permanent retention, and a caller-side timer does not release it.
 
 #### What is guaranteed
 
