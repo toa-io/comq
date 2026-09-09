@@ -1,9 +1,9 @@
 # Fix comq's poison-message handling
 
 > **A proposal, open for discussion — nothing here is implemented.** It covers what comq does
-> today when a consumer callback rejects, why that is wrong, and what to build instead. Three
-> questions are still open, listed at the very end. Comments welcome on any of it,
-> especially Part 1, which is the one decision that shapes the rest.
+> today when a consumer callback rejects, why that is wrong, and what to build instead.
+> Revised after review in [#272](https://github.com/toa-io/comq/discussions/272); the questions
+> it originally left open are resolved at the end. Comments still welcome.
 
 When a consumer callback rejects, comq is supposed to retry the message a few times and then
 give up on it. What it actually does is kill the process, and take every other consumer in that
@@ -43,7 +43,7 @@ deletion.
 
 ## The mechanism: comq parks it in a queue it owns
 
-On the last attempt, comq publishes the message to `comq.dead.<queue>`, waits for the publisher
+On the last attempt, comq publishes the message to `comq.parked.<queue>`, waits for the publisher
 confirm, and only then acks the original.
 
 **This is about retention, not delivery.** The message is not going to be processed again — that
@@ -63,7 +63,7 @@ retry path and redelivery generally, not because of this.)
 > | | **Part 2 — retry** | **Part 1 — parking** |
 > |---|---|---|
 > | when | attempts 1–5 | after the 6th failure |
-> | queue | `comq.retry.<queue>` | `comq.dead.<queue>` |
+> | queue | the shared retry queue | `comq.parked.<queue>` |
 > | how it gets there | comq publishes it | comq publishes it |
 > | what happens next | the broker returns it to the source queue after the TTL | nothing — it waits for a human |
 > | purpose | try again later | keep the evidence |
@@ -114,7 +114,7 @@ That failure would be loud rather than silent — the declaration happens inside
 `failsafe(this, this.#recover, …)` wrapper, `permanent()` ([:463](../source/channel.js#L463))
 classifies `PRECONDITION_FAILED` as unrecoverable, and `io.consume(...)` rejects at wiring
 time — but "the application does not start after the upgrade" is still a migration for every
-user. Parking sidesteps it entirely: `comq.dead.<queue>` is a **new** queue, and the source
+user. Parking sidesteps it entirely: `comq.parked.<queue>` is a **new** queue, and the source
 queue's declaration is untouched.
 
 A migration would have been acceptable, so this is not what decided it — retention is. But it is a real saving, and it keeps the destination soft: a publish target can
@@ -123,33 +123,59 @@ later change is another migration.
 
 ## What the parked message carries
 
-Only what a person doing a post-mortem needs. There is no compatibility requirement here —
-nothing reads these but a human — so do not reproduce RabbitMQ's `x-death` format, and do not
-build multi-hop machinery (`x-first-death-*` / `x-last-death-*`): a comq message parks once.
+Only what a person doing a post-mortem needs. There is no compatibility requirement — nothing
+reads these but a human — so do not reproduce RabbitMQ's `x-death` format, and do not build
+multi-hop machinery (`x-first-death-*` / `x-last-death-*`): a comq message parks once.
 
-Everything needed is already in hand at the moment of parking. In `#dispose`:
+**The origin must be captured on the first failure, not at parking time.** This is the one
+non-obvious part, and it was got wrong in an earlier draft. A message that has been retried
+comes back through the *default* exchange, so by the time it is parked:
+
+```json
+"exchange": "",
+"routingKey": "orders..billing",
+"headers": {
+  "x-attempt": 1,
+  "x-death": [{ "reason": "expired", "queue": "comq.retry.30000",
+                "exchange": "comq.retry.30000", "routing-keys": ["orders..billing"] }],
+  "x-first-death-exchange": "comq.retry.30000"
+}
+```
+
+`message.fields.exchange` is `''` — it has to be — and `fields.routingKey` is now the source
+queue name. So reading `fields` at parking time would record `''` as the origin of **every**
+parked message that was ever retried, which is all of them except one parked by a first-delivery
+`Park`. The broker does not rescue it either: `x-death[0].exchange` and `x-first-death-exchange`
+both name the *retry* exchange. The original is nowhere unless comq writes it down.
+
+So `#retry` writes `x-comq-exchange` / `x-comq-key` on the first failure and later retries
+preserve them (Part 2 §4), and `#dispose` prefers those headers, falling back to `message.fields`
+only for the first-delivery `Park` path where nothing has been written yet:
 
 ```js
 const headers = {
-  ...message.properties.headers,          // x-attempt is already here
+  ...message.properties.headers,          // x-attempt and, after one retry, the origin
   'x-comq-queue': queue,                  // threaded in by Part 2 §3
-  'x-comq-exchange': message.fields.exchange,
-  'x-comq-key': message.fields.routingKey,
+  'x-comq-exchange': message.properties.headers?.['x-comq-exchange'] ?? message.fields.exchange,
+  'x-comq-key': message.properties.headers?.['x-comq-key'] ?? message.fields.routingKey,
   'x-comq-reason': exception?.message,
   'x-comq-at': Date.now()
 }
 ```
 
-The only two that need deliberate copying are `exchange` and `routingKey`: they live in
-`message.fields`, not `properties`, so a republish drops them unless they are moved across.
+**Two attempt counters will be on the message, and the docs must say which is authoritative.**
+RabbitMQ maintains `x-death[0].count`, and after five retries it reads `5` alongside comq's own
+`x-attempt: 5`. They agree today, but nothing should be built on that — a move to quorum queues
+changes `x-death` semantics, and `x-attempt` is comq's. `x-attempt` is authoritative; `x-death`
+is the broker's own record and is useful for the timestamps.
+
 
 ## The seam
 
-Route the terminal branch through one method, so the destination is one function body and the
-rest of the plan does not care what is in it:
+Route the terminal branch through one method, so the destination is one function body:
 
 ```js
-async #discard (queue, message, exception) {
+async #park (queue, message, exception) {
   await this.#dispose(queue, message, exception)
   this.#diagnostics.emit('discard', message, exception)
 }
@@ -161,7 +187,7 @@ async #dispose (queue, message, exception) {
   const headers = { /* as above */ }
   const properties = { ...message.properties, headers, mandatory: true }
 
-  await this.#publish(DEFAULT, deadQueueOf(queue), message.content, properties)
+  await this.#publish(DEFAULT, parkedQueueOf(queue), message.content, properties)
   this.#channel.ack(message)
 }
 ```
@@ -170,17 +196,15 @@ async #dispose (queue, message, exception) {
 inherits the "cannot reject into amqplib" guarantee for free: if the parking publish fails, the
 message is nacked back to the broker rather than lost.
 
-`comq.dead.<queue>` is declared next to `comq.retry.<queue>` in `#assertRetryQueue` (Part 2 §2),
-under the same rules — at consume time, mirroring the source queue's durability, no `x-expires`.
-
-**Naming is coupled to Part 3.** If the verdict class is `Park`, the queue should be
-`comq.parked.<queue>`; if `Dead`, `comq.dead.<queue>`. Pick the noun once — renaming it later
-orphans whatever is sitting in the old queue.
+The parking queue is per source queue — depth per consumer is how anyone notices a problem — and
+is declared next to the shared retry topology in `#consume` (Part 2 §3), mirroring the source
+queue's durability. The diagnostic keeps its existing name, `discard`, so nothing downstream
+breaks.
 
 ## The one thing this does not fix
 
 A parked message is out of the broker's way but still needs someone to look at it.
-`comq.dead.*` queues grow without bound unless an operator drains them. That is the right
+`comq.parked.*` queues grow without bound unless an operator drains them. That is the right
 default — the alternative is deleting evidence — but the readme must say so, and the `discard`
 diagnostic is the hook for alerting on it.
 
@@ -192,109 +216,130 @@ None of these change an existing queue declaration, so none of them break an upg
 
 ### The retry loop
 
-On failure, publish the message to `comq.retry.<queue>` — a queue with **no consumer**,
-declared with `x-message-ttl: 1000`, `x-dead-letter-exchange: ''` and
-`x-dead-letter-routing-key: <queue>`. The broker holds it for the TTL, then returns it to the
-queue it came from. Only after the publish is confirmed is the original acked.
+On failure, comq publishes the message to a **shared retry queue**: a queue with no consumer,
+holding it for a TTL and then dead-lettering it back to the queue it came from. Only after the
+publish is confirmed is the original acked.
 
-The retry queue is **new**, so declaring it with `arguments` is safe — no existing queue is
-redeclared, no `PRECONDITION_FAILED`.
+```
+exchange  comq.retry.30000   (fanout)
+queue     comq.retry.30000   bound to it
+            x-message-ttl: 30000
+            x-dead-letter-exchange: ''
+            (no x-dead-letter-routing-key — the original key is preserved)
 
-Two constraints drive the details:
+publish → exchange comq.retry.30000, routingKey = <source queue>
+expiry  → default exchange, routing key preserved → <source queue>
+```
 
-- **The retry queue cannot be a `lazy` initializer.** `call()` in
-  [source/attributes/lazy.js:33](../source/attributes/lazy.js#L33) passes the *original, unspliced*
-  `args` to every initializer, so one appended to the `subscribe`/`bound` chain would still see
-  `queue === undefined` and memoize on that key. It has to go inside `#consume`.
-- **It must be declared at consume time, not on first failure.** Declaring inside the catch
-  block means a declaration error surfaces at 3am under load, and a declare failure there falls
-  through to `nack(requeue: true)` → immediate redelivery → immediate re-failure → a hot loop
-  with no delay and no attempt counting. Declaring in `#consume` puts the failure inside the
-  `failsafe` wrapper, where `io.consume(...)` rejects at wiring time with a legible error. It
-  also gets re-declared for free on `recover()` (which does `lazy.reset` + `recall(this)`),
-  which matters for exclusive queues.
+One queue and one exchange **per distinct delay**, shared by every source queue — not one pair
+per consumed queue. With the two defaults below that is four broker objects for a whole
+application, plus one parking queue per consumed queue.
 
-Cost, stated plainly: one extra, usually-empty queue per consumed queue. Skipped automatically
-for the reply channel (`reply.json` is `acknowledgments: false`).
+**The fanout exchange is not optional.** Publishing to the retry queue through the default
+exchange would make the message's own routing key the retry queue's name, so on expiry it would
+dead-letter straight back into itself. RabbitMQ does not loop on that — it detects the cycle
+and, since no rejection occurred in it, drops the message. Verified against a broker: the
+message is gone at the **first** expiry, at exactly one TTL, not after a lap or two. So the
+naive shape fails as "every retried message vanishes silently after one TTL" — no loop to
+notice, no queue growth to alert on. A reader who half-remembers that RabbitMQ detects cycles
+may expect something visible to happen; nothing does.
 
-**Naming: `comq.retry.<queue>`.** `io.concat` uses `'..'` as its separator
-([source/.io/concat.js](../source/.io/concat.js)), so `concat(queue, 'retry')` would produce
-`<queue>..retry` — exactly what `io.consume('<queue>', 'retry', cb)` produces. A real
-collision, not a hypothetical. The `comq.retry.` prefix cannot be produced by `concat`, groups
-in the management UI, and gives operators one policy regex. **The name is a compatibility
-surface** — changing it later orphans in-flight retries.
+Publishing through a fanout exchange leaves the routing key free to name the destination. A
+direct exchange would need a binding per source queue, which is the proliferation being removed.
+
+**Naming: `comq.retry.<delay>`, and the delay is in the name deliberately.** `x-message-ttl` is
+fixed at declare time, so a queue whose name did not carry it could never have that value
+changed — every redeclaration with a different TTL is `406 PRECONDITION_FAILED`, and by the
+placement below that means the application does not start. With the delay in the name, a change
+declares a *new* queue and the old one keeps working: during a rolling deploy, old pods publish
+to the old queue and new pods to the new one, and both dead-letter back to the same unchanged
+source queue. There is no window at all.
+
+**Orphans stay, and `x-expires` is not the cleanup.** A retired delay leaves an empty queue
+behind. `x-expires` looks like the answer and is not: a retry queue never has a consumer, so
+"unused" is its permanent state, and the timer would delete it along with whatever is waiting
+inside. An empty queue per retired delay value is the price, and it is a housekeeping item
+rather than a hazard.
+
+**Declared at consume time, not on first failure.** Declaring inside the catch block means a
+declaration error surfaces at 3am under load, and a failure there falls through to
+`nack(requeue: true)` → immediate redelivery → immediate re-failure → a hot loop with no delay
+and no attempt counting. Declaring in `#consume` puts it inside the
+`failsafe(this, this.#recover, …)` wrapper, where `io.consume(...)` rejects at wiring time with
+a legible error, and it is re-declared for free on `recover()` (which does `lazy.reset` +
+`recall(this)`).
+
+**Sharing centralises the blast radius.** Delete or misconfigure `comq.retry.30000` and every
+retry in the application stops, where a per-queue design would lose one queue's. Re-declaring at
+consume time is the mitigation; the documentation line that already says not to delete these
+queues on a running system covers it.
+
+**Durability and exclusive source queues.** The shared queue is always durable, and that is
+always right: every topology that acknowledges is also durable (`request.json` and `event.json`
+are both `durable: true`; `reply.json` is `acknowledgments: false` and has no retry path).
+An *exclusive* source queue — from `io.consume(exchange, callback)` with no group — is the one
+case worth tracing. While that ephemeral subscriber is alive the retry is delivered normally.
+Once its connection is gone there is nobody to deliver to, and the message is dropped at expiry
+because the default exchange finds no such queue. A per-queue retry design loses it too, at
+disconnect rather than at expiry. Neither can do better, so sharing costs nothing here.
+
+**Not per-message TTL.** A queue with mixed TTLs only expires from the head, so one long-TTL
+message blocks every shorter one behind it. A uniform per-queue TTL means expiry order equals
+enqueue order. Exponential backoff, if ever wanted, needs one queue per tier — a separate design.
 
 **Attempt count: the default stays 5.** `MAX_REDELIVERIES = 5` ([:481](../source/channel.js#L481))
 already exists — added by the same `1df2afe` — and becomes the default of a `topology.attempts`
-setting (see *What of this belongs in the public contract*, below). Note its actual arithmetic, because the readme gets it
-wrong: the counter is the `x-attempt` header, absent on first delivery, so it reads `0` and the
-message is retried. `5 >= 5` first holds on the **sixth** delivery. The consumer is therefore
-invoked **six times** (one original + five retries), not five.
-[readme.md:466](../readme.md#L466) — "causes exceptions five times in a row, it is discarded" — is
-off by one *today*; correct it in §8 rather than changing the behaviour.
+setting. Note its actual arithmetic, because the readme gets it wrong: the counter is the
+`x-attempt` header, absent on first delivery, so it reads `0` and the message is retried.
+`5 >= 5` first holds on the **sixth** delivery, so the consumer is invoked **six times** (one
+original plus five retries). [readme.md:466](../readme.md#L466) — "causes exceptions five times
+in a row, it is discarded" — is off by one *today*; correct it in §8 rather than changing the
+behaviour.
 
-**Delay: `RETRY_DELAY = 1000`, a constant**
-([:481](../source/channel.js#L481)). Feature tests run five retries sequentially against a 30s
-per-step cucumber timeout ([features/steps/setup.js](../features/steps/setup.js)), so wall clock
-is `5 × delay`: 1s is ~5–6s and comfortable, above 2s is flaky, above 4s impossible. If 1s
-proves wrong for one of the two channel types: a `request` caller is blocked on `io.request()`
-with no timeout, so `5 × delay` is added to its worst case, whereas nobody waits on an event.
+> **The retry queue inherits the at-most-once caveat described in Part 1.** The return hop is
+> broker dead-lettering, which on classic queues republishes without publisher confirms — so a
+> retried message can be lost if the source queue is unavailable when the TTL fires (target
+> unavailable, length limit under `reject-publish`, or a network partition between the nodes
+> hosting the two queues). Still a large improvement on today's ack-before-publish loss, and the
+> alternative — an in-process `setTimeout` — is worse, since it loses the delay on any restart.
+> A known limitation; it belongs in the docs (§8), not left implicit. Moving comq to quorum
+> queues would close it; see Part 1.
 
-### What of this belongs in the public contract
+### Delay and attempts are both public
 
-The attempt count is a knob. The delay is not, and the difference is worth being precise about.
+Both are `Topology` fields, defaulted per channel type and overridable per deployment.
 
-**`attempts` — expose it.** It is a runtime comparison against a header and nothing else: no
-declaration, no broker state, nothing other processes must agree on. Two processes consuming one
-queue with different counts each give up at their own threshold — non-deterministic across a
-mixed fleet mid-deploy, but nothing fails. It belongs in `Topology` next to `prefetch` and
-`confirms`, per channel type, which is exactly what those presets are for. Cost is small and
-contained:
+| | `event` | `request` | why |
+|---|---|---|---|
+| `delay` | `30000` | `5000` | |
+| `attempts` | `5` | `5` | |
 
-- add `attempts` to `types/topology.d.ts` and to the three `source/topology/*.json` presets
-  (`5` for `request` and `event`; it is unused on `reply`, which is `acknowledgments: false`)
-- `source/connection.js:92` currently hands out the shared preset object as-is; make it merge —
-  `{ ...presets[type], ...overrides?.[type] }` — rather than mutate it
-- `Connect` is variadic (`(...urls: string[]) => Promise<IO>`, [types/connection.d.ts](../types/connection.d.ts)),
-  so an override object is the optional trailing argument, detected by `typeof !== 'string'`
-  and typed as `[...urls: string[], options: Options]`
-- `test/presets.test.js` asserts the presets with `toStrictEqual`, so all three cases change
+**Events: 30s.** Six deliveries then span two and a half minutes, which is the shape of the
+failures worth retrying — a database primary stepping down, a storage reconnect, a third-party
+blip, or nothing listening on the queue yet during a rolling deploy. None of those are
+five-second events, and a ladder that covers only five seconds parks everything that was merely
+slow, which makes the parking queue mean "something was briefly slow" instead of "something is
+wrong".
 
-**`delay` — do not expose it.** `x-message-ttl` is a property of the *queue*, not of the message
-or of the consumer, and every process consuming `orders..billing` shares one
-`comq.retry.orders..billing`. So a user-overridable delay means: whoever declares the queue
-first wins, and anyone configured differently gets `PRECONDITION_FAILED` and **fails to start** —
-fired precisely by the rolling deploy that changes the value, which is the only time anyone
-would change it. That is not a knob.
+**Requests: 5s.** The failure durations are identical; what differs is that a request has
+someone blocked on it with no timeout. Exhausting the attempts on a request means the caller
+gets **no answer at all**, ever — so giving up early is not a cheaper failure, it is an
+unbounded one, and a caller that would otherwise hang forever would rather wait twenty-five
+seconds. What bounds how much coverage to buy is that a reply arriving long after the caller
+gave up lands in an exclusive reply queue that may no longer exist and comes back unroutable.
+Short *total* ladder rather than a generous per-step one.
 
-It could be dodged by putting the value in the queue name (`comq.retry.<delay>.<queue>`); that
-genuinely works, since an old-delay queue keeps dead-lettering to the same unchanged source
-queue and simply drains itself empty. But it reshapes the naming scheme to accommodate a setting
-and leaves an orphaned queue behind on every change. Per-message TTL is ruled out separately
-(head-of-line blocking, below). Neither is worth it: leave the delay a constant.
+`attempts` stays 5 on both. On requests it does not change the hang — only how long a successful
+retry takes, and how many pointless invocations precede a park.
 
-> **The same fact is a forward-looking hazard even as a constant.** Because the TTL is baked
-> into the declaration, changing `RETRY_DELAY` in a *future* comq release makes every existing
-> `comq.retry.*` queue fail redeclaration, and by this design the app will not start. Migration
-> is "delete the retry queues", and it belongs in the release notes. Pick a number you can live
-> with.
+Both defaults being different is free: `event.json` and `request.json` already differ on four
+other settings. It does mean two shared retry queues by default, `comq.retry.30000` and
+`comq.retry.5000`, which falls out of the naming scheme rather than needing anything.
 
-> **The retry queue inherits the at-most-once caveat described in Part 1.** The return
-> hop is broker dead-lettering, which on classic queues republishes without publisher confirms
-> — so a retried message can be lost if the source queue is unavailable when the TTL fires
-> (target unavailable, length limit under `reject-publish`, or a network partition between the
-> nodes hosting the two queues). This is still a large improvement on today's ack-before-publish
-> loss, and the alternative — an in-process `setTimeout` — is worse, since it loses the delay on
-> any restart. But it is a known limitation and belongs in the docs (§8), not left implicit.
-> Moving comq to quorum queues would close it; see Part 1.
+And it removes a constraint that should never have set a production number: the feature suite
+can run at 100ms without either default being chosen for it. The original `1000` was picked for
+the suite's wall clock, which is the wrong reason for a production constant.
 
-**Not per-message TTL.** A queue with mixed TTLs only expires from the head, so one long-TTL
-message blocks every shorter one behind it. Uniform per-queue TTL means expiry order equals
-enqueue order. Exponential backoff, if ever wanted, needs one queue per tier — separate design.
-
-**No `x-expires` on the retry queue.** It looks like tidy orphan cleanup, but a retry queue
-never has a consumer, so `x-expires` would delete it *with the messages waiting in it* during
-any quiet period.
 
 ### Nothing in the failure path may reject
 
@@ -334,52 +379,61 @@ All in [source/channel.js](../source/channel.js) unless noted.
 
 ### 1. Record each queue's declaration options
 
-The retry queue must mirror its source queue's lifetime — a durable retry queue behind an
-exclusive `amq.gen-*` source leaks a durable queue whose dead-letter target no longer exists.
-`#consume` can't re-derive this, because only `#assertBoundQueue`
-([:303](../source/channel.js#L303)) passes the `{ exclusive: true }` override. Record it where it
-is known:
+The parking queue must mirror its source queue's lifetime — a durable parking queue behind an
+exclusive `amq.gen-*` source leaks a durable queue nothing will ever read. `#consume` cannot
+re-derive this, because only `#assertBoundQueue` ([:303](../source/channel.js#L303)) passes the
+`{ exclusive: true }` override. Record it where it is known:
 
 - new field `#queues = new Map()` next to `#tags` ([:26](../source/channel.js#L26))
 - `this.#queues.clear()` in `create()` next to `this.#tags = []` ([:72](../source/channel.js#L72))
   — a fresh amqplib channel has declared nothing
 - `this.#queues.set(queue, options)` in `#assertQueue` ([:250](../source/channel.js#L250))
 
-### 2. The retry and parking queues
+(The retry queue does not need this: it is shared and always durable, per the Design section.)
 
-Both mirror the source queue's durability; only the retry queue takes `arguments`. Reuses
-`#assertQueue`'s existing `arguments[1]` options override ([:247](../source/channel.js#L247)) — no
-signature change:
+### 2. The retry and parking topology
+
+The retry exchange and queue are per *delay*, so they are declared once per distinct value
+rather than once per source queue. `#assertRetryQueue` takes no queue argument, which is what
+makes `lazy`'s per-argument memo collapse them:
 
 ```js
-#optionsOf (queue) {
-  return this.#queues.get(queue) ?? (this.#topology.durable ? DURABLE : EXCLUSIVE)
-}
+async #assertRetryQueue () {
+  const delay = this.#topology.delay
+  const name = RETRY_PREFIX + delay
 
-async #assertRetryQueue (queue) {
-  const options = {
-    ...this.#optionsOf(queue),
-    // replaces `arguments` wholesale rather than merging: a retry must return to the
-    // queue it came from, never to the parking queue
+  // fanout, so the routing key stays free to name the destination. Publishing through
+  // the default exchange instead would make the message's own routing key this queue's
+  // name, and the broker would drop it as a cycle at the first expiry.
+  await this.#channel.assertExchange(name, 'fanout', DURABLE)
+
+  await this.#assertQueue(name, {
+    ...DURABLE,
     arguments: {
-      'x-message-ttl': RETRY_DELAY,
-      'x-dead-letter-exchange': DEFAULT,
-      'x-dead-letter-routing-key': queue
+      'x-message-ttl': delay,
+      'x-dead-letter-exchange': DEFAULT
+      // no x-dead-letter-routing-key: the original key is preserved, and it names
+      // the source queue because that is what we published with
     }
-  }
+  })
 
-  return (await this.#assertQueue(retryQueueOf(queue), options))[0]
+  await this.#channel.bindQueue(name, name, '')
+
+  return name
 }
 
-async #assertDeadQueue (queue) {
-  return (await this.#assertQueue(deadQueueOf(queue), this.#optionsOf(queue)))[0]
+async #assertParkedQueue (queue) {
+  const options = this.#queues.get(queue) ?? (this.#topology.durable ? DURABLE : EXCLUSIVE)
+
+  return (await this.#assertQueue(parkedQueueOf(queue), options))[0]
 }
 ```
 
-Plus `RETRY_PREFIX = 'comq.retry.'`, `DEAD_PREFIX = 'comq.dead.'`, `RETRY_DELAY = 1000`, and the
-two `…QueueOf` helpers, where `MAX_REDELIVERIES` sits today
-([:481](../source/channel.js#L481)) — that constant itself moves into the topology presets as
-the default for `attempts`.
+Plus `RETRY_PREFIX = 'comq.retry.'`, `PARKED_PREFIX = 'comq.parked.'` and
+`parkedQueueOf = (queue) => PARKED_PREFIX + queue`, where `MAX_REDELIVERIES` sits today
+([:481](../source/channel.js#L481)) — that constant moves into the topology presets as the
+default for `attempts`, and `RETRY_DELAY` never becomes a constant at all; it is
+`topology.delay` from the start.
 
 ### 3. `#consume` declares them and threads the queue name
 
@@ -391,16 +445,17 @@ name (including generated `amq.gen-*` names for the exclusive case, `io.js:112`)
 ```js
 // :352
 if (this.#topology.acknowledgments) {
-  await this.#assertRetryQueue(queue)
-  await this.#assertDeadQueue(queue)
+  await this.#assertRetryQueue()
+  await this.#assertParkedQueue(queue)
   consumer = this.#getAcknowledgingConsumer(queue, consumer)
 } else options.noAck = true
 ```
 
-`#getAcknowledgingConsumer` becomes `(queue, consumer) => async (message) => {...}`; single
-call site at [:356](../source/channel.js#L356). Declare the source queue **before** the retry
-queue — existing tests at [test/channel.test.js:386](../test/channel.test.js#L386) and `:407` read
+`#getAcknowledgingConsumer` becomes `(queue, consumer) => async (message) => {...}`; single call
+site at [:356](../source/channel.js#L356). Declare the source queue **before** the others —
+existing tests at [test/channel.test.js:386](../test/channel.test.js#L386) and `:407` read
 `assertQueue.mock.results[0]`.
+
 
 ### 4. Rewrite the failure path
 
@@ -425,7 +480,7 @@ async #failed (queue, message, exception) {
   try {
     const attempt = message.properties.headers?.[REDELIVERY_HEADER] ?? 0
 
-    if (attempt >= this.#topology.attempts) await this.#discard(queue, message, exception)
+    if (attempt >= this.#topology.attempts) await this.#park(queue, message, exception)
     else await this.#retry(queue, message, attempt, exception)
   } catch {
     this.#nack(message) // hand it back rather than lose it
@@ -433,12 +488,18 @@ async #failed (queue, message, exception) {
 }
 
 async #retry (queue, message, attempt, exception) {
-  const headers = { ...message.properties.headers, [REDELIVERY_HEADER]: attempt + 1 }
+  const headers = {
+    // the origin is recorded on the first failure and carried from then on: after one
+    // trip through the retry queue the message comes back through the default exchange,
+    // so message.fields no longer describes where it was published
+    ...origin(message),
+    ...message.properties.headers,
+    [REDELIVERY_HEADER]: attempt + 1
+  }
+
   const properties = { ...message.properties, headers, mandatory: true }
 
-  // the copy is placed before the original is released: a message the broker holds
-  // twice is recoverable, one it no longer holds at all is not
-  await this.#publish(DEFAULT, retryQueueOf(queue), message.content, properties)
+  await this.#publish(RETRY_PREFIX + this.#topology.delay, queue, message.content, properties)
 
   this.#channel.ack(message)
   this.#diagnostics.emit('retry', message, exception, attempt + 1)
@@ -447,13 +508,25 @@ async #retry (queue, message, attempt, exception) {
 #nack (message) {
   try { this.#channel.nack(message, false, true) } catch { /* nothing left to do */ }
 }
+
+// spread *under* the existing headers, so the first failure writes it and later ones
+// leave it alone
+const origin = (message) => ({
+  'x-comq-exchange': message.fields.exchange,
+  'x-comq-key': message.fields.routingKey
+})
 ```
 
-`#retry` **copies** the properties rather than mutating them as
-[:396](../source/channel.js#L396) does — the mutated message must not reach the fallback `nack`,
-and a user consumer may still hold a reference.
+Two things worth being explicit about:
 
-`#discard` / `#dispose` are as given in Part 1.
+- **`#retry` copies the properties** rather than mutating them as [:396](../source/channel.js#L396)
+  does — the mutated message must not reach the fallback `nack`, and a user consumer may still
+  hold a reference.
+- **The publish target is the retry *exchange*, and the routing key is the source queue.** That
+  is what survives the expiry and routes the message home.
+
+`#park` / `#dispose` are as given in Part 1.
+
 
 ### 5. Wire the `retry` diagnostic
 
@@ -468,13 +541,16 @@ and a user consumer may still hold a reference.
   hardcoded re-emit list.
 - [features/steps/context.js:124](../features/steps/context.js#L124) — add `'retry'` to `EVENTS`.
 
-### 5b. Make `attempts` configurable
+### 5b. Make `delay` and `attempts` configurable
 
-Small and self-contained; the reasoning is under *What of this belongs in the public contract*.
+Small and self-contained; the reasoning and the defaults are under *Delay and attempts are both
+public*.
 
-- `source/topology/{request,event}.json` — add `"attempts": 5`. Leave `reply.json` alone; it is
-  `acknowledgments: false`, so nothing there ever counts an attempt.
-- [types/topology.d.ts](../types/topology.d.ts) — add `attempts: number` to `Topology`.
+- `source/topology/{request,event}.json` — add `"attempts": 5`, and `"delay": 30000` /
+  `"delay": 5000`. Leave `reply.json` alone; it is `acknowledgments: false`, so nothing there
+  ever counts an attempt or waits a delay.
+- [types/topology.d.ts](../types/topology.d.ts) — add `attempts: number` and `delay: number` to
+  `Topology`.
 - [source/connection.js:92](../source/connection.js#L92) — `const topology = presets[type]` hands
   out the shared module-level preset object. Make it merge into a copy,
   `{ ...presets[type], ...this.#overrides?.[type] }`, and never mutate the preset.
@@ -486,7 +562,8 @@ Small and self-contained; the reasoning is under *What of this belongs in the pu
   so all three change.
 - New tests: an override reaches the channel; an absent override leaves the preset untouched
   (assert the module object is not mutated across two connections); a consumer configured with
-  `attempts: 1` parks on the second delivery rather than the sixth.
+  `attempts: 1` parks on the second delivery rather than the sixth; two channels with different
+  `delay` values declare two differently-named retry queues and neither redeclares the other's.
 
 ### 6. Unit tests — new `describe('retry')` in [test/channel.test.js](../test/channel.test.js)
 
@@ -494,10 +571,13 @@ Small and self-contained; the reasoning is under *What of this belongs in the pu
 `confirms` and `acknowledgments` with `flip()`** — every new test must set the ones it asserts
 on explicitly, and the file should be run repeatedly.
 
-Declaration: retry queue asserted with the right name and arguments, and parking queue with the
-right name and **no** arguments; both asserted *after* the source queue; **neither** asserted
-when `acknowledgments: false`; both exclusive when the source is exclusive (test both values of
-`durable`); both asserted for the `bound` path; both re-asserted after `recover()`.
+Declaration: the retry **exchange** asserted as `fanout` and the retry queue asserted with the
+delay-derived name, the TTL and **no** `x-dead-letter-routing-key`, and bound to that exchange;
+the parking queue asserted with the right name and no arguments. All asserted *after* the source
+queue; none asserted when `acknowledgments: false`; the parking queue exclusive when the source
+is exclusive (test both values of `durable`) while the retry queue stays durable regardless;
+asserted for the `bound` path; re-asserted after `recover()`. And the one that guards the shared
+design: **two consumers on the same channel declare the retry topology once**, not once each.
 
 Failure path — the regression tests that matter:
 - **publishes before acking** —
@@ -505,8 +585,12 @@ Failure path — the regression tests that matter:
 - **waits for the confirmation** — `confirms: true`, capture the 5th publish arg, assert `ack`
   not yet called, invoke the callback, assert it then is
 - **does not republish to the original exchange** — build the message with a random
-  `fields.exchange`; assert the publish target is `''` / `comq.retry.<queue>`. *(the fanout
-  re-delivery regression)*
+  `fields.exchange`; assert the publish goes to the retry exchange with the **source queue** as
+  the routing key, never to `fields.exchange`. *(the fanout re-delivery regression)*
+- **records the origin on the first failure** — `fields.exchange` and `fields.routingKey` are
+  written as `x-comq-exchange` / `x-comq-key`; a message that already carries them (a returned
+  retry, whose `fields.exchange` is now `''`) keeps the originals rather than overwriting them
+  with `''`. *(the wrong-provenance regression his broker run found)*
 - **tolerates a message with no headers** — `properties = {}`. *(the non-comq-publisher
   `TypeError` regression)*
 - **does not throw** — `await expect(callback(message)).resolves.not.toThrow()`. *(the
@@ -519,14 +603,15 @@ Failure path — the regression tests that matter:
 - consumer throwing `'Channel closed'` → no publish, no nack, no ack (complements the existing
   test at [:144](../test/channel.test.js#L144), which covers `ack` throwing)
 - consumer doing `throw undefined` → resolves *(covers the `exception?.message` guard)*
-- **terminal**: `x-attempt: 5` → published to `comq.dead.<queue>`, **not** to the retry queue;
+- **terminal**: `x-attempt: 5` → published to `comq.parked.<queue>`, **not** to the retry queue;
   published before acking, same order assertion as above; carries the `x-comq-*` headers
-  including the original `fields.exchange` and `fields.routingKey`; `nack` not called. Restores
+  including an `x-comq-exchange` that names the original exchange rather than `''`; `nack` not
+  called. Restores
   the spirit of the `it.each` requeue test `1df2afe` deleted. The existing `should emit
   'discard' event` ([:894](../test/channel.test.js#L894)) needs its message fixture extended with
   `fields` — it currently has none, which works only because today's `#discard` never reads
   them.
-- **parking failure**: publish to the dead queue throws → `nack(message, false, true)`, no
+- **parking failure**: publish to the parking queue throws → `nack(message, false, true)`, no
   `ack`, resolves. The message survives an unavailable parking queue.
 
 ### 7. Feature tests — rewrite [features/events.poison.feature](../features/events.poison.feature)
@@ -578,7 +663,7 @@ Steps needed:
   feature file references it). It becomes live; change its `await timeout(300)` to a polling
   wait, via a new `until(predicate, ms)` helper in `test/helpers.js` next to `timeout`.
 - `Then the message is parked` (new) — the real end-to-end assertion, and only possible because
-  Part 1 gives comq a queue it owns: `io.process('comq.dead.<queue>', …)` and assert the payload
+  Part 1 gives comq a queue it owns: `io.process('comq.parked.<queue>', …)` and assert the payload
   arrives, carrying `x-attempt: 5` and the `x-comq-*` headers. Under today's code, and under a
   broker-side DLX, there would be nothing to consume. Prefer this over the diagnostic-flag step
   wherever both would work — it proves the message actually survived, not just that comq
@@ -594,16 +679,17 @@ Replace [readme.md:464-470](../readme.md#L464) (which currently documents the se
 the "configure a DLX yourself" workaround) with prose covering: the retry queue and its name;
 `x-message-ttl` + `x-dead-letter-exchange` as the delay mechanism; `x-attempt` visible to
 consumers; **six attempts by default** — one original plus five retries — then `discard`,
-correcting the existing off-by-one at [readme.md:466](../readme.md#L466), and noting that the
-count is the `attempts` topology setting while the delay is fixed; **the channel keeps consuming**; ordering not
+correcting the existing off-by-one at [readme.md:466](../readme.md#L466), and noting that both
+the count and the delay are topology settings (`attempts`, `delay`) with per-channel-type
+defaults; **the channel keeps consuming**; ordering not
 preserved across a failure; at-least-once / consumers must be idempotent; retries confirmed for
 Events but best-effort for Requests (`confirms: false`, `persistent: false`), and a discarded
 Request is never answered — the caller waits indefinitely, which with a limited prefetch can
-deadlock it; do not delete `comq.retry.*` or `comq.dead.*` on a running system; and **the retry
+deadlock it; do not delete `comq.retry.*` or `comq.parked.*` on a running system; and **the retry
 queue's return hop is at-most-once on classic queues** — a retry can be lost if the source queue
 is unavailable when the TTL fires.
 
-Then the parking half, from Part 1: comq publishes the exhausted message to `comq.dead.<queue>`
+Then the parking half, from Part 1: comq publishes the exhausted message to `comq.parked.<queue>`
 and acks only once the broker confirms it, so it is not deleted and not dependent on a
 broker-side policy; the `x-comq-*` headers it carries; that these queues **grow until someone
 drains them**, which is deliberate — the alternative is deleting evidence — and that `discard`
@@ -615,14 +701,22 @@ that broker dead-lettering is at-most-once on classic queues — means it was ne
 it appeared to be. A DLX on the parking queue itself remains a user's choice; say nothing about
 it either way.
 
-Add `retry` to the diagnostics list at [readme.md:556](../readme.md#L556), and `x-attempt` plus the
-`x-comq-*` parking headers to `docs/headers.md`.
+The topology section ([readme.md:428](../readme.md#L428)) gains the retry exchange and queue —
+one pair per distinct `delay`, shared by every source queue — and the per-queue parking queue,
+so the queue list an operator sees is documented rather than discovered.
+
+Add `retry` to the diagnostics list at [readme.md:556](../readme.md#L556), and to
+`docs/headers.md`: `x-attempt`, the `x-comq-*` parking headers, and a note that a retried message
+also carries the broker's `x-death` — whose `count` is a *second* attempt counter that happens to
+agree with `x-attempt` today. Say which is authoritative (`x-attempt`, comq's own; `x-death` is
+the broker's record and is useful for its timestamps), because two counters on one message is
+otherwise a debugging trap.
 
 ## Not affected — checked
 
 - `source/shards/channel.js:59` delegates `consume`/`subscribe`/`bound` to per-shard `Channel`s.
-  Each shard is a separate broker with its own copy of the queue, declares its own
-  `comq.retry.*` and `comq.dead.*`, and returns retries to its own source. Self-contained —
+  Each shard is a separate broker with its own copy of the queue, declares its own retry
+  topology and `comq.parked.*`, and returns retries to its own source. Self-contained —
   though note a parked message lives on the shard that failed it, so a post-mortem means
   looking at every shard. `#retry` uses
   `#publish` directly (not the `failsafe`-wrapped `publish`), so on a paused failfast shard it
@@ -651,9 +745,15 @@ Add `retry` to the diagnostics list at [readme.md:556](../readme.md#L556), and `
    gone, and — the point of the whole exercise — a *sibling* consumer still alive afterwards.
 4. Confirm the process no longer exits: today, running the poison scenario ends the node
    process. After the change it should complete the scenario.
-5. Inspect the broker after a features run — `comq.retry.*` empty, `comq.dead.*` holding
-   exactly the messages the poison scenarios parked, with their `x-comq-*` headers intact.
-6. Branch off `dev` (not `release`).
+5. Inspect the broker after a features run — the retry queues empty, `comq.parked.*` holding
+   exactly the messages the poison scenarios parked, with `x-comq-exchange` naming the original
+   exchange rather than `''`. That last one is the check that the origin is captured on the
+   first failure rather than at parking time.
+6. Confirm the cycle claim directly, once, rather than trusting the document: declare a queue
+   with a TTL, `x-dead-letter-exchange: ''` and no routing key, publish to the default exchange
+   with that queue as the key, and watch the message vanish at the first expiry. It is the
+   reason the retry exchange exists.
+7. Branch off `dev` (not `release`).
 
 ---
 
@@ -675,7 +775,7 @@ fix to it. Parts 1 and 2 stand exactly as written, and remain worth landing on t
 ```js
 const park = verdictOf(exception) === PARK || attempt >= this.#topology.attempts
 
-if (park) await this.#discard(queue, message, exception)
+if (park) await this.#park(queue, message, exception)
 else await this.#retry(queue, message, attempt, exception)
 ```
 
@@ -725,9 +825,10 @@ const verdictOf = (exception) => exception?.[VERDICT] ?? RETRY
 
 Two deliberate choices:
 
-- **`Symbol.for` brand, not `instanceof`.** comq is a library others depend on; two copies in
-  one dependency tree (Toa pins one version, the app resolves another) makes `instanceof`
-  silently `false`. A `Park` would then be read as a bare rejection, retried six times, and
+- **`Symbol.for` brand, not `instanceof`.** Required, not defensive: a consumer of comq that
+  pins it inside its own binding while the application resolves its own tree makes two copies
+  the ordinary resolution rather than the pathological one, and `instanceof` is silently `false`
+  across them. A `Park` would then be read as a bare rejection, retried six times, and
   parked anyway — the right outcome, six retry cycles late, with six spurious `retry`
   diagnostics. The global symbol registry is shared across copies; a class identity is not.
 - **`extends Error`**, so a verdict carries a stack, a `message`, and `cause`. A bare
@@ -765,17 +866,31 @@ await io.reply('compute', async (input) => {
 })
 ```
 
-## The footgun the proposal does not mention
+## `Park` from a Producer is a category error
 
-**`Park` on an `io.reply` producer hangs the caller.** No reply is ever sent, so the requester's
-promise never settles — the prefetch deadlock [readme.md:469](../readme.md#L469) already admits.
-Today that happens by accident, after six failures. With `Park()` it happens deliberately on the
-first delivery: a consumer says "I will never process this" and silently hangs the requester
-forever, which is a worse failure than the accident because it is now the documented path.
+`Park` on an `io.reply` producer would mean the caller never gets a reply and its promise never
+settles — the prefetch deadlock [readme.md:469](../readme.md#L469) already admits. Today that
+happens by accident after six failures; a `Park` would make it a documented path.
 
-Three ways out, to decide before building: document it and leave it; have `Park` on a request
-send an error reply (a protocol change — what does an error reply look like to the caller?); or
-reject `Park` on the request path as a usage error. Not decided here.
+**Resolved: reject it.** `consume` and `process` take a `Consumer` — no caller, so somebody has
+to decide what happens to a failed message. `reply` takes a `Producer` — a caller is waiting, and
+what it is owed is a reply. Retry-or-park is not a policy choice there, and comq's own type
+vocabulary already draws the line.
+
+The rejection cannot be static — nothing at wiring time knows what a producer will throw — so
+concretely: a `Park` from a producer is treated as a bare rejection, so the message retries and
+eventually parks on the count, and comq emits a diagnostic saying `Park` is not applicable to a
+reply producer. Loud, no new protocol, and the message is not lost.
+
+The alternative of sending an error reply was rejected on its own terms: it adds an element to
+the reply protocol that every caller must learn to distinguish, and it collides with a
+distinction callers already make between an error returned as a value and an exception rethrown
+in them. A third kind arriving from the transport would have to be mapped onto one of those.
+
+Burning six attempts on a request nobody can process does **not** wedge the consumer, which was
+an earlier worry here: a retry publishes and acks, so the delivery is released immediately and
+the message waits in the retry queue, not in the consumer's unacked set. The cost is six
+pointless invocations.
 
 ## Sequencing
 
@@ -785,7 +900,7 @@ cleanly on top as a minor release.
 
 One thing argues for doing them together: Part 1 names the parking queue and Part 3 names the
 class, and they should agree — `Park` → `comq.parked.<queue>`, or `Dead` →
-`comq.dead.<queue>`. Naming it twice means renaming a queue in a later release, which orphans
+`comq.parked.<queue>`. Naming it twice means renaming a queue in a later release, which orphans
 whatever is sitting in the old one. **Pick the noun once**, before Part 1 is implemented; it is
 the only thing Part 3 needs decided up front.
 
@@ -853,8 +968,10 @@ correct claims that get made about this area.
   `for (const key in val)`, walking the prototype chain. So every comq-published message arrives
   with a headers table, at minimum `{}`. The `TypeError` is real only for a message published by
   a **non-comq client** that omits the field table (`defs.js:3438`, `headers: void 0` is the
-  decode default). Guard it anyway — `source/shards/channel.js:204` already guards the identical
-  pattern — but it is not the common case.
+  decode default). That is a supported case rather than a hypothetical one — consuming events
+  published by something that is not comq is a thing comq is used for — so the guard is
+  load-bearing, not tidiness. `source/shards/channel.js:204` already guards the identical
+  pattern.
 - **Publisher confirms cover events only.** `source/topology/request.json` is `confirms: false`
   and the channel is created with `createChannel`, not `createConfirmChannel`
   ([channel.js:68](../source/channel.js#L68)) — there is no confirm to await on the request channel.
@@ -883,9 +1000,15 @@ correct claims that get made about this area.
 
 ## Still open
 
-- **The noun.** `Park` / `comq.parked.<queue>` or `Dead` / `comq.dead.<queue>` — pick before
-  implementing Part 1, since Part 3 must match it and renaming the queue later orphans its
-  contents. This document writes `comq.dead.<queue>` throughout as a placeholder.
-- **`Park` on an `io.reply` producer** hangs the caller forever. Document it, send an error
-  reply, or reject it as a usage error — see the end of Part 3. Only blocks Part 3.
-- **Whether Part 3 is built at all**, and when. Parts 1 and 2 do not depend on it.
+Nothing blocking. The three questions this document opened are resolved:
+
+- **The noun** — `Park` / `comq.parked.<queue>`. See Part 1.
+- **`Park` on an `io.reply` producer** — rejected as a category error, treated at runtime as a
+  bare rejection plus a diagnostic. See Part 3.
+- **Whether Part 3 is built** — **decided, not yet scheduled.** Parts 1 and 2 are the emergency
+  and do not depend on it; a consumer of comq gets retry-then-park by upgrading and writing no
+  code. But the parking queue takes its noun from a verdict class that would not otherwise
+  exist, and without verdicts a message a contract has already refused costs six deliveries —
+  two and a half minutes at the event default — and then lands in the parking queue beside the
+  messages that genuinely failed. "Decided, not yet scheduled" rather than "open", because
+  people read this deciding whether to build on it.
