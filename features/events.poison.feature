@@ -40,3 +40,14 @@ Feature: Poison events
     When an event is emitted to the `poison_open` exchange
     And after 1000ms
     Then `bystander` has received 1 event
+
+  Scenario: A consumer refusing a message parks it at once
+
+    A `Park` says the consumer will never process this message, so climbing the
+    ladder would only delay the inevitable.
+
+    Given that events from the `poison_refused` exchange are refused as poison
+    When an event is emitted to the `poison_refused` exchange
+    Then the event is attempted 1 time
+    And the message is parked
+    And the parked message is kept, and says it came from the `poison_refused` exchange

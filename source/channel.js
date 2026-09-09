@@ -2,6 +2,7 @@
 
 const { Promex } = require('promex')
 const { failsafe, lazy, recall } = require('./attributes')
+const { verdictOf, PARK } = require('./verdicts')
 const emitter = require('./emitter')
 
 /**
@@ -490,8 +491,11 @@ class Channel {
       // the header is which attempt this delivery is, and the first does not carry one
       const attempt = message.properties.headers?.[ATTEMPT_HEADER] ?? 1
 
-      // one rung per retry: a message that has climbed the ladder has nowhere left to wait
-      if (attempt > this.#delays.length) await this.#park(queue, message, exception)
+      // a consumer that says the message will never work is taken at its word; otherwise
+      // one rung per retry, and a message that has climbed the ladder has nowhere left to wait
+      const parking = verdictOf(exception) === PARK || attempt > this.#delays.length
+
+      if (parking) await this.#park(queue, message, exception)
       else await this.#retry(queue, message, attempt, exception)
     } catch {
       // the message could not be moved: give the delivery back rather than lose it
@@ -527,6 +531,9 @@ class Channel {
     const properties = this.#carry(message, {
       [PARKED_QUEUE_HEADER]: queue,
       [PARKED_REASON_HEADER]: exception?.message,
+      // a verdict is usually thrown with the exception that prompted it, and that one
+      // says what actually went wrong
+      [PARKED_CAUSE_HEADER]: exception?.cause?.message,
       [PARKED_AT_HEADER]: Date.now()
     })
 
@@ -659,6 +666,7 @@ const ORIGIN_EXCHANGE_HEADER = 'x-comq-exchange'
 const ORIGIN_KEY_HEADER = 'x-comq-key'
 const PARKED_QUEUE_HEADER = 'x-comq-queue'
 const PARKED_REASON_HEADER = 'x-comq-reason'
+const PARKED_CAUSE_HEADER = 'x-comq-cause'
 const PARKED_AT_HEADER = 'x-comq-at'
 
 function noop () {}

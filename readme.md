@@ -515,6 +515,41 @@ One retry queue and one exchange are declared per distinct wait and shared by ev
 uses them, so their number grows with the length of the ladder rather than with the number of
 queues.
 
+#### Saying how it failed
+
+A consumer can classify its failure, which decides whether the message is worth another
+attempt at all:
+
+```javascript
+const { Retry, Park } = require('comq')
+
+await io.consume('orders', 'billing', async (order) => {
+  if (typeof order.total !== 'number') throw new Park('no total on order')
+
+  try {
+    await billing.charge(order)
+  } catch (e) {
+    throw new Retry('billing unavailable', { cause: e })
+  }
+})
+```
+
+- `Park` says this consumer will never process this message, however many times it is handed
+  over. It is [parked](#parked-messages) at once, without climbing the ladder.
+- `Retry` says whatever was missing may be back shortly. This is what an unclassified rejection
+  already means, so throwing it changes nothing but the reader's certainty.
+
+**A bare rejection means `Retry`** — a failure nobody classified is a failure nobody chose — so
+consumers written before this behave exactly as they did.
+
+Both are `Error`s and both take a `cause`, which is recorded on the parked message alongside the
+verdict's own message.
+
+> **`Park` is not applicable to a `Producer` given to [`IO.reply`](#reply).** A Request
+> has a caller awaiting a reply, so what happens to a failed one is not a policy choice. A `Park`
+> thrown there is treated as an ordinary failure — retried, then parked on the count — and the
+> parked message says so as its reason.
+
 #### Parked messages
 
 A message that has run out of attempts is published to `comq.parked.<queue>` and acknowledged

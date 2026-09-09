@@ -38,6 +38,21 @@ Given('(that )events are exclusively consumed from the {token} exchange',
     this.consumptionPromise = consume.call(this, undefined, exchange)
   })
 
+Given('(that )events from the {token} exchange are refused as poison',
+  /**
+   * @param {string} exchange
+   * @this {comq.features.Context}
+   */
+  async function (exchange) {
+    const { Park } = require('../../')
+
+    await this.io.consume(exchange, 'exceptions', (payload, properties) => {
+      this.attempts.push(properties.headers?.['x-comq-attempt'] ?? 1)
+
+      throw new Park('Expected refusal')
+    })
+  })
+
 Given('(that )events from the {token} exchange are causing exceptions',
   /**
    * @param {string} exchange
