@@ -567,11 +567,21 @@ A retried message re-enters its queue behind the messages published while it wai
 Retries and parked messages are published *persistent* whatever the channel is, so they survive a
 restart of the broker even on the Request channel. Ordinary publishing is untouched: Requests and
 Replies stay [delivery mode 1](#messages), and only a message that has already failed is written
-to disk. Two weaker points remain on that channel: it
-does not use publisher confirms, so comq has no positive acknowledgement that the broker took the
-copy; and the return hop of a retry is performed by the broker's dead-lettering, which on classic
-queues is at-most-once and can lose the message if the source queue is unavailable when the delay
-expires.
+to disk.
+
+On the Request channel the copy is published without [publisher confirms](#channels). Those are
+an Events property here, because a confirm is a round trip and Requests are where that is felt —
+the same reason they are not persistent. Confirm mode belongs to the channel rather than to a
+publish, so the failure path cannot ask for it on its own.
+
+What that costs is narrow. Commands on a channel are handled in order, so the broker takes the
+copy before it releases the original, and `mandatory` brings back a copy it could not route. What
+is left uncovered is a broker that accepted the frame and then failed to keep it.
+
+The return hop of a retry — the broker moving a message out of the retry queue when its wait
+expires — is dead-lettering, and on classic queues that is at-most-once: a retry can be lost if
+its source queue is unavailable at the moment the delay expires. This applies to every channel,
+not only Requests.
 
 See:
 
