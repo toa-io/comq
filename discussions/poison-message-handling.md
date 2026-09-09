@@ -235,8 +235,26 @@ expiry  → default exchange, routing key preserved → <source queue>
 ```
 
 One queue and one exchange **per distinct delay**, shared by every source queue — not one pair
-per consumed queue. With the two defaults below that is four broker objects for a whole
-application, plus one parking queue per consumed queue.
+per consumed queue. The delay comes from the channel topology, so the count does not depend on
+how many queues are consumed.
+
+Worked through, because the rule alone is easy to misread. An application with 100 request
+endpoints and 100 consumed events:
+
+| | count | scales with |
+|---|---|---|
+| source queues (unchanged, exist today) | 200 | endpoints + events |
+| **retry queues** | **2** (+ 2 exchanges) | distinct `delay` values — *not* queue count |
+| parking queues | 200 | one per source queue |
+
+The 100 endpoints share `comq.retry.5000` and the 100 events share `comq.retry.30000`; add a
+thousand more of each and it is still two. A per-queue retry design would have made it 400 new
+queues instead of 202.
+
+Three things do move the retry number, and nothing else does: overriding `delay` (the count is
+distinct values in use), a sharded connection (each shard is its own broker with its own pair),
+and nothing further — more services, replicas and connections all declare the same names, and
+`assertQueue` is idempotent.
 
 **The fanout exchange is not optional.** Publishing to the retry queue through the default
 exchange would make the message's own routing key the retry queue's name, so on expiry it would
