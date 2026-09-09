@@ -609,7 +609,7 @@ const io = await comq.connect(url, {
 })
 ```
 
-`delay` is the one meant to be set. Changing [the rest](./types/topology.d.ts) will change what a
+`delay` is the one meant to be set. Changing the rest will change what a
 Request, a Reply and an Event *are*.
 
 > Changing `delay` declares new retry queues rather than redeclaring the existing ones, so a
