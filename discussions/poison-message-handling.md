@@ -188,7 +188,7 @@ async #park (queue, message, exception) {
 // and one it no longer holds at all is not.
 async #dispose (queue, message, exception) {
   const headers = { /* as above */ }
-  const properties = { ...message.properties, headers, mandatory: true }
+  const properties = { ...message.properties, headers, mandatory: true, persistent: true }
 
   await this.#publish(DEFAULT, parkedQueueOf(queue), message.content, properties)
   this.#channel.ack(message)
@@ -203,6 +203,44 @@ The parking queue is per source queue — depth per consumer is how anyone notic
 is declared next to the shared retry topology in `#consume` (Part 2 §3), mirroring the source
 queue's durability. The diagnostic keeps its existing name, `discard`, so nothing downstream
 breaks.
+
+## Parked Requests: what is kept, and what is still not answered
+
+A parked Request is preserved; its caller is still not answered. The promise never settles —
+the prefetch deadlock [readme.md:469](../readme.md#L469) already documents — and nothing here
+changes that. Parking makes the request *recoverable*, not *answered*.
+
+**The parked copy must be published `persistent: true` regardless of the source topology.**
+`source/topology/request.json` is `persistent: false`, so a parked Request would otherwise be
+delivery-mode 1: sitting in a durable queue, but dropped by a broker restart. Requests are
+non-persistent for latency and the failure path is not the latency path — parking is rare and
+terminal, so the disk write costs nothing. The same applies to the retry copy, where a broker
+restart during the TTL would otherwise lose a retried Request. Both `#retry` and `#dispose`
+therefore set `persistent: true` explicitly rather than inheriting it.
+
+(The remaining weakness on that channel is that `confirms: false` means the parking publish gets
+no publisher confirm. Channel command ordering still has the broker process the publish before
+the ack, so this is not a loss race — but there is no positive acknowledgement that the broker
+took it. Fixing that means confirms on the request channel, which is a throughput change well
+outside this work.)
+
+**A parked Request carries enough to answer it later.** `#createRequest`
+([io.js:365](../source/io.js#L365)) sets `correlationId` and `replyTo` in the message properties,
+and both `#retry` and `#dispose` spread `...message.properties`, so both survive into the
+parking queue. Whether an answer would *land* depends on the caller:
+
+- **Still running** — and it will be, hanging indefinitely, which is the case that matters. Its
+  reply queue is still declared, so a reply published to `replyTo` with that `correlationId`
+  would resolve the hung promise.
+- **Restarted** — reply queues are `<queue>..<16 random hex>`
+  ([createReplyEmitter.js:33](../source/.io/createReplyEmitter.js#L33)) declared *exclusive*
+  (`reply.json` is `durable: false`, so `#assertQueue` uses `EXCLUSIVE`), so it died with the
+  old connection. The reply is unroutable, and because `#reply` sets `mandatory: true` the broker
+  returns it and the `return` diagnostic fires rather than it vanishing silently.
+
+`correlationId` carries a per-process prefix, so it is unique across processes and a replay
+cannot cross wires. None of this is built here — but it is worth recording that the door is
+open, because it turns the deadlock from permanent into merely manual.
 
 ## The one thing this does not fix
 
@@ -549,7 +587,9 @@ async #retry (queue, message, attempt, exception) {
     [REDELIVERY_HEADER]: attempt + 1
   }
 
-  const properties = { ...message.properties, headers, mandatory: true }
+  // persistent regardless of the source topology: a retried Request would otherwise be
+  // delivery-mode 1 and would not survive a broker restart during the TTL
+  const properties = { ...message.properties, headers, mandatory: true, persistent: true }
 
   await this.#publish(RETRY_PREFIX + this.#topology.delay, queue, message.content, properties)
 
@@ -650,6 +690,11 @@ Failure path — the regression tests that matter:
 - **does not seal** — `chan.cancel` not called, `seal` spy not called, and a subsequent
   `channel.consume(...)` still works *(proves `#sealed` is still false)*
 - increments `x-attempt`; does not mutate `message.properties`; emits `retry` with the attempt
+- **publishes persistent even from a non-persistent topology** — `topology.persistent = false`
+  (the request preset), assert the publish options carry `persistent: true`, for both the retry
+  and the parking publish. *(a parked Request would otherwise not survive a broker restart)*
+- **carries `replyTo` and `correlationId` through** — a message with both in its properties is
+  parked with both intact, so a hung caller remains answerable
 - **defensive fallback**: publish throws → `nack(message, false, true)`, no `ack`, resolves;
   publish *and* nack both throw → still resolves; confirmation rejected → same as publish throw
 - consumer throwing `'Channel closed'` → no publish, no nack, no ack (complements the existing
