@@ -30,6 +30,6 @@ it('should define event preset', async () => {
     durable: true,
     acknowledgments: true,
     persistent: true,
-    delay: [1000, 5000, 15000, 20000]
+    delay: [1000, 10000, 30000, 90000]
   })
 })

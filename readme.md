@@ -505,7 +505,7 @@ other consumers nor that consumer's next message; only the message that failed i
 
 | | ladder | attempts | total |
 |---|---|---|---|
-| Event | 1s, 5s, 15s, 20s | 5 | 41s |
+| Event | 1s, 10s, 30s, 90s | 5 | 131s |
 | Request | 1s, 3s, 5s, 10s | 5 | 19s |
 
 Requests are shorter because a caller is blocked on one with no timeout, and a Reply arriving
@@ -548,7 +548,9 @@ A retried message re-enters its queue behind the messages published while it wai
 **ordering is not preserved across a failure**.
 
 Retries and parked messages are published *persistent* whatever the channel is, so they survive a
-restart of the broker even on the Request channel. Two weaker points remain on that channel: it
+restart of the broker even on the Request channel. Ordinary publishing is untouched: Requests and
+Replies stay [delivery mode 1](#messages), and only a message that has already failed is written
+to disk. Two weaker points remain on that channel: it
 does not use publisher confirms, so comq has no positive acknowledgement that the broker took the
 copy; and the return hop of a retry is performed by the broker's dead-lettering, which on classic
 queues is at-most-once and can lose the message if the source queue is unavailable when the delay
@@ -566,7 +568,7 @@ See:
 |---------|-----------|----------|-----------|----------------|------------|------------------|
 | Request | limited   | no       | durable   | manual         | no         | 1s, 3s, 5s, 10s  |
 | Reply   | unlimited | no       | exclusive | automatic      | no         | —                |
-| Event   | limited   | yes      | durable   | manual         | yes        | 1s, 5s, 15s, 20s |
+| Event   | limited   | yes      | durable   | manual         | yes        | 1s, 10s, 30s, 90s |
 
 ## Graceful shutdown
 

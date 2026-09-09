@@ -132,6 +132,11 @@ const PROTOCOL = 'amqp://'
 const EVENTS = ['open', 'close', 'flow', 'discard', 'retry', 'pause', 'resume', 'exhausted']
 
 /** @type {comq.topology.Overrides} */
-const TOPOLOGY = { event: { delay: [50, 100, 150] }, request: { delay: [50, 100, 150] } }
+// as many rungs as the presets have, so the suite exercises the shipped attempt count,
+// at a wall clock it can wait out
+const LADDER = [50, 100, 150, 200]
+
+/** @type {comq.topology.Overrides} */
+const TOPOLOGY = { event: { delay: LADDER }, request: { delay: LADDER } }
 
 exports.Context = Context

@@ -1374,6 +1374,25 @@ describe('failed messages', () => {
     })
   })
 
+  describe('the healthy path', () => {
+    it('should not make ordinary publishing persistent', async () => {
+      // only a message that has already failed is worth a disk write; Requests are
+      // transient for the sake of latency and must stay that way
+      jest.clearAllMocks()
+
+      topology.persistent = false
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+
+      await channel.send(generate(), randomBytes(8))
+      await channel.publish(generate(), randomBytes(8))
+
+      for (const [, , , options] of chan.publish.mock.calls) {
+        expect(options.persistent).toStrictEqual(false)
+      }
+    })
+  })
+
   describe('backoff', () => {
     const LADDER = [1000, 5000, 25000]
 

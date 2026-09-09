@@ -376,17 +376,15 @@ Once its connection is gone there is nobody to deliver to, and the message is dr
 because the default exchange finds no such queue. A per-queue retry design loses it too, at
 disconnect rather than at expiry. Neither can do better, so sharing costs nothing here.
 
-**Not per-message TTL.** A queue with mixed TTLs only expires from the head, so one long-TTL
-message blocks every shorter one behind it. A uniform per-queue TTL means expiry order equals
-enqueue order. Exponential backoff, if ever wanted, needs one queue per tier — a separate design.
+**Not per-message TTL.** RabbitMQ discards an expired message only once it reaches the head of
+its queue, so a long wait would hold up every shorter one behind it. The wait therefore has to
+be a property of the queue — which is why a backoff ladder is a queue per rung rather than an
+`expiration` per message.
 
-**Attempt count: the default stays 5.** `MAX_REDELIVERIES = 5` ([:481](../source/channel.js#L481))
-already exists — added by the same `1df2afe` — and is replaced by the length of the backoff
-ladder, so the count and the waits cannot disagree. Note its actual arithmetic, because the readme gets it wrong: the counter is the
-`x-comq-attempt` header, absent on first delivery, so it reads `0` and the message is retried.
-There is no separate attempt count: `delay` is a **backoff ladder with one rung per retry**, so
-its length decides how many there are and four rungs is five attempts. A count kept beside the
-ladder would be a second source of truth able to disagree with it.
+**There is no separate attempt count.** `delay` is a **ladder with one rung per retry**, so its
+length decides how many there are and four rungs is five attempts. `MAX_REDELIVERIES`
+([:481](../source/channel.js#L481)) disappears into it: a retry and its wait are the same event,
+and a count kept beside the ladder would be a second source of truth free to disagree with it.
 
 The header is the attempt number, counting from one, and the first delivery does not carry it: a
 consumer reads `headers?.['x-comq-attempt'] ?? 1`.
@@ -412,15 +410,18 @@ separate count to fall out of step with it.
 
 | | ladder | attempts | total |
 |---|---|---|---|
-| `event` | 1s, 5s, 15s, 20s | 5 | 41s |
+| `event` | 1s, 10s, 30s, 90s | 5 | 131s |
 | `request` | 1s, 3s, 5s, 10s | 5 | 19s |
 
 **Events.** A fast first rung catches a momentary blip without making it wait out a long one,
-and the ladder then backs off toward the failures worth retrying — a database primary stepping
-down, a storage reconnect, a third-party blip, or nothing listening on the queue yet during a
-rolling deploy. None of those are five-second events, and a ladder covering only a few seconds
-parks everything that was merely slow, which makes the parking queue mean "something was briefly
-slow" instead of "something is wrong".
+and the ladder then climbs toward the failures worth retrying — a database primary stepping down,
+a storage reconnect, a third-party blip, and a component mid-rollout. That last one is the most
+common and the easiest to misplace: on the event path "nothing is listening yet" is not a failure
+at all, since the message waits in a durable queue. It is reached *indirectly* — a receiver's
+handler calls a component that is mid-rollout, the call raises, the handler throws, the event is
+retried — and a rollout with `maxUnavailable: 0` across several replicas is minutes rather than
+seconds. A ladder covering only a few seconds parks everything that was merely slow, which makes
+the parking queue mean "something was briefly slow" instead of "something is wrong".
 
 **Requests are shorter, and deliberately so.** The failure durations are identical; what differs
 is that a request has someone blocked on it with no timeout. Exhausting the attempts means the
@@ -430,8 +431,9 @@ caller gave up lands in an exclusive reply queue that may no longer exist, and c
 unroutable.
 
 Different defaults per channel type are free: `event.json` and `request.json` already differ on
-four other settings. Two ladders that share no value mean eight retry queues and eight exchanges
-for a whole application — still constant in the number of queues consumed.
+four other settings. The two ladders share the rungs `1000` and `10000`, so between them they
+mean **six** retry queues and six exchanges for a whole application — and that number follows the
+rungs, not the number of queues consumed.
 
 And it removes a constraint that should never have set a production number: the feature suite
 can run at 100ms without either default being chosen for it. The original `1000` was picked for

@@ -361,6 +361,12 @@ class Channel {
    * The queue a message is kept in once it has run out of attempts. It has no consumer
    * either: what is in it is waiting for a person.
    *
+   * It is declared to live exactly as long as the queue it serves, which for a groupless
+   * subscriber means an exclusive queue whose contents go when the connection does. That
+   * is deliberate: such a subscriber is ephemeral by construction, and a durable queue per
+   * generated name would leak one per restart, forever. An ephemeral subscriber's failures
+   * are ephemeral too.
+   *
    * @param {string} queue the queue the message was consumed from
    * @returns {Promise<void>}
    */
