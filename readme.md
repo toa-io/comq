@@ -599,7 +599,7 @@ See:
 
 ### Settings
 
-Each channel type has a [preset](./types/topology.d.ts), and the trailing argument of `connect`
+Each channel type has a [preset](./source/topology), and the trailing argument of `connect`
 overrides any of its fields:
 
 ```javascript
@@ -609,7 +609,8 @@ const io = await comq.connect(url, {
 })
 ```
 
-`delay` is the one meant to be set. The rest describe what a Request, a Reply and an Event *are*,
+`delay` is the one meant to be set. [The rest](./types/topology.d.ts) describe what a Request, a
+Reply and an Event *are*,
 and changing them changes that: they are overridable because the presets are one mechanism, not
 because every combination of them works.
 
