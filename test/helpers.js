@@ -4,6 +4,20 @@ const timeout = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const immediate = () => new Promise((resolve) => setImmediate(resolve))
 
+/**
+ * Waits for a condition rather than for a duration.
+ *
+ * @param {() => boolean} condition
+ * @param {number} [ms] how long to keep asking
+ */
+const until = async (condition, ms = 5000) => {
+  const deadline = Date.now() + ms
+
+  while (!condition() && Date.now() < deadline) await timeout(20)
+
+  return condition()
+}
+
 const random = (max = 100) => Math.floor(Math.random() * max)
 
 const flip = () => Math.random() < 0.5
@@ -70,6 +84,7 @@ const MULTIPLIERS = Object.entries({
 
 exports.timeout = timeout
 exports.immediate = immediate
+exports.until = until
 exports.random = random
 exports.flip = flip
 exports.sample = sample

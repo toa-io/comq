@@ -27,7 +27,7 @@ beforeEach(() => {
 
 it('should extend Connection', async () => {
   expect(connection).toBeInstanceOf(mock.Connection)
-  expect(mock.Connection.ctor).toHaveBeenCalledWith(url)
+  expect(mock.Connection.ctor).toHaveBeenCalledWith(url, {})
 })
 
 describe('connection', () => {

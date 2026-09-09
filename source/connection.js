@@ -38,6 +38,9 @@ class Connection {
   /** @type {NodeJS.Timeout | null} */
   #heartbeatTimer = null
 
+  /** @type {comq.topology.Overrides} */
+  #overrides
+
   /** @type {import('node:net').Socket | null} */
   #heartbeatSocket = null
 
@@ -49,8 +52,13 @@ class Connection {
   /**
    * @param {string} url
    */
-  constructor (url) {
+  /**
+   * @param {string} url
+   * @param {comq.topology.Overrides} [overrides] per channel type, merged over the presets
+   */
+  constructor (url, overrides = {}) {
     this.#url = heartbeaten(url)
+    this.#overrides = overrides
   }
 
   get connected () {
@@ -89,7 +97,8 @@ class Connection {
     async (type, index) => {
       if (this.#connection === undefined) await this.#recovery
 
-      const topology = presets[type]
+      // a copy: the presets are shared by every connection in the process
+      const topology = { ...presets[type], ...this.#overrides[type] }
 
       // a closed channel held here would hold its IO, and a shared connection is
       // in no hurry to make another channel that would have swept it out

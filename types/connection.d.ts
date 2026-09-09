@@ -22,7 +22,12 @@ declare namespace comq {
     forget(event: _diagnostics.Event, listener: Function): void
   }
 
-  type Connect = (...urls: string[]) => Promise<_io.IO>
+  type Connect = {
+    (...urls: string[]): Promise<_io.IO>
+
+    /** The trailing argument overrides the topology presets, per channel type. */
+    (...args: [...urls: string[], overrides: _topology.Overrides]): Promise<_io.IO>
+  }
 
 }
 

@@ -18,6 +18,9 @@ class Context extends World {
   eventsPublishedCount = 0
   eventsConsumedCount = 0
   events = {}
+  attempts = []
+  counts = {}
+  parked = {}
   processed
   enqueued
   tasksProcessedCount = 0
@@ -63,6 +66,9 @@ class Context extends World {
     this.io = undefined
     this.connected = false
     this.events = {}
+    this.attempts = []
+    this.counts = {}
+    this.parked = {}
   }
 
   /**
@@ -73,7 +79,9 @@ class Context extends World {
   async #connect (urls, method = connect) {
     if (this.io !== undefined) await this.disconnect()
 
-    this.io = await method(...urls)
+    // the retry delay is a topology setting, so the suite need not wait out a
+    // production one to see the mechanism work
+    this.io = await method(...urls, TOPOLOGY)
     this.connected = true
 
     for (const event of EVENTS) this.io.diagnose(event, () => (this.events[event] = true))
@@ -121,6 +129,14 @@ class Context extends World {
 const PROTOCOL = 'amqp://'
 
 /** @type {comq.diagnostics.Event[]} */
-const EVENTS = ['open', 'close', 'flow', 'discard', 'pause', 'resume', 'exhausted']
+const EVENTS = ['open', 'close', 'flow', 'discard', 'retry', 'pause', 'resume', 'exhausted']
+
+/** @type {comq.topology.Overrides} */
+// as many rungs as the presets have, so the suite exercises the shipped attempt count,
+// at a wall clock it can wait out
+const LADDER = [50, 100, 150, 200]
+
+/** @type {comq.topology.Overrides} */
+const TOPOLOGY = { event: { delay: LADDER }, request: { delay: LADDER } }
 
 exports.Context = Context

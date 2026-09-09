@@ -103,7 +103,9 @@ declare namespace comq {
 
     diagnose(event: 'recover', listener: (channel: _topology.type, index?: number) => void): void
 
-    diagnose(event: 'discard', listener: (channel: _topology.type, message: any, index?: number) => void): void
+    diagnose(event: 'discard', listener: (channel: _topology.type, message: any, error: Error, index?: number) => void): void
+
+    diagnose(event: 'retry', listener: (channel: _topology.type, message: any, error: Error, attempt: number, index?: number) => void): void
 
     diagnose(event: 'pause', listener: (channel: _topology.type) => void): void
 
