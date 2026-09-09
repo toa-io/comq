@@ -9,12 +9,32 @@ class SingletonConnection extends Connection {
   /** @type {Promise<void>} */
   #opened = null
 
-  constructor (url) {
-    if (instances.has(url)) return instances.get(url)
+  /** @type {comq.topology.Overrides} */
+  #overrides
 
-    super(url)
+  /**
+   * An instance is shared, so its topology is whatever the first caller asked for.
+   * A later caller asking for something else would get a connection retrying on a
+   * ladder it did not choose, which is expensive to debug and cheap to refuse.
+   *
+   * @param {string} url
+   * @param {comq.topology.Overrides} [overrides]
+   */
+  constructor (url, overrides = {}) {
+    const instance = instances.get(url)
+
+    if (instance !== undefined) {
+      if (!same(instance.#overrides, overrides)) {
+        throw new Error(`Connection to ${url} has already been asserted with a different topology`)
+      }
+
+      return instance
+    }
+
+    super(url, overrides)
 
     this.#url = url
+    this.#overrides = overrides
 
     instances.set(url, this)
   }
@@ -64,5 +84,28 @@ const instances = new Map()
 
 /** @type {Map<string, number>} */
 const counters = new Map()
+
+/**
+ * Topology overrides are a couple of small plain objects, so this is enough and
+ * does not pull in a dependency for it.
+ *
+ * @param {object} one
+ * @param {object} another
+ * @returns {boolean}
+ */
+function same (one, another) {
+  return JSON.stringify(sorted(one)) === JSON.stringify(sorted(another))
+}
+
+/**
+ * @param {any} value
+ * @returns {any} the value with every object's keys in a stable order
+ */
+function sorted (value) {
+  if (Array.isArray(value)) return value.map(sorted)
+  if (value === null || typeof value !== 'object') return value
+
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key])]))
+}
 
 exports.SingletonConnection = SingletonConnection

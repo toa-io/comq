@@ -3,5 +3,11 @@
   "confirms": true,
   "durable": true,
   "acknowledgments": true,
-  "persistent": true
+  "persistent": true,
+  "delay": [
+    1000,
+    10000,
+    30000,
+    90000
+  ]
 }

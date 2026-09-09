@@ -8,7 +8,8 @@ it('should define request preset', async () => {
     confirms: false,
     durable: true,
     acknowledgments: true,
-    persistent: false
+    persistent: false,
+    delay: [1000, 3000, 5000, 10000]
   })
 })
 
@@ -28,6 +29,7 @@ it('should define event preset', async () => {
     confirms: true,
     durable: true,
     acknowledgments: true,
-    persistent: true
+    persistent: true,
+    delay: [1000, 10000, 30000, 90000]
   })
 })

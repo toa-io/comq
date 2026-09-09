@@ -7,7 +7,8 @@ const preset = () => ({
   confirms: flip(),
   durable: flip(),
   acknowledgments: flip(),
-  persistent: flip()
+  persistent: flip(),
+  delay: [1000, 1000, 1000, 1000]
 })
 
 exports.preset = preset

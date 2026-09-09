@@ -425,6 +425,24 @@ dynamic, such as those that depend on runtime data like incoming messages, makin
 impossible or hard to maintain. The tradeoff of potentially encountering runtime topology
 declaration exceptions, which are more likely to happen during development, is deemed acceptable.
 
+### Settings
+
+Each channel type has a preset, and the trailing argument of `connect` overrides it:
+
+```javascript
+const io = await comq.connect(url, {
+  event: { delay: [5000, 60000] },  // two retries
+  request: { delay: 1000 }          // one
+})
+```
+
+`delay` governs [retries](#retries); the rest of [the settings](./types/topology.d.ts) are not
+meant to be changed.
+
+> Changing `delay` declares new retry queues rather than redeclaring the existing ones, so a
+> rolling deploy that changes it has no window in which either version fails. The queues left
+> behind are empty and can be removed once nothing is publishing to them.
+
 ### Channels
 
 `IO` lazy creates individual channels for Requests, Replies, and Events.
@@ -450,6 +468,12 @@ requests and are expecting replies.
   the other: asserting it as both is what the broker refuses.
 - Queues for Replies are _exclusive_ and _auto deleted_.
 
+comq declares two kinds of queue of its own, for [failed messages](#retries):
+
+- `comq.retry.<delay>`, with a fanout exchange of the same name, one pair per distinct rung of
+  the [backoff ladder](#retries), shared by every queue that uses it.
+- `comq.parked.<queue>`, one per consumed queue, declared to live as long as it does.
+
 See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.html#channel_assertQueue).
 
 ### Messages
@@ -461,27 +485,90 @@ See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.ht
   manual [acknowledgment mode](https://www.rabbitmq.com/confirms.html#acknowledgment-modes),
   and Replies are consumed using automatic mode.
 
-If an incoming message causes an exception, the corresponding channel is sealed, the message is republished, and the
-exception is thrown.
-If the message causes exceptions five times in a row, it is discarded.
+#### Retries
 
-> It is highly recommended to set up a dead letter exchange policy to analyze messages that caused
-> exceptions. Note that in some cases, if the problematic message is a Request, a Consumer will
-> never receive a Reply, and this can result in a prefetch deadlock of a Consumer.
+If an incoming message causes an exception, comq publishes it to a *retry queue* and only then
+acknowledges the original. The retry queue has no consumer: it holds the message for
+`delay` milliseconds and then returns it to the queue it came from, so the wait is the broker's
+and outlives a restart of this process without holding a delivery against the
+[prefetch limit](#channels).
+
+Each attempt increments the [`x-comq-attempt`](./docs/headers.md) header, which the consumer
+receives among the message properties. `delay` is a backoff ladder with **one rung per retry**,
+so its length decides how many there are: the four rungs of the default are five attempts, and
+once a message has climbed it there is nowhere left to wait and it is *parked*.
+
+The channel keeps consuming throughout. A message one consumer cannot handle stops neither the
+other consumers nor that consumer's next message; only the message that failed is delayed.
+
+`delay` is a [topology](#topology) setting:
+
+| | ladder | attempts | total |
+|---|---|---|---|
+| Event | 1s, 10s, 30s, 90s | 5 | 131s |
+| Request | 1s, 3s, 5s, 10s | 5 | 19s |
+
+Requests are shorter because a caller is blocked on one with no timeout, and a Reply arriving
+long after it gave up has nowhere useful to land. Nobody waits on an Event.
+
+One retry queue and one exchange are declared per distinct wait and shared by every queue that
+uses them, so their number grows with the length of the ladder rather than with the number of
+queues.
+
+#### Parked messages
+
+A message that has run out of attempts is published to `comq.parked.<queue>` and acknowledged
+only once the broker confirms it. It is not deleted, and it does not depend on a broker-side
+policy. The [`discard`](#diagnostics) diagnostic event is emitted when it happens, and
+[`retry`](#diagnostics) on every attempt before it.
+
+A parked message carries what a person looking at it needs: `x-comq-exchange` and `x-comq-key`
+name where it was originally published, `x-comq-queue` the queue it was consumed from,
+`x-comq-reason` the exception's message, and `x-comq-at` when it was parked. Its original
+properties are kept as they were.
+
+Parked queues grow until somebody drains them, which is deliberate — the alternative is deleting
+evidence. Alert on [`discard`](#diagnostics), and do not delete `comq.retry.*` or `comq.parked.*`
+queues on a running system.
+
+> **A parked Request is never answered.** A Consumer awaiting its Reply waits indefinitely, and
+> with a limited prefetch that can deadlock it. Parking keeps the Request rather than deleting
+> it — and it keeps `replyTo` and `correlationId`, so a Reply can still be produced from it by
+> hand while the caller is alive — but comq itself sends no Reply and reports no error to the
+> caller. Give a Request a timeout on the calling side if you cannot tolerate that.
+
+#### What is guaranteed
+
+The copy is published *before* the original is acknowledged, so a process that dies between the
+two leaves the broker holding both and the message is handled twice: **consumers must be
+idempotent**. That is the deliberate trade — a message the broker holds twice can be recovered,
+one it no longer holds at all cannot.
+
+A retried message re-enters its queue behind the messages published while it waited, so
+**ordering is not preserved across a failure**.
+
+Retries and parked messages are published *persistent* whatever the channel is, so they survive a
+restart of the broker even on the Request channel. Ordinary publishing is untouched: Requests and
+Replies stay [delivery mode 1](#messages), and only a message that has already failed is written
+to disk. Two weaker points remain on that channel: it
+does not use publisher confirms, so comq has no positive acknowledgement that the broker took the
+copy; and the return hop of a retry is performed by the broker's dead-lettering, which on classic
+queues is at-most-once and can lose the message if the source queue is unavailable when the delay
+expires.
 
 See:
 
 - [Consumer Acknowledgments and Publisher Confirms](https://www.rabbitmq.com/confirms.html)
-- [Negative Acknowledgment and Requeuing of Deliveries](https://www.rabbitmq.com/confirms.html#consumer-nacks-requeue)
 - [Dead Letter Exchanges](https://www.rabbitmq.com/dlx.html)
+- [At-Least-Once Dead Lettering](https://www.rabbitmq.com/blog/2022/03/29/at-least-once-dead-lettering)
 
 ### Cheatsheet
 
-| Message | Prefetch  | Confirms | Queue     | Acknowledgment | Persistent |
-|---------|-----------|----------|-----------|----------------|------------|
-| Request | limited   | no       | durable   | manual         | no         |
-| Reply   | unlimited | no       | exclusive | automatic      | no         |
-| Event   | limited   | yes      | durable   | manual         | yes        |
+| Message | Prefetch  | Confirms | Queue     | Acknowledgment | Persistent | Retries          |
+|---------|-----------|----------|-----------|----------------|------------|------------------|
+| Request | limited   | no       | durable   | manual         | no         | 1s, 3s, 5s, 10s  |
+| Reply   | unlimited | no       | exclusive | automatic      | no         | —                |
+| Event   | limited   | yes      | durable   | manual         | yes        | 1s, 10s, 30s, 90s |
 
 ## Graceful shutdown
 
@@ -553,10 +640,12 @@ Subscribe to one of the diagnostic events:
 - `lost`: a shard has lost its connection, hence the requests awaiting their replies on it are
   re-sent. Channel type is passed.
 - `recover`: channel's topology is recovered. Channel type is passed.
-- `discard`: message is [discarded](#messages) as it repeatedly caused
-  exceptions. Channel type,
+- `discard`: message is [parked](#parked-messages), having run out of attempts. Channel type,
   raw [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_consume)
   and the exception are passed as arguments.
+- `retry`: message caused an exception and has been published to its
+  [retry queue](#retries). Channel type, the raw amqp message object, the exception and the
+  attempt number are passed as arguments.
 - `return`: message is returned by the broker as unroutable. Channel type and the raw
   [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_publish) are
   passed as arguments. In the case of a [sharded connection](#sharded-connection), the message is
