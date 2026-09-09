@@ -425,24 +425,6 @@ dynamic, such as those that depend on runtime data like incoming messages, makin
 impossible or hard to maintain. The tradeoff of potentially encountering runtime topology
 declaration exceptions, which are more likely to happen during development, is deemed acceptable.
 
-### Settings
-
-Each channel type has a preset, and the trailing argument of `connect` overrides it:
-
-```javascript
-const io = await comq.connect(url, {
-  event: { delay: [5000, 60000] },  // two retries
-  request: { delay: 1000 }          // one
-})
-```
-
-`delay` governs [retries](#retries); the rest of [the settings](./types/topology.d.ts) are not
-meant to be changed.
-
-> Changing `delay` declares new retry queues rather than redeclaring the existing ones, so a
-> rolling deploy that changes it has no window in which either version fails. The queues left
-> behind are empty and can be removed once nothing is publishing to them.
-
 ### Channels
 
 `IO` lazy creates individual channels for Requests, Replies, and Events.
@@ -604,6 +586,26 @@ See:
 | Request | limited   | no       | durable   | manual         | no         | 1s, 3s, 5s, 10s  |
 | Reply   | unlimited | no       | exclusive | automatic      | no         | —                |
 | Event   | limited   | yes      | durable   | manual         | yes        | 1s, 10s, 30s, 90s |
+
+### Settings
+
+Each channel type has a [preset](./types/topology.d.ts), and the trailing argument of `connect`
+overrides any of its fields:
+
+```javascript
+const io = await comq.connect(url, {
+  event: { delay: [5000, 60000] },  // two retries
+  request: { delay: 1000 }          // one
+})
+```
+
+`delay` is the one meant to be set. The rest describe what a Request, a Reply and an Event *are*,
+and changing them changes that: they are overridable because the presets are one mechanism, not
+because every combination of them works.
+
+> Changing `delay` declares new retry queues rather than redeclaring the existing ones, so a
+> rolling deploy that changes it has no window in which either version fails. The queues left
+> behind are empty and can be removed once nothing is publishing to them.
 
 ## Graceful shutdown
 
