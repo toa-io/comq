@@ -169,10 +169,11 @@ const headers = {
 ```
 
 **Two attempt counters will be on the message, and the docs must say which is authoritative.**
-RabbitMQ maintains `x-death[0].count`, and after five retries it reads `5` alongside comq's own
-`x-comq-attempt: 5`. They agree today, but nothing should be built on that — a move to quorum queues
-changes `x-death` semantics, and `x-comq-attempt` is comq's. `x-comq-attempt` is authoritative; `x-death`
-is the broker's own record and is useful for the timestamps.
+RabbitMQ maintains `x-death[0].count`, and it counts *deaths* where `x-comq-attempt` counts
+*deliveries*: on a parked message with the default settings they read `4` and `5`. They will not
+agree, and a move to quorum queues changes `x-death` semantics besides. `x-comq-attempt` is
+authoritative — it is comq's, and it is what `attempts` is compared against; `x-death` is the
+broker's own record, useful for its timestamps.
 
 
 ## The seam
@@ -383,10 +384,15 @@ enqueue order. Exponential backoff, if ever wanted, needs one queue per tier —
 already exists — added by the same `1df2afe` — and becomes the default of a `topology.attempts`
 setting. Note its actual arithmetic, because the readme gets it wrong: the counter is the
 `x-comq-attempt` header, absent on first delivery, so it reads `0` and the message is retried.
-`5 >= 5` first holds on the **sixth** delivery, so the consumer is invoked **six times** (one
-original plus five retries). [readme.md:466](../readme.md#L466) — "causes exceptions five times
-in a row, it is discarded" — is off by one *today*; correct it in §8 rather than changing the
-behaviour.
+`attempts` counts **deliveries, not retries** — the convention `maxAttempts` follows and
+`maxRetries` does not — so `5` is one delivery and four retries. The header is the attempt
+number, counting from one, and the first delivery does not carry it: a consumer reads
+`headers?.['x-comq-attempt'] ?? 1`.
+
+The original code named the setting for attempts and counted retries, which made `5` mean six
+deliveries and left [readme.md:466](../readme.md#L466) — "causes exceptions five times in a row,
+it is discarded" — off by one. Counting deliveries makes that sentence true rather than
+correcting it.
 
 > **The retry queue inherits the at-most-once caveat described in Part 1.** The return hop is
 > broker dead-lettering, which on classic queues republishes without publisher confirms — so a
@@ -406,7 +412,7 @@ Both are `Topology` fields, defaulted per channel type and overridable per deplo
 | `delay` | `30000` | `5000` | |
 | `attempts` | `5` | `5` | |
 
-**Events: 30s.** Six deliveries then span two and a half minutes, which is the shape of the
+**Events: 30s.** Five deliveries then span two minutes, which is the shape of the
 failures worth retrying — a database primary stepping down, a storage reconnect, a third-party
 blip, or nothing listening on the queue yet during a rolling deploy. None of those are
 five-second events, and a ladder that covers only five seconds parks everything that was merely
@@ -656,7 +662,7 @@ public*.
   so all three change.
 - New tests: an override reaches the channel; an absent override leaves the preset untouched
   (assert the module object is not mutated across two connections); a consumer configured with
-  `attempts: 1` parks on the second delivery rather than the sixth; two channels with different
+  `attempts: 1` parks on the first delivery, having had its one attempt; two channels with different
   `delay` values declare two differently-named retry queues and neither redeclares the other's.
 
 ### 6. Unit tests — new `describe('retry')` in [test/channel.test.js](../test/channel.test.js)
@@ -754,7 +760,7 @@ Scenario 2 is the direct proof the channel is not sealed — `numbers_added` and
 
 Steps needed:
 - `Then the event is attempted {int} times` (new, `features/steps/poison.js`) — poll
-  `this.attempts` to a deadline, then `assert.deepEqual(this.attempts, [0, 1, 2, 3, 4, 5])`.
+  `this.attempts` to a deadline, then `assert.deepEqual(this.attempts, [1, 2, 3, 4, 5])`.
   Asserts count, header increment, and that the delay round-trips through the broker. Six
   entries, per the arithmetic above — the first delivery has no `x-comq-attempt` header.
 - `Then the message is discarded` — **already exists** at
@@ -777,8 +783,8 @@ Steps needed:
 Replace [readme.md:464-470](../readme.md#L464) (which currently documents the sealed channel and
 the "configure a DLX yourself" workaround) with prose covering: the retry queue and its name;
 `x-message-ttl` + `x-dead-letter-exchange` as the delay mechanism; `x-comq-attempt` visible to
-consumers; **six attempts by default** — one original plus five retries — then `discard`,
-correcting the existing off-by-one at [readme.md:466](../readme.md#L466), and noting that both
+consumers; **five attempts by default** — the first delivery and four retries — then `discard`,
+which is what [readme.md:466](../readme.md#L466) already claimed, and noting that both
 the count and the delay are topology settings (`attempts`, `delay`) with per-channel-type
 defaults; **the channel keeps consuming**; ordering not
 preserved across a failure; at-least-once / consumers must be idempotent; retries confirmed for
@@ -840,7 +846,7 @@ otherwise a debugging trap.
    timing in the suite, against a 30s per-step cucumber timeout.
 3. The end-to-end proof is that `features/events.poison.feature` becomes ordinary automatic
    scenarios: a consumer that throws, a message that comes back five times with an incrementing
-   `x-comq-attempt` (six deliveries in total), a message that ends up disposed rather than silently
+   `x-comq-attempt` (five deliveries in total), a message that ends up disposed rather than silently
    gone, and — the point of the whole exercise — a *sibling* consumer still alive afterwards.
 4. Confirm the process no longer exits: today, running the poison scenario ends the node
    process. After the change it should complete the scenario.
@@ -927,9 +933,9 @@ Two deliberate choices:
 - **`Symbol.for` brand, not `instanceof`.** Required, not defensive: a consumer of comq that
   pins it inside its own binding while the application resolves its own tree makes two copies
   the ordinary resolution rather than the pathological one, and `instanceof` is silently `false`
-  across them. A `Park` would then be read as a bare rejection, retried six times, and
-  parked anyway — the right outcome, six retry cycles late, with six spurious `retry`
-  diagnostics. The global symbol registry is shared across copies; a class identity is not.
+  across them. A `Park` would then be read as a bare rejection, retried to exhaustion, and
+  parked anyway — the right outcome, several retry cycles late, with a spurious `retry`
+  diagnostic for each. The global symbol registry is shared across copies; a class identity is not.
 - **`extends Error`**, so a verdict carries a stack, a `message`, and `cause`. A bare
   `new Park()` would throw the cause away, and the `discard` diagnostic's second argument
   ([channel.js:408](../source/channel.js#L408)) would be a marker with nothing about what actually
@@ -969,7 +975,7 @@ await io.reply('compute', async (input) => {
 
 `Park` on an `io.reply` producer would mean the caller never gets a reply and its promise never
 settles — the prefetch deadlock [readme.md:469](../readme.md#L469) already admits. Today that
-happens by accident after six failures; a `Park` would make it a documented path.
+happens by accident once the attempts are spent; a `Park` would make it a documented path.
 
 **Resolved: reject it.** `consume` and `process` take a `Consumer` — no caller, so somebody has
 to decide what happens to a failed message. `reply` takes a `Producer` — a caller is waiting, and
@@ -986,10 +992,10 @@ the reply protocol that every caller must learn to distinguish, and it collides 
 distinction callers already make between an error returned as a value and an exception rethrown
 in them. A third kind arriving from the transport would have to be mapped onto one of those.
 
-Burning six attempts on a request nobody can process does **not** wedge the consumer, which was
+Burning every attempt on a request nobody can process does **not** wedge the consumer, which was
 an earlier worry here: a retry publishes and acks, so the delivery is released immediately and
-the message waits in the retry queue, not in the consumer's unacked set. The cost is six
-pointless invocations.
+the message waits in the retry queue, not in the consumer's unacked set. The cost is a handful
+of pointless invocations.
 
 ## Sequencing
 
@@ -1017,7 +1023,7 @@ the only thing Part 3 needs decided up front.
   a bare rejection.
 - One feature scenario per verdict: a `Park()` on first delivery lands in the parking queue with
   no retry cycle at all (and completes fast, since it skips five TTL waits — a useful contrast
-  with the six-attempt scenario's ~6s); a `Retry()` behaves exactly as a bare rejection.
+  with the full-ladder scenario); a `Retry()` behaves exactly as a bare rejection.
 - Docs: the verdicts get their own readme section, and the `x-comq-reason` header note in
   `docs/headers.md` should mention that a `cause` is recorded alongside it.
 
@@ -1076,10 +1082,10 @@ correct claims that get made about this area.
   ([channel.js:68](../source/channel.js#L68)) — there is no confirm to await on the request channel.
   Requests are also `persistent: false`, so a requeued request does not survive a broker restart
   regardless. This is why Part 2 fixes requests structurally but calls them best-effort.
-- **`MAX_REDELIVERIES = 5` means six deliveries, not five.** The counter is the `x-comq-attempt`
-  header, absent on the first delivery, so it reads `0` and the message is retried; `5 >= 5`
-  first holds on the sixth. [readme.md:466](../readme.md#L466) says "five times in a row" and is off
-  by one today.
+- **`MAX_REDELIVERIES = 5` meant six deliveries, not five.** The counter was absent on the first
+  delivery, so it read `0` and the message was retried; `5 >= 5` first held on the sixth, while
+  [readme.md:466](../readme.md#L466) said "five times in a row". Fixed by counting deliveries
+  rather than retries, which is what the setting's name claims.
 - **Test coverage for this path collapsed in `1df2afe`.** That commit deleted the requeue unit
   test and the one automated scenario in `features/rpc.feature`, replaced them with two
   `@manual` scenarios that assert nothing, and left the `the message is discarded` step in
@@ -1107,7 +1113,7 @@ Nothing blocking. The three questions this document opened are resolved:
 - **Whether Part 3 is built** — **decided, not yet scheduled.** Parts 1 and 2 are the emergency
   and do not depend on it; a consumer of comq gets retry-then-park by upgrading and writing no
   code. But the parking queue takes its noun from a verdict class that would not otherwise
-  exist, and without verdicts a message a contract has already refused costs six deliveries —
-  two and a half minutes at the event default — and then lands in the parking queue beside the
+  exist, and without verdicts a message a contract has already refused costs every attempt —
+  two minutes at the event default — and then lands in the parking queue beside the
   messages that genuinely failed. "Decided, not yet scheduled" rather than "open", because
   people read this deciding whether to build on it.

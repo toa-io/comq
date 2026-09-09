@@ -1251,14 +1251,15 @@ describe('failed messages', () => {
     })
 
     it('should tolerate a message without headers', async () => {
-      // a message published by something that is not comq carries no field table
+      // a message published by something that is not comq carries no field table,
+      // and the first delivery of any message carries no attempt either
       await channel.consume(queue, consumer)
 
       await expect(deliver(delivery({}))).resolves.not.toThrow()
 
       const [, , , options] = publications()[0]
 
-      expect(options.headers['x-comq-attempt']).toStrictEqual(1)
+      expect(options.headers['x-comq-attempt']).toStrictEqual(2)
     })
 
     it('should record the origin on the first failure', async () => {
@@ -1447,7 +1448,8 @@ describe('failed messages', () => {
       expect(options.persistent).toStrictEqual(true)
     })
 
-    it('should respect a configured attempt count', async () => {
+    it('should count the first delivery as an attempt', async () => {
+      // `attempts` is the number of deliveries, not the number of retries after one
       jest.clearAllMocks()
 
       topology.attempts = 1
@@ -1456,11 +1458,31 @@ describe('failed messages', () => {
 
       await channel.consume(queue, consumer)
 
-      await deliver(delivery({ headers: { 'x-comq-attempt': 1 } }))
+      await deliver(delivery({})) // no header: this is the first and only attempt
 
-      const [, key] = publications()[0]
+      const [exchange, key] = publications()[0]
 
+      expect(exchange).toStrictEqual('')
       expect(key).toStrictEqual('comq.parked.' + queue)
+    })
+
+    it('should give a message exactly as many deliveries as configured', async () => {
+      jest.clearAllMocks()
+
+      topology.attempts = 3
+      channel = await create(connection, topology)
+      chan = await getCreatedChannel()
+
+      await channel.consume(queue, consumer)
+
+      // the ladder the broker would walk: no header, then what each retry published
+      await deliver(delivery({}))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 2 } }))
+      await deliver(delivery({ headers: { 'x-comq-attempt': 3 } }))
+
+      const targets = publications().map(([, key]) => key)
+
+      expect(targets).toStrictEqual([queue, queue, 'comq.parked.' + queue])
     })
   })
 

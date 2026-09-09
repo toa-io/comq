@@ -464,7 +464,8 @@ class Channel {
    */
   async #failed (queue, message, exception) {
     try {
-      const attempt = message.properties.headers?.[ATTEMPT_HEADER] ?? 0
+      // the header is which attempt this delivery is, and the first does not carry one
+      const attempt = message.properties.headers?.[ATTEMPT_HEADER] ?? 1
 
       if (attempt >= this.#topology.attempts) await this.#park(queue, message, exception)
       else await this.#retry(queue, message, attempt, exception)
@@ -489,7 +490,8 @@ class Channel {
 
     this.#channel.ack(message)
 
-    this.#diagnostics.emit('retry', message, exception, attempt + 1)
+    // the attempt that just failed, rather than the one it is about to get
+    this.#diagnostics.emit('retry', message, exception, attempt)
   }
 
   /**

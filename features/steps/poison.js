@@ -12,7 +12,7 @@ Then('the event is attempted {int} time(s)',
   async function (times) {
     await until(() => this.attempts.length >= times)
 
-    const expected = Array.from({ length: times }, (_, index) => index)
+    const expected = Array.from({ length: times }, (_, index) => index + 1)
 
     assert.deepEqual(this.attempts, expected,
       `Expected attempts ${expected.join(', ')} but saw ${this.attempts.join(', ')}`)

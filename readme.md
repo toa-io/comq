@@ -494,8 +494,9 @@ and outlives a restart of this process without holding a delivery against the
 [prefetch limit](#channels).
 
 Each attempt increments the [`x-comq-attempt`](./docs/headers.md) header, which the consumer
-receives among the message properties. After `attempts` retries — six deliveries in all, by default: the first, which
-carries no header, then five more — the message is *parked*.
+receives among the message properties. Once a message has had `attempts` of them it is *parked*.
+`attempts` counts deliveries rather than retries — as `maxAttempts` does and `maxRetries` does
+not — so the default of `5` is the first delivery and four retries.
 
 The channel keeps consuming throughout. A message one consumer cannot handle stops neither the
 other consumers nor that consumer's next message; only the message that failed is delayed.

@@ -23,7 +23,7 @@ the message properties.
 
 | Header | On | Meaning |
 |---|---|---|
-| `x-comq-attempt` | a retried message | Which attempt this delivery is. Absent on the first. |
+| `x-comq-attempt` | a retried message | Which attempt this delivery is, counting from one. Absent on the first, so read it as `headers?.['x-comq-attempt'] ?? 1`. |
 | `x-comq-exchange` | a retried or parked message | The exchange it was originally published to. |
 | `x-comq-key` | a retried or parked message | The routing key it was originally published with. |
 | `x-comq-queue` | a parked message | The queue it was consumed from. |
@@ -43,7 +43,10 @@ would be free to collide with the application's own headers, or with another lib
 > is read as a first delivery and gets a full ladder of attempts rather than the remainder of
 > one.
 
-A retried message also carries RabbitMQ's own [`x-death`](https://www.rabbitmq.com/docs/dlx), and
-`x-death[0].count` is a second attempt counter that happens to agree with `x-comq-attempt`. **`x-comq-attempt`
-is the authoritative one** — it is comq's, and it is the number the `attempts` setting is compared
-against. `x-death` is the broker's record, and is useful for its timestamps.
+A retried message also carries RabbitMQ's own [`x-death`](https://www.rabbitmq.com/docs/dlx),
+whose `x-death[0].count` looks like a second attempt counter. It is not the same number: it
+counts the times the message expired out of the retry queue, where `x-comq-attempt` counts the
+times it was delivered, so on a parked message with the default settings they read `4` and `5`.
+
+**`x-comq-attempt` is the authoritative one** — it is comq's, and it is what the `attempts`
+setting is compared against. `x-death` is the broker's record, useful for its timestamps.
