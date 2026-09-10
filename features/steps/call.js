@@ -30,7 +30,7 @@ Given('a holder on another connection answering {token} under the {token} key',
    * @this {comq.features.Context}
    */
   async function (exchange, key) {
-    this.holder = await holder(this)
+    this.holder = await another(this)
 
     await this.holder.back(exchange, key, echo)
   })
@@ -43,7 +43,7 @@ Given('a holder on another connection answering {token} under the {token} key in
    * @this {comq.features.Context}
    */
   async function (exchange, key, delay) {
-    this.holder = await holder(this)
+    this.holder = await another(this)
 
     await this.holder.back(exchange, key, async (payload) => {
       await timeout(delay)
@@ -60,7 +60,7 @@ Given('a holder connected to broker {number} answering {token} under the {token}
    * @this {comq.features.Context}
    */
   async function (broker, exchange, key) {
-    this.holder = await holder(this, broker)
+    this.holder = await another(this, broker)
 
     await this.holder.back(exchange, key, echo)
   })
@@ -87,14 +87,29 @@ Given('a holder never answering {token} under the {token} key',
     this.silent = connection
   })
 
-When('the silent holder\'s connection is lost',
+When('the silent holder crashes',
+  /**
+   * Its socket is destroyed without a word, as a process that dies leaves it.
+   *
+   * @this {comq.features.Context}
+   */
+  function () {
+    const connection = this.silent
+
+    this.silent = undefined
+
+    connection.on('error', () => undefined)
+    connection.connection.stream.destroy()
+  })
+
+Given('the connection\'s failed recoveries are recorded',
   /**
    * @this {comq.features.Context}
    */
-  async function () {
-    await this.silent.close()
+  function () {
+    this.recoveries = []
 
-    this.silent = undefined
+    this.io.diagnose('error', (error) => this.recoveries.push(error))
   })
 
 When('the consumer calls {token} under the {token} key',
@@ -167,12 +182,12 @@ When('a second holder on another connection holds {token} under the {token} key'
    * @this {comq.features.Context}
    */
   async function (exchange, key) {
-    const second = await holder(this)
-
-    this.locked = false
-    second.diagnose('locked', () => (this.locked = true))
+    const second = await another(this)
 
     this.holding = second.back(exchange, key, echo)
+
+    // asserted on by a later step, and an unhandled rejection would end the run before it
+    this.holding.catch(() => undefined)
   })
 
 When('the first holder disconnects',
@@ -214,12 +229,12 @@ Then('the consumer stops waiting',
     await assert.rejects(this.reply, (error) => error.name === 'TimeoutError')
   })
 
-Then('the second holder waits for the key',
+Then('the second holder is refused',
   /**
    * @this {comq.features.Context}
    */
   async function () {
-    assert.equal(await until(() => this.locked === true), true, 'The second holder did not wait')
+    await assert.rejects(this.holding)
   })
 
 Then('the second holder holds the key',
@@ -228,6 +243,88 @@ Then('the second holder holds the key',
    */
   async function () {
     await this.holding
+  })
+
+Then('its recovery is refused while the broker holds the silent connection', { timeout: 60_000 },
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    const refused = await until(() => this.recoveries.some((error) => error.code === RESOURCE_LOCKED), 50_000)
+
+    const recorded = this.recoveries.map((error) => error.message).join('; ')
+
+    assert.equal(refused, true, `The recovery was not refused, recoveries failed with: [${recorded}]`)
+  })
+
+Then('a call to {token} under the {token} key is answered within {number} seconds', { timeout: 120_000 },
+  /**
+   * @param {string} exchange
+   * @param {string} key
+   * @param {number} seconds
+   * @this {comq.features.Context}
+   */
+  async function (exchange, key, seconds) {
+    const answered = await eventually(() => this.io.call(exchange, key, { key }, { timeout: 1000 }), seconds)
+
+    assert.equal(answered, true, 'The call was not answered')
+  })
+
+Then('a call to {token} under the {token} key from another connection is answered within {number} seconds', { timeout: 120_000 },
+  /**
+   * @param {string} exchange
+   * @param {string} key
+   * @param {number} seconds
+   * @this {comq.features.Context}
+   */
+  async function (exchange, key, seconds) {
+    const caller = await another(this)
+    const answered = await eventually(() => caller.call(exchange, key, { key }, { timeout: 1000 }), seconds)
+
+    assert.equal(answered, true, 'The call was not answered')
+  })
+
+Then('a call to {token} under the {token} key is refused within {number} seconds', { timeout: 60_000 },
+  /**
+   * @param {string} exchange
+   * @param {string} key
+   * @param {number} seconds
+   * @this {comq.features.Context}
+   */
+  async function (exchange, key, seconds) {
+    const refused = await eventually(async () => {
+      try {
+        await this.io.call(exchange, key, { key }, { timeout: 1000 })
+      } catch (error) {
+        if (error instanceof Unroutable) return
+
+        throw error
+      }
+
+      throw new Error('Answered')
+    }, seconds)
+
+    assert.equal(refused, true, 'The call was not refused')
+  })
+
+Then('the call ends', { timeout: 90_000 },
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    await this.reply.catch(() => undefined)
+  })
+
+Then('the consumer stops waiting within {number} second(s)', { timeout: 90_000 },
+  /**
+   * @param {number} seconds
+   * @this {comq.features.Context}
+   */
+  async function (seconds) {
+    const stopped = this.reply.then(() => 'answered', (error) => error.name === 'TimeoutError' ? 'stopped' : error.message)
+    const late = timeout(seconds * 1000).then(() => 'still waiting')
+
+    assert.equal(await Promise.race([stopped, late]), 'stopped')
   })
 
 Then('every call is answered',
@@ -267,7 +364,7 @@ After(
  * @param {number} [broker]
  * @returns {Promise<comq.IO>}
  */
-async function holder (context, broker) {
+async function another (context, broker) {
   const urls = broker !== undefined
     ? [url(broker)]
     : context.sharded ? [url(0), url(1)] : [url(0)]
@@ -298,6 +395,32 @@ function call (context, reply) {
 function url (broker) {
   return `amqp://${USER}:${PASSWORD}@${getAddress(broker)}`
 }
+
+/**
+ * Makes an attempt until it succeeds, or until the time is up.
+ *
+ * @param {() => Promise<unknown>} attempt
+ * @param {number} seconds
+ * @returns {Promise<boolean>} whether it succeeded
+ */
+async function eventually (attempt, seconds) {
+  const deadline = Date.now() + seconds * 1000
+
+  while (Date.now() < deadline) {
+    try {
+      await attempt()
+
+      return true
+    } catch {
+      await timeout(500)
+    }
+  }
+
+  return false
+}
+
+// the AMQP reply code a broker refuses a queue with when another connection holds it
+const RESOURCE_LOCKED = 405
 
 function echo (payload) {
   return payload

@@ -140,7 +140,9 @@ already taken is processed to the end, and its Reply is discarded. A Request re-
 connection carries the time it has left.
 
 A `signal` rejects the Request with its reason once aborted, within the `timeout` where both are
-given. A Request with a `signal` alone stays in its queue.
+given. It ends the wait and leaves the Request where it is: in its queue until the `timeout`
+passes, or, without a `timeout`, until a Producer takes it. A Request abandoned by its `signal` may
+therefore still be processed.
 
 A Request that failed and waits for its [next attempt](#retries) loses its expiration on the way
 back to its queue, so it may be processed after its caller has stopped waiting.
@@ -235,9 +237,11 @@ Producer takes it first.
 
 `back` asserts a [direct exchange](#routing) and a queue named `<exchange>.<key>`, *exclusive* to
 the connection, binds it under the `key` and starts consuming Requests, as [`reply`](#reply) does.
-**Only one connection holds a Key at a time.** While another connection holds it, `back` waits
-for it to be let go, and emits [`locked`](#diagnostics) each time it finds the Key held. The Key
-is let go when its connection closes, however it closes.
+**Only one connection holds a Key at a time.** While another connection holds it, `back` rejects.
+The Key is let go when its connection closes, however it closes — once the broker has noticed, for
+a connection that went without a word. A connection that is [restored](#connection-tolerance)
+holds its Keys again as part of its recovery, and a recovery that finds one held fails and is made
+again.
 
 `call` publishes the encoded Request to the exchange under the `key` and returns the decoded Reply,
 taking the same options as [`request`](#request).
@@ -785,8 +789,6 @@ Subscribe to one of the diagnostic events:
   [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_publish) are
   passed as arguments. In the case of a [sharded connection](#sharded-connection), the message is
   reported only once every shard has rejected it.
-- `locked`: the queue of a Key [`back`](#call-and-back) asks for is held by another connection,
-  and will be asked for again. Channel type and the queue name are passed.
 - `pause`: channel is paused. Channel type is passed.
   In the case of a [sharded connection](#sharded-connection), it means that there is no shard left
   to publish to, be it because every one of them has rejected a publish or lost its connection.

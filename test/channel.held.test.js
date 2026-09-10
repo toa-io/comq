@@ -3,7 +3,6 @@
 // region setup
 
 const { generate } = require('randomstring')
-const { timeout } = require('./helpers')
 
 const { amqplib } = require('./amqplib.mock')
 const fixtures = require('./channel.fixtures')
@@ -29,16 +28,10 @@ const consumer = jest.fn()
 beforeEach(async () => {
   jest.clearAllMocks()
 
-  global.COMQ_TESTING_LOCK_INTERVAL = 5
-
   connection = await amqplib.connect()
   topology = fixtures.preset()
   channel = await create(connection, topology)
   chan = await getCreatedChannel(connection)
-})
-
-afterEach(() => {
-  delete global.COMQ_TESTING_LOCK_INTERVAL
 })
 
 // endregion
@@ -71,36 +64,13 @@ describe('held', () => {
     expect(chan.consume).toHaveBeenCalledWith(queue, expect.any(Function), expect.any(Object))
   })
 
-  it('should wait while another connection holds the queue', async () => {
-    const locked = jest.fn()
+  it.each([405, 403])('should reject with what the broker refused with (%d)', async (code) => {
+    lock(connection, { code })
 
-    channel.diagnose('locked', locked)
-    lock(connection, { times: 2 })
-
-    await channel.held(exchange, queue, key, consumer)
-
-    expect(locked).toHaveBeenCalledTimes(2)
-    expect(locked).toHaveBeenCalledWith(queue)
-    expect(chan.consume).toHaveBeenCalledWith(queue, expect.any(Function), expect.any(Object))
-  })
-
-  it('should stop waiting once sealed', async () => {
-    lock(connection)
-
-    const holding = channel.held(exchange, queue, key, consumer)
-
-    await timeout(20)
-    await channel.seal()
-    await holding
+    await expect(channel.held(exchange, queue, key, consumer)).rejects.toMatchObject({ code })
 
     expect(chan.bindQueue).not.toHaveBeenCalled()
     expect(chan.consume).not.toHaveBeenCalled()
-  })
-
-  it('should reject on any other refusal', async () => {
-    lock(connection, { code: 403 })
-
-    await expect(channel.held(exchange, queue, key, consumer)).rejects.toBeDefined()
   })
 })
 
@@ -126,18 +96,14 @@ describe('seal', () => {
 })
 
 describe('recovery', () => {
-  const other = generate()
-
   beforeEach(async () => {
     await channel.held(exchange, queue, key, consumer)
-    await channel.consume(other, consumer)
   })
 
   it('should hold the queue on the new connection', async () => {
     const replacement = await amqplib.connect()
 
     await channel.recover(replacement)
-    await timeout(5)
 
     const repl = await getCreatedChannel(replacement)
     const [probe] = await getProbes(replacement)
@@ -146,36 +112,26 @@ describe('recovery', () => {
     expect(repl.bindQueue).toHaveBeenCalledWith(queue, exchange, key)
   })
 
-  it('should restore the rest while the queue is held elsewhere', async () => {
+  it('should fail while another connection holds the queue', async () => {
     const replacement = await amqplib.connect()
 
     lock(replacement, { main: true })
 
-    const recovered = channel.recover(replacement).then(() => true)
-    const hung = timeout(200).then(() => false)
-
-    await expect(Promise.race([recovered, hung])).resolves.toStrictEqual(true)
-
-    const repl = await getCreatedChannel(replacement)
-
-    expect(repl.consume).toHaveBeenCalledWith(other, expect.any(Function), expect.any(Object))
-    expect(repl.bindQueue).not.toHaveBeenCalledWith(queue, exchange, key)
-
-    await channel.seal()
+    await expect(channel.recover(replacement)).rejects.toMatchObject({ code: 405 })
   })
 })
 
 /**
- * Makes the channels a connection creates from now on refuse an exclusive queue.
+ * Makes the channels a connection creates from now on refuse an exclusive queue, the way a
+ * broker does: by closing the channel, with the reason emitted as its error.
  *
  * @param {jest.MockedObject<comq.amqp.Connection>} conn
- * @param {{ times?: number, code?: number, main?: boolean }} [options]
+ * @param {{ code?: number, main?: boolean }} [options]
  * `main` says the channel to be created first is the channel under test, which is left alone
  */
-function lock (conn, { times = Infinity, code = 405, main = false } = {}) {
+function lock (conn, { code = 405, main = false } = {}) {
   const create = conn.createChannel.getMockImplementation()
   let skip = main && !topology.confirms
-  let refused = 0
 
   conn.createChannel.mockImplementation(async () => {
     const created = await create()
@@ -186,15 +142,11 @@ function lock (conn, { times = Infinity, code = 405, main = false } = {}) {
       return created
     }
 
-    if (refused < times) {
-      refused++
+    created.assertQueue.mockImplementation(async () => {
+      created.emit('error', Object.assign(new Error('Refused'), { code }))
 
-      created.assertQueue.mockImplementation(async () => {
-        created.emit('error', Object.assign(new Error('Refused'), { code }))
-
-        throw new Error('Channel closed')
-      })
-    }
+      throw new Error('Channel closed')
+    })
 
     return created
   })

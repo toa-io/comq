@@ -53,18 +53,20 @@ Feature: Calls under a key
     When the consumer calls `slow` under the `a` key
     Then the call is refused as unroutable
 
-  Scenario: A second holder waits for the key
+  Scenario: A key is held by one connection at a time
     Given a holder on another connection answering `echo` under the `a` key
     When a second holder on another connection holds `echo` under the `a` key
-    Then the second holder waits for the key
+    Then the second holder is refused
     When the first holder disconnects
+    And a second holder on another connection holds `echo` under the `a` key
     Then the second holder holds the key
     When the consumer calls `echo` under the `a` key
     Then the consumer receives the reply
 
-  Scenario: A caller stops waiting for a holder that is gone
+  Scenario: A caller stops waiting for a holder that crashed
     Given a holder never answering `void` under the `a` key
     When the consumer calls `void` under the `a` key with a 1000ms timeout
     And after 100ms
-    And the silent holder's connection is lost
+    And the silent holder crashes
     Then the consumer stops waiting
+    And a call to `void` under the `a` key is refused within 10 seconds

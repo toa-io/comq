@@ -47,7 +47,10 @@ declare namespace comq {
      */
     timeout?: number
 
-    /** Ends the wait when aborted, within the timeout. A Request stays in its queue. */
+    /**
+     * Ends the wait when aborted, within the timeout. The Request stays in its queue until the
+     * timeout passes, or, without one, until a Producer takes it.
+     */
     signal?: AbortSignal
   }
 
@@ -73,7 +76,7 @@ declare namespace comq {
 
     /**
      * Answers the Requests `call` sends under `key`, from a queue this connection alone holds.
-     * While another connection holds it, waits for it to be let go.
+     * Rejects while another connection holds it.
      */
     back(exchange: string, key: string, produce: Producer): Promise<void>
 
@@ -140,8 +143,6 @@ declare namespace comq {
     diagnose(event: 'discard', listener: (channel: _topology.type, message: any, error: Error, index?: number) => void): void
 
     diagnose(event: 'retry', listener: (channel: _topology.type, message: any, error: Error, attempt: number, index?: number) => void): void
-
-    diagnose(event: 'locked', listener: (channel: _topology.type, queue: string, index?: number) => void): void
 
     diagnose(event: 'pause', listener: (channel: _topology.type) => void): void
 
