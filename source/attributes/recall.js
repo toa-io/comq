@@ -15,7 +15,8 @@ const recorder = (context, method) => async function (...args) {
 
   const result = await method.apply(context, args)
 
-  method[CALLS].push(args)
+  // forgotten while it ran, by a seal: a sealed context replays nothing
+  method[CALLS]?.push(args)
 
   return result
 }
