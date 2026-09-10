@@ -1,5 +1,6 @@
 'use strict'
 
+const { setTimeout: wait } = require('node:timers/promises')
 const { Promex } = require('promex')
 const { failsafe, lazy, recall } = require('./attributes')
 const { verdictOf, PARK } = require('./verdicts')
@@ -33,6 +34,13 @@ class Channel {
    * @type {Map<string, comq.amqp.options.Queue>}
    */
   #queues = new Map()
+
+  /**
+   * The exchange and key each held queue is bound under, so that sealing withdraws them.
+   *
+   * @type {Map<string, [string, string]>}
+   */
+  #held = new Map()
 
   /** @type {Promex | null} */
   #paused = null
@@ -80,8 +88,9 @@ class Channel {
     // the consumers of the previous channel went down with it, their tags mean nothing here
     this.#tags = []
 
-    // a fresh channel has declared nothing
+    // a fresh channel has declared nothing, and bound nothing
     this.#queues.clear()
+    this.#held.clear()
 
     await this.#channel.prefetch(this.#topology.prefetch)
 
@@ -129,6 +138,32 @@ class Channel {
          */
         async (exchange, queue, key, callback) => {
           if (!this.#sealed) await this.#consume(queue, callback)
+        })))
+
+  /**
+   * Consumes a queue exclusive to this connection, bound to a direct exchange under a key:
+   * whatever is published under that key reaches this connection and no other. While another
+   * connection holds the queue, this waits for it to be let go.
+   */
+  held = recall(this,
+    failsafe(this, this.#recover,
+      lazy(this, this.#assertRouted,
+        /**
+         * @param {string} exchange
+         * @param {string} queue
+         * @param {string} key
+         * @param {comq.channels.Consumer} callback
+         * @returns {Promise<void>}
+         */
+        async (exchange, queue, key, callback) => {
+          if (this.#sealed) return
+
+          const holding = this.#hold(exchange, queue, key, callback)
+
+          // a recovery replays every call at once, and one waiting for another connection
+          // to let go of its queue must leave the others to be restored
+          if (this.#recovering) holding.catch(noop)
+          else await holding
         })))
 
   send = failsafe(this, this.#recover,
@@ -201,6 +236,15 @@ class Channel {
   async seal () {
     this.#sealed = true
 
+    // a key is withdrawn before its consumer goes: a Request published from here on is
+    // returned to its caller, and one published before it is delivered and answered
+    const unbindings = Array.from(this.#held,
+      ([queue, [exchange, key]]) => this.#channel.unbindQueue(queue, exchange, key))
+
+    await Promise.allSettled(unbindings)
+
+    this.#held.clear()
+
     const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
 
     await Promise.all(cancellations).catch(noop) // won't recover anyway
@@ -247,6 +291,68 @@ class Channel {
     this.#recovery.resolve()
     this.#recovery = new Promex()
     this.#diagnostics.emit('recover')
+  }
+
+  /**
+   * @param {string} exchange
+   * @param {string} queue
+   * @param {string} key
+   * @param {comq.channels.Consumer} callback
+   * @returns {Promise<void>}
+   */
+  async #hold (exchange, queue, key, callback) {
+    const held = await this.#lock(queue)
+
+    if (!held) return
+
+    await this.#assertQueue(queue, EXCLUSIVE)
+    await this.#channel.bindQueue(queue, exchange, key)
+
+    this.#held.set(queue, [exchange, key])
+
+    if (!this.#sealed) await this.#consume(queue, callback)
+  }
+
+  /**
+   * Declares a queue exclusive to this connection, and waits while another connection holds it.
+   *
+   * The broker refuses such a queue by closing the channel that asked for it, so the
+   * declaration is made on a channel of its own, which is all that goes down with it. The queue
+   * belongs to the connection rather than to that channel, and outlives it. The broker announces
+   * nothing when a queue is let go, so it is asked again.
+   *
+   * @param {string} queue
+   * @returns {Promise<boolean>} whether the queue is held, as opposed to sealed while waiting
+   */
+  async #lock (queue) {
+    const connection = this.#connection
+
+    while (true) {
+      /** @type {Error & { code?: number } | undefined} */
+      let refusal
+
+      // a connection that is gone is recovered from, like any other interruption
+      const probe = await connection.createChannel().catch(() => { throw INTERRUPTION })
+
+      probe.on('error', (error) => { refusal = error })
+
+      try {
+        await probe.assertQueue(queue, EXCLUSIVE)
+        await probe.close().catch(noop)
+
+        return true
+      } catch (exception) {
+        // what the broker refused with says more than the channel it closed
+        if (refusal?.code !== RESOURCE_LOCKED) throw refusal ?? exception
+      }
+
+      this.#diagnostics.emit('locked', queue)
+
+      await wait(global.COMQ_TESTING_LOCK_INTERVAL ?? LOCK_INTERVAL)
+
+      if (this.#sealed) return false
+      if (connection !== this.#connection) throw INTERRUPTION
+    }
   }
 
   // region initializers
@@ -648,6 +754,12 @@ const EXCLUSIVE = { exclusive: true }
 
 const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 
+// the AMQP reply code a broker closes a channel with when another connection holds the queue
+const RESOURCE_LOCKED = 405
+
+// how often a queue another connection holds is asked for again
+const LOCK_INTERVAL = 1000
+
 const RETRY_PREFIX = 'comq.retry.'
 const PARKED_PREFIX = 'comq.parked.'
 
@@ -672,3 +784,4 @@ const PARKED_AT_HEADER = 'x-comq-at'
 function noop () {}
 
 exports.create = create
+exports.RETRY_PREFIX = RETRY_PREFIX

@@ -1,6 +1,7 @@
 'use strict'
 
 const { Promex } = require('promex')
+const { RETRY_PREFIX } = require('../channel')
 const events = require('../events')
 const emitter = require('../emitter')
 
@@ -66,6 +67,10 @@ class Channel {
 
   async bound (exchange, queue, key, consumer) {
     await this.#every((channel) => channel.bound(exchange, queue, key, consumer))
+  }
+
+  async held (exchange, queue, key, consumer) {
+    await this.#every((channel) => channel.held(exchange, queue, key, consumer))
   }
 
   async send (queue, buffer, options) {
@@ -203,9 +208,11 @@ class Channel {
     const report = () => this.#diagnostics.emit(RETURN, message, channel.index)
     const attempt = (message.properties.headers?.[RETURN_HEADER] ?? 0) + 1
     const rest = this.#pool.filter((one) => one !== channel)
+    const { exchange, routingKey } = message.fields
 
-    // only replies are published to the default exchange, and only they are mandatory
-    const exhausted = message.fields.exchange !== DEFAULT ||
+    // a failed message waits on an exchange of comq's own, a fanout that is declared as one
+    // where it is consumed, and declaring it on another shard as anything else is refused
+    const exhausted = exchange.startsWith(RETRY_PREFIX) ||
       attempt >= this.#connections.length ||
       rest.length === 0
 
@@ -219,7 +226,13 @@ class Channel {
 
     const next = rest[Math.floor(Math.random() * rest.length)]
 
-    next.fire(message.fields.routingKey, message.content, properties).catch(report)
+    // a Request under a key goes through its routed exchange, which `route` declares on that
+    // shard before publishing: publishing to an exchange a broker lacks closes the connection
+    const retried = exchange === DEFAULT
+      ? next.fire(routingKey, message.content, properties)
+      : next.route(exchange, routingKey, message.content, properties)
+
+    retried.catch(report)
   }
 
   /**

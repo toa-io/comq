@@ -34,14 +34,48 @@ declare namespace comq {
   interface Request {
     emitter: ReplyEmitter
     properties: _amqp.Properties
+    signal?: AbortSignal
+  }
+
+  /** How long a caller waits for a Reply. */
+  interface RequestOptions {
+    encoding?: _encoding.Encoding
+
+    /**
+     * Milliseconds to wait for the Reply. A Request nobody has taken by then is dropped by the
+     * broker; one already taken may still be processed, and its Reply is discarded.
+     */
+    timeout?: number
+
+    /** Ends the wait when aborted, within the timeout. A Request stays in its queue. */
+    signal?: AbortSignal
+  }
+
+  /** The options of a Request, settled once for all its attempts. */
+  interface Terms {
+    encoding?: _encoding.Encoding
+    expires?: number
+    signal?: AbortSignal
   }
 
   interface IO extends _diagnostics.Diagnosable {
     reply(queue: string, produce: Producer): Promise<void>
 
-    request<Reply = any, Request = any>(queue: string, payload: Request, encoding?: _encoding.Encoding): Promise<Reply> | Promise<Readable>
+    request<Reply = any, Request = any>(queue: string, payload: Request, options?: _encoding.Encoding | RequestOptions): Promise<Reply> | Promise<Readable>
 
-    request(queue: string, stream: Readable, encoding?: _encoding.Encoding): Promise<Readable>
+    request(queue: string, stream: Readable, options?: _encoding.Encoding | RequestOptions): Promise<Readable>
+
+    /**
+     * Sends a Request to whoever holds `key` on the routed `exchange`, through `back`. One that
+     * nobody holds is refused with `Unroutable`.
+     */
+    call<Reply = any, Request = any>(exchange: string, key: string, payload: Request, options?: _encoding.Encoding | RequestOptions): Promise<Reply> | Promise<Readable>
+
+    /**
+     * Answers the Requests `call` sends under `key`, from a queue this connection alone holds.
+     * While another connection holds it, waits for it to be let go.
+     */
+    back(exchange: string, key: string, produce: Producer): Promise<void>
 
     consume<T = any>(exchange: string, group: string, consumer: Consumer<T>): Promise<void>
 
@@ -106,6 +140,8 @@ declare namespace comq {
     diagnose(event: 'discard', listener: (channel: _topology.type, message: any, error: Error, index?: number) => void): void
 
     diagnose(event: 'retry', listener: (channel: _topology.type, message: any, error: Error, attempt: number, index?: number) => void): void
+
+    diagnose(event: 'locked', listener: (channel: _topology.type, queue: string, index?: number) => void): void
 
     diagnose(event: 'pause', listener: (channel: _topology.type) => void): void
 

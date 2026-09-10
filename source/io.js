@@ -5,6 +5,7 @@ const { setTimeout } = require('node:timers/promises')
 const { Promex } = require('promex')
 const { memo, failsafe, lazy, track } = require('./attributes')
 const { verdictOf, PARK } = require('./verdicts')
+const { Unroutable } = require('./unroutable')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
@@ -75,31 +76,83 @@ class IO {
       await this.#requests.consume(queue, consumer)
     })
 
-  // failsafe is aimed to retransmit unanswered messages
-  request = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
+  /**
+   * @param {string} queue
+   * @param {any | Readable} payload
+   * @param {comq.Encoding | comq.RequestOptions} [options]
+   * @returns {Promise<any | Readable>}
+   */
+  request (queue, payload, options) {
+    return this.#request(queue, payload, terms(options))
+  }
+
+  /**
+   * A Request to whoever holds `key` on a routed `exchange`, through `back`. One nobody holds
+   * is returned by the broker and rejects with `Unroutable`.
+   *
+   * @param {string} exchange
+   * @param {string} key
+   * @param {any} payload
+   * @param {comq.Encoding | comq.RequestOptions} [options]
+   * @returns {Promise<any | Readable>}
+   */
+  call (exchange, key, payload, options) {
+    return this.#call(exchange, key, payload, terms(options))
+  }
+
+  /**
+   * Answers the Requests `call` makes under `key`, from a queue that belongs to this
+   * connection alone. Sealing withdraws the key before it stops consuming.
+   */
+  back = lazy(this, this.#createRequestReplyChannels,
+    /**
+     * @param {string} exchange
+     * @param {string} key
+     * @param {comq.Producer} callback
+     * @returns {Promise<void>}
+     */
+    async (exchange, key, callback) => {
+      const consumer = this.#getRequestConsumer(callback)
+
+      await this.#requests.held(exchange, exchange + '.' + key, key, consumer)
+    })
+
+  // failsafe is aimed to retransmit unanswered messages; the terms are taken once, so a
+  // re-sent Request keeps the deadline of the first
+  #request = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
     failsafe(this, this.#recover,
       /**
        * @param {string} queue
        * @param {any | Readable} payload
-       * @param {comq.Encoding} [encoding]
+       * @param {comq.Terms} terms
        * @returns {Promise<any | Readable>}
        */
-      async (queue, payload, encoding) => {
+      async (queue, payload, terms) => {
         if (payload instanceof stream.Readable) {
           return pipeline(
             payload,
-            (payload) => this.request(queue, payload, encoding),
+            (payload) => this.#request(queue, payload, terms),
             this.#requests
           )
         }
 
-        const [buffer, contentType] = this.#encode(payload, encoding)
-        const request = this.#createRequest(queue, contentType)
-        const reply = this.#createReply(request)
+        return await this.#ask(queue, payload, terms,
+          (buffer, properties) => this.#requests.send(queue, buffer, properties))
+      }))
 
-        await this.#requests.send(queue, buffer, request.properties)
-
-        return reply
+  #call = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
+    failsafe(this, this.#recover,
+      /**
+       * @param {string} exchange
+       * @param {string} key
+       * @param {any} payload
+       * @param {comq.Terms} terms
+       * @returns {Promise<any | Readable>}
+       */
+      async (exchange, key, payload, terms) => {
+        // mandatory: a Request nobody holds the key of is returned rather than dropped
+        return await this.#ask(exchange, payload, terms,
+          (buffer, properties) => this.#requests.route(exchange, key, buffer, { ...properties, mandatory: true }))
       }))
 
   consume = lazy(this, this.#createEventChannel,
@@ -221,6 +274,9 @@ class IO {
     this.#replies = await this.#createChannel('reply')
 
     this.#setupRetransmission()
+
+    // on a sharded connection, only once every shard has returned it
+    this.#requests.diagnose('return', this.#returned)
   }
 
   async #createEventChannel () {
@@ -351,21 +407,100 @@ class IO {
     })
 
   /**
+   * Sends a Request and returns what settles with its Reply, within the terms.
+   *
+   * @param {string} target the queue or the exchange the Request is published to
+   * @param {any} payload
+   * @param {comq.Terms} terms
+   * @param {(buffer: Buffer, properties: comq.amqp.options.Publish) => Promise<void>} publish
+   * @returns {Promise<any | Readable>}
+   */
+  async #ask (target, payload, terms, publish) {
+    const { signal, expires } = terms
+
+    signal?.throwIfAborted()
+
+    const [buffer, contentType] = this.#encode(payload, terms.encoding)
+    const request = this.#createRequest(target, contentType, signal)
+    const properties = { ...request.properties }
+
+    if (expires !== undefined) {
+      const left = Math.ceil(expires - Date.now())
+
+      // a re-send past the deadline, ahead of the timer that is about to end it
+      if (left <= 0) throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+
+      // what nobody has taken by the time its caller stops waiting, the broker drops
+      properties.expiration = String(left)
+    }
+
+    const reply = this.#createReply(request)
+
+    if (signal !== undefined) this.#abandon(request, reply, signal)
+
+    await abortable(publish(buffer, properties), signal)
+
+    return reply
+  }
+
+  /**
+   * Stops waiting for a Reply once the signal aborts. The Request is forgotten at once, so a
+   * retransmission leaves it be, and a Reply arriving later finds nobody waiting for it.
+   *
+   * @param {comq.Request} request
+   * @param {Promex} reply
+   * @param {AbortSignal} signal
+   */
+  #abandon (request, reply, signal) {
+    const abandon = () => {
+      request.emitter.off(request.properties.correlationId)
+      this.#pendingReplies.delete(reply)
+      reply.reject(signal.reason)
+    }
+
+    const settled = () => signal.removeEventListener('abort', abandon)
+
+    signal.addEventListener('abort', abandon, { once: true })
+    reply.then(settled, settled)
+  }
+
+  /**
+   * A Request the broker returned reached nobody, and nobody will answer it.
+   *
+   * @param {comq.amqp.Message} message
+   */
+  #returned = (message) => {
+    const { correlationId, replyTo } = message.properties
+
+    for (const [reply, request] of this.#pendingReplies) {
+      if (request.properties.correlationId !== correlationId) continue
+      if (request.emitter.queue !== replyTo) continue
+
+      request.emitter.off(correlationId)
+      this.#pendingReplies.delete(reply)
+      reply.reject(new Unroutable(message.fields.exchange, message.fields.routingKey))
+
+      return
+    }
+  }
+
+  /**
    * The request holds no copy of what was sent: a retransmission encodes the
    * payload anew, and an unanswered request would otherwise keep two of it.
    *
    * @param {string} queue
    * @param {comq.Encoding} contentType
+   * @param {AbortSignal} [signal]
    * @return {comq.Request}
    */
-  #createRequest (queue, contentType) {
+  #createRequest (queue, contentType, signal) {
     const emitter = this.#emitters.get(queue)
     const correlationId = emitter.next()
 
     /** @type {comq.amqp.Properties} */
     const properties = { contentType, correlationId, replyTo: emitter.queue }
 
-    return { emitter, properties }
+    return { emitter, properties, signal }
   }
 
   /**
@@ -416,6 +551,9 @@ class IO {
           // the stream has never started, hence the request is re-sent
           return reply.reject(RETRANSMISSION)
         }
+
+        // the caller stopped waiting while the stream was starting
+        if (request.signal?.aborted === true) return stream.destroy()
 
         reply.resolve(stream)
       } else {
@@ -549,6 +687,54 @@ const OCTETS = 'application/octet-stream'
 const DEFAULT = 'application/json'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
+
+/**
+ * What a caller passed, settled once: a timeout becomes the moment the Request expires, so that
+ * every attempt of it shares one deadline.
+ *
+ * @param {comq.Encoding | comq.RequestOptions} [options]
+ * @returns {comq.Terms}
+ */
+function terms (options) {
+  if (typeof options !== 'object' || options === null) return { encoding: options }
+
+  const { encoding, timeout, signal } = options
+  const signals = []
+
+  if (signal !== undefined) signals.push(signal)
+  if (timeout !== undefined) signals.push(AbortSignal.timeout(timeout))
+
+  return {
+    encoding,
+    expires: timeout === undefined ? undefined : Date.now() + timeout,
+    signal: signals.length === 0 ? undefined : AbortSignal.any(signals)
+  }
+}
+
+/**
+ * Waits for a publication, or for the signal to abort, whichever comes first. A publication
+ * waits out back pressure and a lost connection, and a caller that has stopped waiting is
+ * released from that too.
+ *
+ * @param {Promise<void>} publication
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<void>}
+ */
+async function abortable (publication, signal) {
+  if (signal === undefined) return await publication
+
+  let abort
+
+  const aborted = new Promise((_resolve, reject) => { abort = () => reject(signal.reason) })
+
+  signal.addEventListener('abort', abort, { once: true })
+
+  try {
+    await Promise.race([publication, aborted])
+  } finally {
+    signal.removeEventListener('abort', abort)
+  }
+}
 
 /**
  * A verdict answers what should happen to a message now that it has failed and nobody

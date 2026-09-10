@@ -10,6 +10,7 @@ const channel = /** @type {jest.MockedFunction<(sharded?: boolean, index?: numbe
     fire: jest.fn(async () => undefined),
     subscribe: jest.fn(async () => undefined),
     bound: jest.fn(async () => undefined),
+    held: jest.fn(async () => undefined),
     publish: jest.fn(async () => undefined),
     route: jest.fn(async () => undefined),
     diagnose: jest.fn(async () => undefined),
