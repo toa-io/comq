@@ -69,8 +69,12 @@ class Channel {
     await this.#every((channel) => channel.bound(exchange, queue, key, consumer))
   }
 
+  /**
+   * A key is held once any shard holds it. A shard where another connection holds it goes on
+   * claiming it, and holds it as well once it is let go.
+   */
   async held (exchange, queue, key, consumer) {
-    await this.#every((channel) => channel.held(exchange, queue, key, consumer))
+    await Promise.any(this.#apply((channel) => channel.held(exchange, queue, key, consumer)))
   }
 
   async send (queue, buffer, options) {

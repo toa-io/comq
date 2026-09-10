@@ -53,12 +53,11 @@ Feature: Calls under a key
     When the consumer calls `slow` under the `a` key
     Then the call is refused as unroutable
 
-  Scenario: A key is held by one connection at a time
+  Scenario: A second holder waits for the key
     Given a holder on another connection answering `echo` under the `a` key
     When a second holder on another connection holds `echo` under the `a` key
-    Then the second holder is refused
+    Then the second holder finds the key taken
     When the first holder disconnects
-    And a second holder on another connection holds `echo` under the `a` key
     Then the second holder holds the key
     When the consumer calls `echo` under the `a` key
     Then the consumer receives the reply

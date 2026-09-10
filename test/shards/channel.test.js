@@ -623,6 +623,20 @@ describe('diagnose', () => {
     for (const one of channels) expect(one.held).toHaveBeenCalledWith(exchange, queue, key, consumer)
   })
 
+  it('should hold a queue once any shard holds it', async () => {
+    const [, ...rest] = channels
+
+    for (const one of rest) one.held.mockImplementationOnce(() => new Promise(() => undefined))
+
+    await expect(channel.held(generate(), generate(), generate(), jest.fn())).resolves.toBeUndefined()
+  })
+
+  it('should reject when every shard refuses to hold a queue', async () => {
+    for (const one of channels) one.held.mockImplementationOnce(async () => { throw new Error('refused') })
+
+    await expect(channel.held(generate(), generate(), generate(), jest.fn())).rejects.toBeInstanceOf(AggregateError)
+  })
+
   it('should emit `pause` and `unpause` events', async () => {
     const queue = generate()
     const buffer = randomBytes(8)

@@ -76,7 +76,8 @@ declare namespace comq {
 
     /**
      * Answers the Requests `call` sends under `key`, from a queue this connection alone holds.
-     * Rejects while another connection holds it.
+     * While another connection holds it on a broker, claims it there again and again, emitting
+     * `taken`. Resolves once a broker holds it.
      */
     back(exchange: string, key: string, produce: Producer): Promise<void>
 
@@ -143,6 +144,8 @@ declare namespace comq {
     diagnose(event: 'discard', listener: (channel: _topology.type, message: any, error: Error, index?: number) => void): void
 
     diagnose(event: 'retry', listener: (channel: _topology.type, message: any, error: Error, attempt: number, index?: number) => void): void
+
+    diagnose(event: 'taken', listener: (channel: _topology.type, queue: string, index?: number) => void): void
 
     diagnose(event: 'pause', listener: (channel: _topology.type) => void): void
 

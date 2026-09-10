@@ -237,11 +237,12 @@ Producer takes it first.
 
 `back` asserts a [direct exchange](#routing) and a queue named `<exchange>.<key>`, *exclusive* to
 the connection, binds it under the `key` and starts consuming Requests, as [`reply`](#reply) does.
-**Only one connection holds a Key at a time.** While another connection holds it, `back` rejects.
-The Key is let go when its connection closes, however it closes — once the broker has noticed, for
-a connection that went without a word. A connection that is [restored](#connection-tolerance)
-holds its Keys again as part of its recovery, and a recovery that finds one held fails and is made
-again.
+**On each broker, one connection holds a Key at a time.** While another connection holds it,
+`back` claims it again and again, with the backoff a lost connection is
+[restored](#connection-tolerance) with, and emits [`taken`](#diagnostics) on every refusal. The Key
+is let go when its connection closes, however it closes — once the broker has noticed, for a
+connection that went without a word. `back` returns once a broker holds the Key. The rest of the
+connection works throughout, and a connection that is restored claims its Keys again the same way.
 
 `call` publishes the encoded Request to the exchange under the `key` and returns the decoded Reply,
 taking the same options as [`request`](#request).
@@ -264,8 +265,11 @@ and one published before it is delivered and answered. Calls queued beyond the
 A Key is as alive as its connection: while the holder reconnects, calls to it are refused, and
 calls queued for it are lost.
 
-Over a [sharded connection](#sharded-connection), `back` holds the Key on every shard, and a call
-returned by one shard is published on the next, refused once every shard has returned it.
+Over a [sharded connection](#sharded-connection), `back` claims the Key on every shard and returns
+once one of them holds it; a shard where it is taken goes on claiming it. Two connections given the
+same Key can therefore hold it on different shards and both answer calls, and `taken` is what says
+so. A call returned by one shard is published on the next, and refused once every shard has
+returned it.
 
 ### Example
 
@@ -789,6 +793,8 @@ Subscribe to one of the diagnostic events:
   [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_publish) are
   passed as arguments. In the case of a [sharded connection](#sharded-connection), the message is
   reported only once every shard has rejected it.
+- `taken`: a Key [`back`](#call-and-back) claims is held by another connection on this broker, and
+  is claimed again. Channel type and the queue name are passed.
 - `pause`: channel is paused. Channel type is passed.
   In the case of a [sharded connection](#sharded-connection), it means that there is no shard left
   to publish to, be it because every one of them has rejected a publish or lost its connection.

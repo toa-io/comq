@@ -3,6 +3,7 @@
 // region setup
 
 const { generate } = require('randomstring')
+const { timeout, until } = require('./helpers')
 
 const { amqplib } = require('./amqplib.mock')
 const fixtures = require('./channel.fixtures')
@@ -28,10 +29,16 @@ const consumer = jest.fn()
 beforeEach(async () => {
   jest.clearAllMocks()
 
+  global.COMQ_TESTING_CLAIM_BACKOFF = { base: 5, max: 5 }
+
   connection = await amqplib.connect()
   topology = fixtures.preset()
   channel = await create(connection, topology)
   chan = await getCreatedChannel(connection)
+})
+
+afterEach(() => {
+  delete global.COMQ_TESTING_CLAIM_BACKOFF
 })
 
 // endregion
@@ -64,13 +71,36 @@ describe('held', () => {
     expect(chan.consume).toHaveBeenCalledWith(queue, expect.any(Function), expect.any(Object))
   })
 
-  it.each([405, 403])('should reject with what the broker refused with (%d)', async (code) => {
-    lock(connection, { code })
+  it('should claim the queue again while another connection holds it', async () => {
+    const taken = jest.fn()
 
-    await expect(channel.held(exchange, queue, key, consumer)).rejects.toMatchObject({ code })
+    channel.diagnose('taken', taken)
+    lock(connection, { times: 2 })
+
+    await channel.held(exchange, queue, key, consumer)
+
+    expect(taken).toHaveBeenCalledTimes(2)
+    expect(taken).toHaveBeenCalledWith(queue)
+    expect(chan.consume).toHaveBeenCalledWith(queue, expect.any(Function), expect.any(Object))
+  })
+
+  it('should stop claiming once sealed', async () => {
+    lock(connection)
+
+    const holding = channel.held(exchange, queue, key, consumer)
+
+    await timeout(20)
+    await channel.seal()
+    await holding
 
     expect(chan.bindQueue).not.toHaveBeenCalled()
     expect(chan.consume).not.toHaveBeenCalled()
+  })
+
+  it('should reject with any other refusal', async () => {
+    lock(connection, { code: 403 })
+
+    await expect(channel.held(exchange, queue, key, consumer)).rejects.toMatchObject({ code: 403 })
   })
 })
 
@@ -96,8 +126,15 @@ describe('seal', () => {
 })
 
 describe('recovery', () => {
+  const other = generate()
+
   beforeEach(async () => {
     await channel.held(exchange, queue, key, consumer)
+    await channel.consume(other, consumer)
+  })
+
+  afterEach(async () => {
+    await channel.seal()
   })
 
   it('should hold the queue on the new connection', async () => {
@@ -106,18 +143,38 @@ describe('recovery', () => {
     await channel.recover(replacement)
 
     const repl = await getCreatedChannel(replacement)
-    const [probe] = await getProbes(replacement)
 
-    expect(probe.assertQueue).toHaveBeenCalledWith(queue, { exclusive: true })
+    expect(await until(() => repl.bindQueue.mock.calls.some(([bound]) => bound === queue), 1000)).toStrictEqual(true)
     expect(repl.bindQueue).toHaveBeenCalledWith(queue, exchange, key)
   })
 
-  it('should fail while another connection holds the queue', async () => {
+  it('should restore the rest while another connection holds the queue', async () => {
     const replacement = await amqplib.connect()
 
     lock(replacement, { main: true })
 
-    await expect(channel.recover(replacement)).rejects.toMatchObject({ code: 405 })
+    const recovered = channel.recover(replacement).then(() => true)
+    const hung = timeout(200).then(() => false)
+
+    await expect(Promise.race([recovered, hung])).resolves.toStrictEqual(true)
+
+    const repl = await getCreatedChannel(replacement)
+
+    expect(repl.consume).toHaveBeenCalledWith(other, expect.any(Function), expect.any(Object))
+    expect(repl.bindQueue).not.toHaveBeenCalledWith(queue, exchange, key)
+  })
+
+  it('should hold the queue once it is let go', async () => {
+    const replacement = await amqplib.connect()
+
+    lock(replacement, { main: true, times: 2 })
+
+    await channel.recover(replacement)
+
+    const repl = await getCreatedChannel(replacement)
+
+    expect(await until(() => repl.bindQueue.mock.calls.some(([bound]) => bound === queue), 1000)).toStrictEqual(true)
+    expect(repl.bindQueue).toHaveBeenCalledWith(queue, exchange, key)
   })
 })
 
@@ -126,12 +183,13 @@ describe('recovery', () => {
  * broker does: by closing the channel, with the reason emitted as its error.
  *
  * @param {jest.MockedObject<comq.amqp.Connection>} conn
- * @param {{ code?: number, main?: boolean }} [options]
+ * @param {{ times?: number, code?: number, main?: boolean }} [options]
  * `main` says the channel to be created first is the channel under test, which is left alone
  */
-function lock (conn, { code = 405, main = false } = {}) {
+function lock (conn, { times = Infinity, code = 405, main = false } = {}) {
   const create = conn.createChannel.getMockImplementation()
   let skip = main && !topology.confirms
+  let refused = 0
 
   conn.createChannel.mockImplementation(async () => {
     const created = await create()
@@ -142,11 +200,15 @@ function lock (conn, { code = 405, main = false } = {}) {
       return created
     }
 
-    created.assertQueue.mockImplementation(async () => {
-      created.emit('error', Object.assign(new Error('Refused'), { code }))
+    if (refused < times) {
+      refused++
 
-      throw new Error('Channel closed')
-    })
+      created.assertQueue.mockImplementation(async () => {
+        created.emit('error', Object.assign(new Error('Refused'), { code }))
+
+        throw new Error('Channel closed')
+      })
+    }
 
     return created
   })

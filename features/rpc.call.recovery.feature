@@ -14,19 +14,19 @@ Feature: Calls under a key across failures
   Scenario: A holder holds its key again once the broker lets its silent connection go
 
     The holder reconnects while the broker still holds the connection that went silent, and with
-    it the key. Its recovery is refused until the broker lets that connection go, and made again.
+    it the key. The holder finds the key taken until the broker lets that connection go, and
+    claims it then.
 
     Given watchdog interval is set to 2000ms with 60s AMQP heartbeat
     And a network that can go silent
     And an active connection to the broker
-    And the connection's failed recoveries are recorded
     And a holder answering `echo` under the `a` key:
       """
       (payload) => payload
       """
     When the network goes silent
     Then the connection is lost within 10 seconds
-    And its recovery is refused while the broker holds the silent connection
+    And the holder finds its key taken while the broker holds the silent connection
     When the silent connection is let go
     Then a call to `echo` under the `a` key from another connection is answered within 60 seconds
 

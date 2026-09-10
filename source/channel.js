@@ -1,6 +1,7 @@
 'use strict'
 
 const { Promex } = require('promex')
+const { retry } = require('reretry')
 const { failsafe, lazy, recall } = require('./attributes')
 const { verdictOf, PARK } = require('./verdicts')
 const emitter = require('./emitter')
@@ -142,8 +143,8 @@ class Channel {
   /**
    * Consumes a queue exclusive to this connection, bound to a direct exchange under a key:
    * whatever is published under that key reaches this connection and no other. While another
-   * connection holds the queue, this rejects, and so does a recovery that replays it: the
-   * connection is then reopened and recovered again, as after any failed recovery.
+   * connection holds the queue, it is claimed again and again until it is let go, and every
+   * refusal is reported as `taken`.
    */
   held = recall(this,
     failsafe(this, this.#recover,
@@ -156,7 +157,14 @@ class Channel {
          * @returns {Promise<void>}
          */
         async (exchange, queue, key, callback) => {
-          if (!this.#sealed) await this.#hold(exchange, queue, key, callback)
+          if (this.#sealed) return
+
+          const holding = this.#hold(exchange, queue, key, callback)
+
+          // a recovery restores the rest of the connection while a key another connection holds
+          // is claimed, and a claim the connection is lost under is replayed by the next recovery
+          if (this.#recovering) holding.catch(noop)
+          else await holding
         })))
 
   send = failsafe(this, this.#recover,
@@ -294,7 +302,10 @@ class Channel {
    * @returns {Promise<void>}
    */
   async #hold (exchange, queue, key, callback) {
-    await this.#claim(queue)
+    const claimed = await this.#claim(queue)
+
+    if (!claimed) return
+
     await this.#assertQueue(queue, EXCLUSIVE)
     await this.#channel.bindQueue(queue, exchange, key)
 
@@ -304,21 +315,45 @@ class Channel {
   }
 
   /**
-   * Declares a queue exclusive to this connection.
-   *
-   * The broker refuses a queue another connection holds by closing the channel that asked for
-   * it, and a channel error nobody listens for closes the whole connection. So the declaration
-   * is made on a channel of its own, which is all that closes, and what the broker refused with
-   * is thrown. The queue belongs to the connection, and outlives that channel.
+   * Claims a queue exclusive to this connection, again and again while another connection
+   * holds it. The broker announces nothing when a queue is let go, so it is asked again, with
+   * the backoff a lost connection is restored with.
    *
    * @param {string} queue
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>} whether the queue is claimed, as opposed to sealed while claiming
    */
   async #claim (queue) {
-    // a connection that is gone is recovered from, like any other interruption
-    const probe = await this.#connection.createChannel().catch(() => { throw INTERRUPTION })
+    const connection = this.#connection
 
-    /** @type {Error | undefined} */
+    return await retry(async (again) => {
+      if (this.#sealed) return false
+
+      // a connection that is gone is recovered from, like any other interruption
+      if (connection !== this.#connection) throw INTERRUPTION
+
+      if (await this.#declare(connection, queue)) return true
+
+      this.#diagnostics.emit('taken', queue)
+
+      return again
+    }, global.COMQ_TESTING_CLAIM_BACKOFF)
+  }
+
+  /**
+   * Declares a queue exclusive to this connection, and says whether another connection holds it.
+   *
+   * The broker refuses such a queue by closing the channel that asked for it, and a channel error
+   * nobody listens for closes the whole connection. So the declaration is made on a channel of its
+   * own, which is all that closes. The queue belongs to the connection, and outlives that channel.
+   *
+   * @param {comq.amqp.Connection} connection
+   * @param {string} queue
+   * @returns {Promise<boolean>}
+   */
+  async #declare (connection, queue) {
+    const probe = await connection.createChannel().catch(() => { throw INTERRUPTION })
+
+    /** @type {Error & { code?: number } | undefined} */
     let refusal
 
     probe.on('error', (error) => { refusal = error })
@@ -326,11 +361,15 @@ class Channel {
     try {
       await probe.assertQueue(queue, EXCLUSIVE)
     } catch (exception) {
+      if (refusal?.code === RESOURCE_LOCKED) return false
+
       // what the broker refused with says more than the channel it closed
       throw refusal ?? exception
     }
 
     await probe.close().catch(noop)
+
+    return true
   }
 
   // region initializers
@@ -731,6 +770,9 @@ const DURABLE = { durable: true }
 const EXCLUSIVE = { exclusive: true }
 
 const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
+
+// the AMQP reply code a broker closes a channel with when another connection holds the queue
+const RESOURCE_LOCKED = 405
 
 const RETRY_PREFIX = 'comq.retry.'
 const PARKED_PREFIX = 'comq.parked.'
