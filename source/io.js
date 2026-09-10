@@ -83,7 +83,10 @@ class IO {
    * @returns {Promise<any | Readable>}
    */
   request (queue, payload, options) {
-    return this.#request(queue, payload, terms(options))
+    const settled = terms(options)
+
+    // the channels and the queue a first Request declares are waited for within the terms too
+    return abortable(this.#request(queue, payload, settled), settled.signal)
   }
 
   /**
@@ -97,7 +100,9 @@ class IO {
    * @returns {Promise<any | Readable>}
    */
   call (exchange, key, payload, options) {
-    return this.#call(exchange, key, payload, terms(options))
+    const settled = terms(options)
+
+    return abortable(this.#call(exchange, key, payload, settled), settled.signal)
   }
 
   /**
@@ -712,16 +717,24 @@ function terms (options) {
 }
 
 /**
- * Waits for a publication, or for the signal to abort, whichever comes first. A publication
- * waits out back pressure and a lost connection, and a caller that has stopped waiting is
- * released from that too.
+ * Waits for a promise, or for the signal to abort, whichever comes first. Declaring a channel,
+ * a queue or publishing waits out back pressure and a lost connection, and a caller that has
+ * stopped waiting is released from all of it.
  *
- * @param {Promise<void>} publication
+ * @template T
+ * @param {Promise<T>} promise
  * @param {AbortSignal} [signal]
- * @returns {Promise<void>}
+ * @returns {Promise<T>}
  */
-async function abortable (publication, signal) {
-  if (signal === undefined) return await publication
+async function abortable (promise, signal) {
+  if (signal === undefined) return await promise
+
+  if (signal.aborted) {
+    // it settles later, with nobody waiting for it
+    promise.catch(() => undefined)
+
+    throw signal.reason
+  }
 
   let abort
 
@@ -730,7 +743,7 @@ async function abortable (publication, signal) {
   signal.addEventListener('abort', abort, { once: true })
 
   try {
-    await Promise.race([publication, aborted])
+    return await Promise.race([promise, aborted])
   } finally {
     signal.removeEventListener('abort', abort)
   }

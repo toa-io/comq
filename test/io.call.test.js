@@ -98,6 +98,16 @@ describe('call', () => {
   })
 })
 
+describe('timeout', () => {
+  it('should stop waiting while the channels are being created', async () => {
+    connection.createChannel.mockImplementation(() => new Promise(() => undefined))
+
+    const promise = io.call(exchange, key, payload, { timeout: 20 })
+
+    await expect(promise).rejects.toMatchObject({ name: 'TimeoutError' })
+  })
+})
+
 describe('back', () => {
   const producer = jest.fn(() => generate())
 

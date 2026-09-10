@@ -55,6 +55,14 @@ describe('timeout', () => {
     expect(requests.send.mock.calls[0][2].contentType).toStrictEqual(encoding)
   })
 
+  it('should stop waiting while the channels are being created', async () => {
+    connection.createChannel.mockImplementation(() => new Promise(noop))
+
+    const promise = io.request(queue, payload, { timeout: 20 })
+
+    await expect(promise).rejects.toMatchObject({ name: 'TimeoutError' })
+  })
+
   it('should reject once it has passed', async () => {
     const promise = io.request(queue, payload, { timeout: 20 })
 
@@ -111,6 +119,17 @@ describe('signal', () => {
     await initialized()
 
     expect(requests.send.mock.calls[0][2].expiration).toBeUndefined()
+  })
+
+  it('should reject at once when aborted before the channels exist', async () => {
+    connection.createChannel.mockImplementation(() => new Promise(noop))
+
+    const controller = new AbortController()
+    const reason = new Error(generate())
+
+    controller.abort(reason)
+
+    await expect(io.request(queue, payload, { signal: controller.signal })).rejects.toBe(reason)
   })
 
   it('should send nothing once aborted', async () => {
