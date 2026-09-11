@@ -51,6 +51,14 @@ class Network {
     for (const tunnel of this.#tunnels) tunnel.silent = true
   }
 
+  /**
+   * Closes the tunnels that went silent, at both ends, so the broker learns that the
+   * connection it was still holding is gone — the moment its heartbeat would otherwise tell it.
+   */
+  release () {
+    for (const tunnel of this.#tunnels) if (tunnel.silent) this.#collapse(tunnel)
+  }
+
   async close () {
     for (const tunnel of this.#tunnels) this.#collapse(tunnel)
 
@@ -71,10 +79,22 @@ class Network {
     client.on('data', (chunk) => { if (!tunnel.silent) upstream.write(chunk) })
     upstream.on('data', (chunk) => { if (!tunnel.silent) client.write(chunk) })
 
-    for (const socket of [client, upstream]) {
-      socket.on('error', () => this.#collapse(tunnel))
-      socket.on('close', () => this.#collapse(tunnel))
-    }
+    // a silent network tells neither end that the other has gone: the client giving up on a
+    // silent connection leaves the broker holding its end, until the network is let go
+    client.on('error', () => this.#hangUp(tunnel))
+    client.on('close', () => this.#hangUp(tunnel))
+
+    upstream.on('error', () => this.#collapse(tunnel))
+    upstream.on('close', () => this.#collapse(tunnel))
+  }
+
+  /**
+   * @param {comq.features.Tunnel} tunnel
+   */
+  #hangUp (tunnel) {
+    if (!tunnel.silent) return this.#collapse(tunnel)
+
+    tunnel.client.destroy()
   }
 
   /**

@@ -26,6 +26,14 @@ When('the network goes silent',
     silence.call(this)
   })
 
+When('the silent connection is let go',
+  /**
+   * @this {comq.features.Context}
+   */
+  function () {
+    for (const network of this.networks) network.release()
+  })
+
 // a request that is answered over a connection that is already silent proves
 // nothing, hence the window between the two is left as short as a step boundary
 When('the consumer sends a request to the {token} queue as the network goes silent',

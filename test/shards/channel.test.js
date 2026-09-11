@@ -569,6 +569,74 @@ describe('diagnose', () => {
     expect(listener).toHaveBeenCalledWith(message, index)
   })
 
+  it('should re-route a returned Request under a key on another shard', async () => {
+    const listener = /** @type {jest.MockedFunction} */ jest.fn()
+    const index = random(channels.length)
+    const chan = channels[index]
+    const message = returned()
+
+    message.fields.exchange = generate()
+    channel.diagnose('return', listener)
+
+    emitReturn(chan, message)
+
+    const rest = channels.filter((one) => one !== chan)
+
+    const properties = expect.objectContaining(
+      { mandatory: true, headers: { 'x-return': 1 } })
+
+    for (const one of rest) {
+      expect(one.route).toHaveBeenCalledWith(message.fields.exchange, message.fields.routingKey,
+        message.content, properties)
+    }
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('should report a returned retry at once', async () => {
+    const listener = /** @type {jest.MockedFunction} */ jest.fn()
+    const index = random(channels.length)
+    const chan = channels[index]
+    const message = returned()
+
+    message.fields.exchange = 'comq.retry.' + random(10000)
+    channel.diagnose('return', listener)
+
+    emitReturn(chan, message)
+
+    for (const one of channels) {
+      expect(one.fire).not.toHaveBeenCalled()
+      expect(one.route).not.toHaveBeenCalled()
+    }
+
+    expect(listener).toHaveBeenCalledWith(message, index)
+  })
+
+  it('should hold a queue on every shard', async () => {
+    const exchange = generate()
+    const queue = generate()
+    const key = generate()
+    const consumer = jest.fn()
+
+    await channel.held(exchange, queue, key, consumer)
+
+    for (const one of channels) expect(one.held).toHaveBeenCalledWith(exchange, queue, key, consumer)
+  })
+
+  it('should hold a queue once any shard holds it', async () => {
+    const [, ...rest] = channels
+
+    for (const one of rest) one.held.mockImplementationOnce(() => new Promise(() => undefined))
+
+    await expect(channel.held(generate(), generate(), generate(), jest.fn())).resolves.toBeUndefined()
+  })
+
+  it('should reject when every shard refuses to hold a queue', async () => {
+    for (const one of channels) one.held.mockImplementationOnce(async () => { throw new Error('refused') })
+
+    await expect(channel.held(generate(), generate(), generate(), jest.fn())).rejects.toBeInstanceOf(AggregateError)
+  })
+
   it('should emit `pause` and `unpause` events', async () => {
     const queue = generate()
     const buffer = randomBytes(8)

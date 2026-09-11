@@ -21,3 +21,12 @@ export class Retry extends Error {}
  * the count like any other failure.
  */
 export class Park extends Error {}
+
+/**
+ * A Request `IO.call` sent under a key nobody holds. The broker returned it, so it reached no
+ * one and was not processed.
+ */
+export class Unroutable extends Error {
+  readonly exchange: string
+  readonly key: string
+}

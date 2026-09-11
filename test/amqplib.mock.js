@@ -14,6 +14,7 @@ class Channel extends EventEmitter {
   assertQueue = jest.fn(async (name) => ({ queue: name ?? generate() }))
   assertExchange = jest.fn(async () => undefined)
   bindQueue = jest.fn(async () => undefined)
+  unbindQueue = jest.fn(async () => undefined)
   publish = jest.fn((_0, _1, _2, _3, resolve) => resolve?.(null))
   close = jest.fn(async () => undefined)
 }

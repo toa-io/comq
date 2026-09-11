@@ -5,13 +5,13 @@ Feature: Parked requests
 
   Scenario: A parked request can still be answered
 
-    A caller is certain of an eventual answer for as long as it is alive, and parking
-    is what keeps that true when no consumer can produce one: the request is not
-    deleted, and it keeps who was asking. Somebody else can answer it, and the caller
-    — still waiting, still holding an exclusive reply queue — receives it.
+    A caller that sets no timeout is certain of an eventual answer for as long as it is
+    alive, and parking is what keeps that true when no consumer can produce one: the
+    request is kept, along with who was asking. Somebody else can answer it, and the
+    caller — still waiting, still holding an exclusive reply queue — receives it.
 
-    This is why there is no request timeout and no way to withdraw a request: either
-    would leave the parked message addressed to a caller that is no longer listening.
+    A caller that sets a timeout trades that for an end to the wait: once it stops
+    waiting, a parked request is addressed to a caller that has gone.
 
     Given a producer failing every request to the `unanswerable` queue
     When a request is sent to the `unanswerable` queue

@@ -6,7 +6,8 @@ for distributed, eventually consistent systems running on Node.js.
 ## Features
 
 - [Dynamic topology](#topology)
-- [Request](#request)-[reply](#reply) (RPC)
+- [Request](#request)-[reply](#reply) (RPC), with a [timeout](#timeout)
+- [Addressed requests](#addressed-requests) to the one connection holding a Key
 - Events ([pub](#emission)/[sub](#consumption)), fanned out or [routed](#routing)
 - [Tasks](#tasks)
 - [Pipelines](#pipelines)
@@ -106,17 +107,48 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 ## Request
 
-`async IO.request(queue: string, payload: any, encoding?: string): any`
+`async IO.request(queue: string, payload: any, options?: string | RequestOptions): any`
 
 Send encoded Request message with `replyTo` and `correlationId` properties set and
-return decoded Reply content. The promise stays pending until the Reply arrives.
+return decoded Reply content. The promise stays pending until the Reply arrives, or until the
+[timeout](#timeout) passes.
 
 On the initial call, queues for Requests and Replies are asserted.
+
+`options` is the encoding, or an object:
+
+| Option     | Type          | Default            |
+|------------|---------------|--------------------|
+| `encoding` | `string`      | `application/json` |
+| `timeout`  | `number`, ms  | none               |
+| `signal`   | `AbortSignal` | none               |
 
 ### Example
 
 ```javascript
 const sum = await io.request('add_numbers', { a: 1, b: 2 })
+```
+
+### Timeout
+
+A Request with a `timeout` rejects once it passes, with the `TimeoutError` of
+[`AbortSignal.timeout`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static).
+It is published with that much
+[expiration](https://www.rabbitmq.com/docs/ttl#per-message-ttl-in-publishers), so a Request no
+Producer has taken by then is dropped by the broker and never processed. A Request a Producer has
+already taken is processed to the end, and its Reply is discarded. A Request re-sent after a lost
+connection carries the time it has left.
+
+A `signal` rejects the Request with its reason once aborted, within the `timeout` where both are
+given. It ends the wait and leaves the Request where it is: in its queue until the `timeout`
+passes, or, without a `timeout`, until a Producer takes it. A Request abandoned by its `signal` may
+therefore still be processed.
+
+A Request that failed and waits for its [next attempt](#retries) loses its expiration on the way
+back to its queue, so it may be processed after its caller has stopped waiting.
+
+```javascript
+const sum = await io.request('add_numbers', { a: 1, b: 2 }, { timeout: 5000 })
 ```
 
 ## Consumption
@@ -192,6 +224,65 @@ await io.subscribe('records', 'records.orders', 'store.orders',
 
 await io.route('records', 'store.orders', { id: 1, status: 'paid' })
 await io.route('records', 'store.customers', { id: 2 }) // not delivered to the above
+```
+
+## Addressed Requests
+
+`async IO.back(exchange: string, key: string, producer): void`
+
+`async IO.call(exchange: string, key: string, payload: any, options?: string | RequestOptions): any`
+
+A Request to the one connection holding a Key, where a [Request](#request) goes to whichever
+Producer takes it first.
+
+`back` asserts a [direct exchange](#routing) and a queue named `<exchange>.<key>`, *exclusive* to
+the connection, binds it under the `key` and starts consuming Requests, as [`reply`](#reply) does.
+**On each broker, one connection holds a Key at a time.** While another connection holds it,
+`back` claims it again and again, with the backoff a lost connection is
+[restored](#connection-tolerance) with, and emits [`taken`](#diagnostics) on every refusal. The Key
+is let go when its connection closes, however it closes — once the broker has noticed, for a
+connection that went without a word. `back` returns once a broker holds the Key. The rest of the
+connection works throughout, and a connection that is restored claims its Keys again the same way.
+
+`call` publishes the encoded Request to the exchange under the `key` and returns the decoded Reply,
+taking the same options as [`request`](#request).
+
+A call ends in one of three ways:
+
+- **A Reply.**
+- **Refused at once**, rejecting with `Unroutable`, when no connection holds the Key: it never did,
+  its holder has closed, or its holder is [sealed](#sealing). A refused call reached no one.
+- **At its [timeout](#timeout)**, when its holder has gone without being sealed — a crashed process,
+  a lost connection — or takes longer. A call nobody has taken by then is dropped.
+
+A call waits for as long as it takes unless it has a timeout, and a holder that is gone never
+answers it. **Give every call a timeout.**
+
+Sealing withdraws every Key before it stops consuming: a call published from then on is refused,
+and one published before it is delivered and answered. Calls queued beyond the
+[prefetch](#channels) at that moment go with the connection and end at their timeout.
+
+A Key is as alive as its connection: while the holder reconnects, calls to it are refused, and
+calls queued for it are lost.
+
+Over a [sharded connection](#sharded-connection), `back` claims the Key on every shard and returns
+once one of them holds it; a shard where it is taken goes on claiming it. Two connections given the
+same Key can therefore hold it on different shards and both answer calls, and `taken` is what says
+so. A call returned by one shard is published on the next, and refused once every shard has
+returned it.
+
+### Example
+
+```javascript
+const { Unroutable } = require('comq')
+
+await io.back('sessions', 'a1', (message) => sessions.get(message.id))
+
+try {
+  const session = await io.call('sessions', 'a1', { id: 7 }, { timeout: 5000 })
+} catch (error) {
+  if (error instanceof Unroutable) console.log('Nobody holds', error.key)
+}
 ```
 
 ## Tasks
@@ -449,6 +540,8 @@ requests and are expecting replies.
   and [Consumption](#consumption), and as _direct_ for [Routing](#routing). One name is one or
   the other: asserting it as both is what the broker refuses.
 - Queues for Replies are _exclusive_ and _auto deleted_.
+- A queue [`back`](#addressed-requests) holds is _exclusive_, bound under its Key to a _direct_
+  exchange.
 
 comq declares two kinds of queue of its own, for [failed messages](#retries):
 
@@ -490,8 +583,8 @@ other consumers nor that consumer's next message; only the message that failed i
 | Event | 1s, 10s, 30s, 90s | 5 | 131s |
 | Request | 1s, 3s, 5s, 10s | 5 | 19s |
 
-Requests are shorter because a caller is blocked on one with no timeout, and a Reply arriving
-long after it gave up has nowhere useful to land. Nobody waits on an Event.
+Requests are shorter because a caller is blocked on one, and a Reply arriving long after it
+stopped waiting has nowhere useful to land. Nobody waits on an Event.
 
 One retry queue and one exchange are declared per distinct wait and shared by every queue that
 uses them, so their number grows with the length of the ladder rather than with the number of
@@ -548,8 +641,9 @@ Parked queues grow until somebody drains them, which is deliberate — the alter
 evidence. Alert on [`discard`](#diagnostics), and do not delete `comq.retry.*` or `comq.parked.*`
 queues on a running system.
 
-> **A parked Request is never answered.** A Consumer awaiting its Reply waits indefinitely, and
-> with a limited prefetch that can deadlock it. Parking keeps the Request rather than deleting
+> **A parked Request is never answered.** A Consumer awaiting its Reply waits until its
+> [timeout](#timeout), or indefinitely without one, and with a limited prefetch that can deadlock
+> it. Parking keeps the Request rather than deleting
 > it — and it keeps `replyTo` and `correlationId`, so a Reply can still be produced from it by
 > hand while the caller is alive — but comq itself sends no Reply and reports no error to the
 > caller.
@@ -626,6 +720,9 @@ Event *are*.
 Requests.
 Sending Requests, receiving Replies, and emitting Events will still be available.
 
+Keys held by [`back`](#addressed-requests) are withdrawn first, so a call published from then on is
+refused.
+
 ### Disconnection
 
 `async IO.close(): void`
@@ -696,6 +793,8 @@ Subscribe to one of the diagnostic events:
   [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_publish) are
   passed as arguments. In the case of a [sharded connection](#sharded-connection), the message is
   reported only once every shard has rejected it.
+- `taken`: a Key [`back`](#addressed-requests) claims is held by another connection on this broker, and
+  is claimed again. Channel type and the queue name are passed.
 - `pause`: channel is paused. Channel type is passed.
   In the case of a [sharded connection](#sharded-connection), it means that there is no shard left
   to publish to, be it because every one of them has rejected a publish or lost its connection.
