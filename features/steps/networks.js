@@ -23,6 +23,8 @@ class Network {
   /** @type {number} */
   #port
 
+  #refusing = false
+
   /**
    * @param {number} [n] broker index
    */
@@ -52,6 +54,18 @@ class Network {
   }
 
   /**
+   * A connection established from now on is closed as soon as it is accepted, so
+   * a connection that is lost stays lost until the network admits it.
+   */
+  refuse () {
+    this.#refusing = true
+  }
+
+  admit () {
+    this.#refusing = false
+  }
+
+  /**
    * Closes the tunnels that went silent, at both ends, so the broker learns that the
    * connection it was still holding is gone — the moment its heartbeat would otherwise tell it.
    */
@@ -69,6 +83,8 @@ class Network {
    * @param {net.Socket} client
    */
   #tunnel = (client) => {
+    if (this.#refusing) return client.destroy()
+
     const upstream = net.connect(this.#port, this.#host)
 
     /** @type {comq.features.Tunnel} */

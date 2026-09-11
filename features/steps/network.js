@@ -26,6 +26,24 @@ When('the network goes silent',
     silence.call(this)
   })
 
+When('the network goes silent and refuses new connections',
+  /**
+   * @this {comq.features.Context}
+   */
+  function () {
+    for (const network of this.networks) network.refuse()
+
+    silence.call(this)
+  })
+
+When('the network admits new connections',
+  /**
+   * @this {comq.features.Context}
+   */
+  function () {
+    for (const network of this.networks) network.admit()
+  })
+
 When('the silent connection is let go',
   /**
    * @this {comq.features.Context}
