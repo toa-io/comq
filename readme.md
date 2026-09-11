@@ -7,7 +7,7 @@ for distributed, eventually consistent systems running on Node.js.
 
 - [Dynamic topology](#topology)
 - [Request](#request)-[reply](#reply) (RPC), with a [timeout](#timeout)
-- [Calls](#call-and-back) to the one connection holding a key
+- [Addressed requests](#addressed-requests) to the one connection holding a Key
 - Events ([pub](#emission)/[sub](#consumption)), fanned out or [routed](#routing)
 - [Tasks](#tasks)
 - [Pipelines](#pipelines)
@@ -226,7 +226,7 @@ await io.route('records', 'store.orders', { id: 1, status: 'paid' })
 await io.route('records', 'store.customers', { id: 2 }) // not delivered to the above
 ```
 
-## Call and back
+## Addressed Requests
 
 `async IO.back(exchange: string, key: string, producer): void`
 
@@ -540,7 +540,7 @@ requests and are expecting replies.
   and [Consumption](#consumption), and as _direct_ for [Routing](#routing). One name is one or
   the other: asserting it as both is what the broker refuses.
 - Queues for Replies are _exclusive_ and _auto deleted_.
-- A queue [`back`](#call-and-back) holds is _exclusive_, bound under its Key to a _direct_
+- A queue [`back`](#addressed-requests) holds is _exclusive_, bound under its Key to a _direct_
   exchange.
 
 comq declares two kinds of queue of its own, for [failed messages](#retries):
@@ -720,7 +720,7 @@ Event *are*.
 Requests.
 Sending Requests, receiving Replies, and emitting Events will still be available.
 
-Keys held by [`back`](#call-and-back) are withdrawn first, so a call published from then on is
+Keys held by [`back`](#addressed-requests) are withdrawn first, so a call published from then on is
 refused.
 
 ### Disconnection
@@ -793,7 +793,7 @@ Subscribe to one of the diagnostic events:
   [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_publish) are
   passed as arguments. In the case of a [sharded connection](#sharded-connection), the message is
   reported only once every shard has rejected it.
-- `taken`: a Key [`back`](#call-and-back) claims is held by another connection on this broker, and
+- `taken`: a Key [`back`](#addressed-requests) claims is held by another connection on this broker, and
   is claimed again. Channel type and the queue name are passed.
 - `pause`: channel is paused. Channel type is passed.
   In the case of a [sharded connection](#sharded-connection), it means that there is no shard left
