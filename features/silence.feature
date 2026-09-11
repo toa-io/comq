@@ -57,6 +57,7 @@ Feature: Silent Connection Tolerance
   Scenario: Reporting that there is nowhere left to publish
     Given an active sharded connection
     And a producer replying `echo` queue
-    When the network goes silent
+    When the network goes silent and refuses new connections
     Then publishing is paused within 10 seconds
-    And publishing is resumed within 10 seconds
+    When the network admits new connections
+    Then publishing is resumed within 10 seconds

@@ -684,6 +684,13 @@ describe('heartbeat', () => {
     expect(amqplib.connect)
       .toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ keepAlive: true }))
   })
+
+  it('should send without delay', async () => {
+    await connection.open()
+
+    expect(amqplib.connect)
+      .toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ noDelay: true }))
+  })
 })
 
 describe('close', () => {

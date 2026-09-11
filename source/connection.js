@@ -371,6 +371,8 @@ const SHUTDOWN_MS = 5_000
 
 const SOCKET_OPTIONS = {
   timeout: CONNECT_MS,
+  // a message is written once and is small, which is what Nagle's algorithm holds back
+  noDelay: true,
   // a peer that went away without a word is noticed by the kernel as well
   keepAlive: true,
   keepAliveDelay: KEEPALIVE_MS
