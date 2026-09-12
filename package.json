@@ -58,6 +58,7 @@
     "test": "standard && jest",
     "features": "cucumber-js --fail-fast -t 'not @manual'",
     "features:fast": "cucumber-js --fail-fast -t 'not @manual and not @heavy'",
+    "benchmark": "node benchmarks/run.js",
     "lint": "standard --fix --verbose | snazzy"
   },
   "standard": {
