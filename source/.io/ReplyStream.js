@@ -3,6 +3,7 @@
 const { Readable } = require('node:stream')
 const { Promex } = require('promex')
 const { IDLE_INTERVAL, FLOW_HEADER, control } = require('./const')
+const { Interrupted } = require('../interrupted')
 
 class ReplyStream extends Readable {
   confirmation = new Promex()
@@ -36,6 +37,9 @@ class ReplyStream extends Readable {
   /** Whether the producer honours `pause` and `resume`. */
   #flow = false
 
+  /** Whether this stream has been handed to whoever asked for it, which is what confirms it. */
+  #confirmed = false
+
   /** Whether the producer has been asked to pause. */
   #throttled = false
 
@@ -68,13 +72,16 @@ class ReplyStream extends Readable {
     this._clear()
     this.push(null)
 
-    // a no-op once control.ok has been received
-    this.confirmation.reject(error ?? new Error(UNCONFIRMED))
+    // a no-op once control.ok has been received, and until then this is what it says: the
+    // stream never started, so the Request is re-sent rather than raised to anybody
+    this.confirmation.reject(new Error(UNCONFIRMED))
 
     if (this.#control !== undefined)
       void this.#reply(this.#control, control.end)
 
-    super._destroy(error, callback)
+    // a stream nobody has received yet cannot raise to anybody: the Request is re-sent instead,
+    // and the rejected confirmation is what says so
+    super._destroy(this.#confirmed ? error : null, callback)
   }
 
   /**
@@ -142,7 +149,7 @@ class ReplyStream extends Readable {
    */
   _buffer (payload, properties, size) {
     if (this.#buffered > this.#maxBufferSize || this.#bufferedBytes + size > this.#maxBufferBytes) {
-      this.destroy()
+      this.destroy(new Interrupted('the values held until the missing one arrives no longer fit'))
 
       return
     }
@@ -178,6 +185,7 @@ class ReplyStream extends Readable {
       case control.ok:
         this.#control = { properties }
         this.#flow = properties.headers?.[FLOW_HEADER] === true
+        this.#confirmed = true
         this.confirmation.resolve()
         break
       case control.heartbeat:
@@ -193,7 +201,10 @@ class ReplyStream extends Readable {
   _heartbeat () {
     if (this.#timeout !== null) clearTimeout(this.#timeout)
 
-    this.#timeout = setTimeout(() => this.destroy(), this.#idleInterval)
+    this.#timeout = setTimeout(
+      () => this.destroy(new Interrupted(`nothing arrived within ${this.#idleInterval}ms`)),
+      this.#idleInterval
+    )
   }
 
   _clear () {

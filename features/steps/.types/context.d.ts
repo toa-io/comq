@@ -31,6 +31,8 @@ declare namespace comq.features {
     stream: Readable
     streamValues: any[]
     streamEnded: boolean
+    streamError?: Error
+    streamLength?: number
     streams: Record<number, Readable>
     streamsValues: Record<number, any[]>
     streamsEnded: Record<number, boolean>
