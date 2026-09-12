@@ -6,6 +6,7 @@ const { Promex } = require('promex')
 const { retry } = require('reretry')
 
 const { failsafe } = require('./attributes')
+const { batch } = require('./batch')
 const presets = require('./topology')
 const channels = require('./channel')
 const emitter = require('./emitter')
@@ -146,6 +147,9 @@ class Connection {
 
     connection.on('close', (error) => this.#close(connection, error))
     this.#connection = connection
+
+    batch(connection.connection?.stream)
+
     this.#armWatchdog(connection)
     this.#diagnostics.emit('open')
 
