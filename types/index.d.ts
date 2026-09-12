@@ -30,3 +30,11 @@ export class Unroutable extends Error {
   readonly exchange: string
   readonly key: string
 }
+
+/**
+ * A Reply stream that ended before its producer did: what was received is a prefix of what was
+ * yielded, and the rest is not coming. A stream that completes ends instead.
+ */
+export class Interrupted extends Error {
+  readonly reason: string
+}
