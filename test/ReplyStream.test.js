@@ -4,6 +4,8 @@ const { once } = require('node:events')
 const { ReplyStream, UNCONFIRMED } = require('../source/.io/ReplyStream')
 const { createReplyEmitter } = require('../source/.io/createReplyEmitter')
 const { control, FLOW_HEADER } = require('../source/.io/const')
+const { Interrupted } = require('../source/interrupted')
+const { timeout } = require('./helpers')
 
 /** @type {jest.Mock} */
 let reply
@@ -70,6 +72,49 @@ it('should reject confirmation when nothing arrives within the idle interval', a
   const idle = new ReplyStream(request, reply)
 
   await expect(idle.confirmation).rejects.toThrow(UNCONFIRMED)
+})
+
+it('should raise when nothing arrives within the idle interval', async () => {
+  global.COMQ_TESTING_IDLE_INTERVAL = 10
+
+  const request = {
+    emitter: createReplyEmitter('test'),
+    properties: { correlationId: 'raising-correlation' }
+  }
+
+  const idle = new ReplyStream(request, reply)
+
+  // the stream is answered, which is when it is handed to whoever asked for it
+  idle.arrange(control.ok, { headers: { index: 0 }, type: 'control' })
+
+  const [error] = await once(idle, 'error')
+
+  expect(error).toBeInstanceOf(Interrupted)
+  expect(idle.readableEnded).toStrictEqual(false)
+})
+
+it('should raise when the values held until the missing one arrives no longer fit', async () => {
+  stream.arrange(control.ok, { headers: { index: 0 }, type: 'control' })
+
+  for (let index = 2; index <= 6; index++) {
+    stream.arrange(index, { headers: { index } })
+  }
+
+  const [error] = await once(stream, 'error')
+
+  expect(error).toBeInstanceOf(Interrupted)
+})
+
+it('should end without raising when the consumer destroys it', async () => {
+  const raised = jest.fn()
+
+  stream.on('error', raised)
+  stream.arrange(control.ok, { headers: { index: 0 }, type: 'control' })
+  stream.destroy()
+
+  await timeout(10)
+
+  expect(raised).not.toHaveBeenCalled()
 })
 
 it('should keep confirmation resolved after control.ok', async () => {

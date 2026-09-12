@@ -377,7 +377,7 @@ the request will be retransmitted upon reconnection.
 
 A heartbeat message is sent to the `replyTo` queue whenever a Reply stream idles for 5 seconds.
 If the Consumer of the reply stream doesn't receive a reply or a heartbeat message for 12 seconds, the stream returned
-by `IO.request` is destroyed.
+by `IO.request` is destroyed with an `Interrupted` error.
 These intervals are not configurable.
 
 An "end stream" message is sent to the `replyTo` queue when the Reply stream is finished.
@@ -396,6 +396,17 @@ See also [Reply stream shutdown](#reply-stream-shutdown).
 While consuming the Reply stream if the broker connection is lost,
 or if the Consumer crashes or destroys the stream returned by `IO.request`,
 some of the values yielded by the Reply stream may be lost.
+
+A stream that lost values raises `Interrupted` rather than ending, so that a stream cut short is never taken for one
+that was answered whole. What it delivered before that is the sequence from its start, in order.
+
+```javascript
+try {
+  for await (const number of stream) console.log(number)
+} catch (error) {
+  if (error instanceof Interrupted) console.log('the rest is not coming')
+}
+```
 
 To avoid inconsistency, it is strongly recommended to use the Reply stream only with _safe_ Producers, which do not
 change the application state.

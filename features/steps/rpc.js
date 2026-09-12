@@ -48,8 +48,10 @@ Given('a number generator with {number}ms increasing delay replying {token} queu
   async function (delay, queue) {
     const that = this
 
+    this.streamLength = MAX
+
     class Stream extends Readable {
-      #MAX = 10
+      #MAX = MAX
       #count = 0
 
       constructor () {
@@ -305,6 +307,62 @@ Then('the consumer receives the stream',
   async function () {
     this.stream.on('data', (data) => this.streamValues.push(data))
     this.stream.on('end', () => (this.streamEnded = true))
+    this.stream.on('error', (error) => (this.streamError = error))
+  })
+
+Then('the consumer\'s stream terminates',
+  /**
+   * Either way it terminates: whole, or cut short. Bounded, so that a stream that never does
+   * fails the scenario rather than hanging it.
+   *
+   * @this {comq.features.Context}
+   */
+  async function () {
+    if (this.stream.destroyed || this.streamEnded === true) return
+
+    // both ways it terminates, and `once` would reject on the one that raises
+    const terminated = new Promise((resolve) => {
+      this.stream.once('close', resolve)
+      this.stream.once('error', resolve)
+    })
+    const expired = timeout(TERMINATION_MS).then(() => 'expired')
+
+    assert.notEqual(await Promise.race([terminated, expired]), 'expired',
+      'The stream has neither ended nor raised')
+  })
+
+Then('the consumer has received a prefix of the stream',
+  /**
+   * The order of yielded values is preserved and the tail may be lost, so what arrived is the
+   * sequence from its start, with nothing missing in between and nothing twice.
+   *
+   * @this {comq.features.Context}
+   */
+  async function () {
+    const expected = this.streamValues.map((_, index) => index)
+
+    assert.deepEqual(this.streamValues, expected,
+      `Received ${JSON.stringify(this.streamValues)}, which is not a prefix of the stream`)
+  })
+
+Then('a stream that lost values has raised',
+  /**
+   * A stream that did not deliver everything its producer yielded must not end as one that did:
+   * a caller cannot tell them apart otherwise.
+   *
+   * @this {comq.features.Context}
+   */
+  async function () {
+    const whole = this.streamValues.length === this.streamLength
+
+    if (whole) assert.equal(this.streamError, undefined, 'A whole stream has raised')
+    else {
+      assert.notEqual(this.streamError, undefined,
+        `The stream ended with ${this.streamValues.length} of ${this.streamLength} values and did not raise`)
+
+      assert.equal(this.streamError.name, 'Interrupted',
+        `The stream raised ${this.streamError.name}`)
+    }
   })
 
 Then('the consumer{number} receives the stream',
@@ -507,6 +565,11 @@ async function fetch (queue, payload, number) {
     this.streamsEnded[number] = false
   }
 }
+
+const MAX = 10
+
+/** What a stream is given to terminate in, which is longer than this generator takes. */
+const TERMINATION_MS = 5000
 
 global.COMQ_TESTING_IDLE_INTERVAL = 150
 global.COMQ_TESTING_HEARTBEAT_INTERVAL = 100
