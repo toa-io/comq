@@ -117,6 +117,14 @@ declare namespace comq {
 
     process<T = any>(queue: string, processor: Consumer<T>): Promise<void>
 
+    /**
+     * Stops consuming Events and Tasks, and consumes again on `unsuspend`. Requests are
+     * untouched. Nothing is lost: a queue fills while nothing takes from it.
+     */
+    suspend(): Promise<void>
+
+    unsuspend(): Promise<void>
+
     seal(): Promise<void>
 
     /**

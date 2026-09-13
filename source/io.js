@@ -248,6 +248,25 @@ class IO {
     return this.emit(queue, payload, encoding, 'send')
   }
 
+  /**
+   * Stops consuming Events and Tasks, and consumes again on `unsuspend`.
+   *
+   * Requests are untouched: what this connection is answering it goes on answering, and a
+   * caller inside a consumer can still be answered. Nothing is lost — a queue fills while
+   * nothing takes from it.
+   *
+   * `unsuspend` rather than `resume`, because `resume` is the diagnostic event a channel emits
+   * when the broker stops applying back pressure, which is another thing entirely.
+   */
+  async suspend () {
+    await this.#events?.suspend()
+  }
+
+  /** Consumes again what `suspend` stopped consuming. */
+  async unsuspend () {
+    await this.#events?.unsuspend()
+  }
+
   seal = memo(async () => {
     await this.#requests?.seal()
     await this.#events?.seal()

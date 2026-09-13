@@ -48,6 +48,9 @@ class Channel {
   /** @type {boolean} */
   #sealed = false
 
+  /** Whether consumption has been stopped and may start again, see `suspend`. */
+  #suspended = false
+
   /** @type {Promex} */
   #recovery = new Promex()
 
@@ -106,7 +109,7 @@ class Channel {
          * @param {comq.channels.Consumer} callback
          */
         async (queue, callback) => {
-          if (!this.#sealed) return await this.#consume(queue, callback)
+          if (!this.#sealed && !this.#suspended) return await this.#consume(queue, callback)
         })))
 
   subscribe = recall(this,
@@ -119,7 +122,7 @@ class Channel {
          * @returns {Promise<void>}
          */
         async (exchange, queue, callback) => {
-          if (!this.#sealed) await this.#consume(queue, callback)
+          if (!this.#sealed && !this.#suspended) await this.#consume(queue, callback)
         })))
 
   /**
@@ -137,7 +140,7 @@ class Channel {
          * @returns {Promise<void>}
          */
         async (exchange, queue, key, callback) => {
-          if (!this.#sealed) await this.#consume(queue, callback)
+          if (!this.#sealed && !this.#suspended) await this.#consume(queue, callback)
         })))
 
   /**
@@ -157,7 +160,7 @@ class Channel {
          * @returns {Promise<void>}
          */
         async (exchange, queue, key, callback) => {
-          if (this.#sealed) return
+          if (this.#sealed || this.#suspended) return
 
           const holding = this.#hold(exchange, queue, key, callback)
 
@@ -232,6 +235,37 @@ class Channel {
     await this.#channel?.close().catch(noop)
 
     this.#release(this)
+  }
+
+  /**
+   * Stops consuming, and consumes again on `unsuspend`.
+   *
+   * Where `seal` is for good, this is not: the consumers are cancelled but what they were
+   * registered with is kept, so a queue goes on filling while nothing takes from it. Deliveries
+   * already dispatched are not recalled — they are handled and acknowledged as they would be —
+   * so what this stops is what arrives next.
+   */
+  async suspend () {
+    if (this.#sealed || this.#suspended) return
+
+    this.#suspended = true
+
+    const cancellations = this.#tags.map((tag) => this.#channel.cancel(tag))
+
+    await Promise.all(cancellations).catch(noop)
+
+    this.#tags = []
+  }
+
+  /** Consumes again what `suspend` stopped consuming. */
+  async unsuspend () {
+    if (this.#sealed || !this.#suspended) return
+
+    this.#suspended = false
+
+    // this is the channel that was suspended, so what was asserted on it still is and only
+    // the consuming is replayed; a recovery resets `lazy` first because its channel is new
+    await recall(this)
   }
 
   async seal () {

@@ -19,6 +19,7 @@ for distributed, eventually consistent systems running on Node.js.
 - [Connection tolerance](#connection-tolerance) and broker restart resilience
 - [Sharded connection](#sharded-connection) :rocket:
 - [Singleton connection](#singleton-connection)
+- [Suspending consumption](#suspending-consumption)
 - [Graceful shutdown](#graceful-shutdown)
 
 > CommonJS, ECMAScript, and TypeScript compatible (types included).
@@ -720,6 +721,28 @@ Event *are*.
 > Changing `delay` declares new retry queues rather than redeclaring the existing ones, so a
 > rolling deploy that changes it has no window in which either version fails. The queues left
 > behind are empty and can be removed once nothing is publishing to them.
+
+## Suspending consumption
+
+`async IO.suspend(): void`
+`async IO.unsuspend(): void`
+
+Stop consuming Events and Tasks, and start again.
+
+Requests are not affected: what the connection is answering it goes on answering, and a `producer`
+calling out can still be answered. Nothing is lost — a queue fills while nothing takes from it, and
+what was published meanwhile is delivered once consumption starts again.
+
+Deliveries already dispatched are not recalled. Up to the channel's `prefetch` may be in hand when
+`suspend` returns, and those are handled and acknowledged as they would have been; what is stopped
+is what arrives next.
+
+Unlike [sealing](#sealing), this is reversible, and a consumer registered while suspended starts
+consuming on `unsuspend` rather than at once.
+
+> It is `unsuspend` and not `resume` because `resume` is already the [diagnostic
+> event](#diagnostics) a channel emits when the broker stops applying back pressure, which is
+> another thing entirely.
 
 ## Graceful shutdown
 
