@@ -10,9 +10,9 @@
  * end of the same turn: nothing waits for a timer, and nothing waits for a write that may never
  * come.
  *
- * This belongs in amqplib, whose loop does the writing, and is proposed there:
- * https://github.com/temich/amqplib/tree/perf/one-write-per-turn. It is done here until that
- * lands, and goes when it does.
+ * This belongs in amqplib, whose `Mux` writes the frames one at a time, and where corking that
+ * loop is six lines and needs no wrapping of a socket the library does not own. It is done here
+ * until amqplib carries it, and goes when it does.
  *
  * @param {import('node:net').Socket} socket
  */
