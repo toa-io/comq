@@ -6,7 +6,6 @@ const { Promex } = require('promex')
 const { memo, failsafe, lazy, track } = require('./attributes')
 const { verdictOf, PARK } = require('./verdicts')
 const { Unroutable } = require('./unroutable')
-const { Abandoned } = require('./abandoned')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
@@ -39,9 +38,6 @@ class IO {
 
   /** @type {Map<Promex, comq.Request>} */
   #pendingReplies = new Map()
-
-  /** Whether this has stopped waiting for Replies, see `abandon`. */
-  #abandoning = false
 
   /** @type {[comq.diagnostics.Event, Function][]} */
   #forwarders = []
@@ -254,30 +250,6 @@ class IO {
     await this.#destroyStreams(this.#replyStreams)
   })
 
-  /**
-   * Stops waiting for Replies: every one still outstanding is rejected with `Abandoned`, and a
-   * Request made from now on is refused with it.
-   *
-   * A close waits for every consumer callback to return, and such a callback may be waiting on
-   * a Request of its own. Where the answer to that Request is the very thing going away — the
-   * process it would come from is shutting down alongside this one — the close waits for as
-   * long as the answer takes. This is how that wait is ended. What the Requests themselves do
-   * is not affected: they were sent and may well be processed; what is given up is this side's
-   * interest in the answers.
-   *
-   * Callable at any time, including while a close is already under way.
-   */
-  abandon = memo(async () => {
-    this.#abandoning = true
-
-    // the same three steps `#abandon` takes for one Reply whose caller stopped waiting
-    for (const [reply, request] of this.#pendingReplies) {
-      request.emitter.off(request.properties.correlationId)
-      this.#pendingReplies.delete(reply)
-      reply.reject(new Abandoned())
-    }
-  })
-
   close = memo(async () => {
     await this.seal()
     await this.#destroyStreams(this.#replyPipes)
@@ -452,9 +424,6 @@ class IO {
     const { signal, expires } = terms
 
     signal?.throwIfAborted()
-
-    // one made now would be waited for by nobody: the Replies are abandoned already
-    if (this.#abandoning) throw new Abandoned()
 
     const [buffer, contentType] = this.#encode(payload, terms.encoding)
     const request = this.#createRequest(target, contentType, signal)
