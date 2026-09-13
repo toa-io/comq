@@ -119,12 +119,6 @@ declare namespace comq {
 
     seal(): Promise<void>
 
-    /**
-     * Stops waiting for Replies: every one still outstanding is rejected with `Abandoned`, and a
-     * Request made from now on is refused with it. Callable while a close is already under way.
-     */
-    abandon(): Promise<void>
-
     close(): Promise<void>
 
     diagnose(event: 'open', listener: (index?: number) => void): void
