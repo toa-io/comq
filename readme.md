@@ -734,6 +734,28 @@ Sending Requests, receiving Replies, and emitting Events will still be available
 Keys held by [`back`](#addressed-requests) are withdrawn first, so a call published from then on is
 refused.
 
+### Abandoning
+
+`async IO.abandon(): void`
+
+Stop waiting for Replies.
+
+A [close](#disconnection) waits for every `producer` and `consumer` call to return, and such a
+call may itself be waiting on a Request of its own. Where the answer to that Request is the very
+thing going away — the process it would come from is shutting down alongside this one — the close
+waits for as long as the answer takes.
+
+`IO.abandon()` ends that wait:
+
+- every outstanding Reply is rejected with `Abandoned`, so a caller inside a `producer` or
+  `consumer` is told at once rather than held;
+- a Request made from then on is refused with `Abandoned`, so a callback cannot start another
+  wait on the way out.
+
+The Requests those Replies belonged to were sent and may well be processed; what is given up is
+this side's interest in the answers. It may be called before a close or while one is already under
+way, which is how a close that has begun is told to stop waiting.
+
 ### Disconnection
 
 `async IO.close(): void`
@@ -741,6 +763,9 @@ refused.
 1. Call `IO.seal()`.
 2. Wait for any outstanding messages to be processed[^2] and acknowledged.
 3. Close the connection.
+
+Step 2 still runs where the Replies have been [abandoned](#abandoning): each message is processed
+to a verdict and acknowledged, and what was given up is the waiting rather than the drain.
 
 [^2]: Therefore, if the underlying connection is lost, `.close()` will only be completed once the
 connection is [recovered](#connection-tolerance).
