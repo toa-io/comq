@@ -7,7 +7,8 @@
 > where it survives a retry.
 >
 > **All three parts are implemented.** Text below is written as a proposal because that is what
-> it was; it describes what the code now does.
+> it was; it describes what the code now does — except for the parking queue's name and
+> lifetime, which [one parking queue](./one-parking-queue.md) supersedes.
 
 When a consumer callback rejects, comq is supposed to retry the message a few times and then
 give up on it. What it actually does is kill the process, and take every other consumer in that
