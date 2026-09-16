@@ -30,8 +30,15 @@ class IO {
   /** @type {comq.Channel} */
   #events
 
-  /** @type {Map<string, comq.ReplyEmitter>} */
-  #emitters = new Map()
+  /**
+   * Where this IO's replies arrive. One queue answers every request it makes: a reply is
+   * found by its correlation identifier, which is unique across processes, so a queue per
+   * target would name what the identifier already tells apart — and the broker would hold
+   * one for every distinct queue the caller has ever requested.
+   *
+   * @type {comq.ReplyEmitter}
+   */
+  #emitter
 
   /** @type {comq.ReplyEmitter | null} */
   #control = null
@@ -312,13 +319,20 @@ class IO {
     return [buffer, properties]
   }
 
-  async #consumeReplies (queue) {
-    const emitter = io.createReplyEmitter(queue)
-    const consumer = this.#getReplyConsumer(queue, emitter)
+  async #consumeReplies () {
+    this.#emitter = await this.#consumeRepliesOf(REPLY)
+  }
 
-    this.#emitters.set(queue, emitter)
+  /**
+   * @param {string} label
+   * @returns {Promise<comq.ReplyEmitter>}
+   */
+  async #consumeRepliesOf (label) {
+    const emitter = io.createReplyEmitter(label)
 
-    await this.#replies.consume(emitter.queue, consumer)
+    await this.#replies.consume(emitter.queue, this.#getReplyConsumer(emitter))
+
+    return emitter
   }
 
   // endregion
@@ -389,11 +403,10 @@ class IO {
       })
 
   /**
-   * @param {string} queue
    * @param {comq.ReplyEmitter} emitter
    * @returns {comq.channels.Consumer}
    */
-  #getReplyConsumer = (queue, emitter) =>
+  #getReplyConsumer = (emitter) =>
     (message) => {
       const payload = decode(message)
 
@@ -426,7 +439,7 @@ class IO {
     signal?.throwIfAborted()
 
     const [buffer, contentType] = this.#encode(payload, terms.encoding)
-    const request = this.#createRequest(target, contentType, signal)
+    const request = this.#createRequest(contentType, signal)
     const properties = { ...request.properties }
 
     if (expires !== undefined) {
@@ -493,13 +506,12 @@ class IO {
    * The request holds no copy of what was sent: a retransmission encodes the
    * payload anew, and an unanswered request would otherwise keep two of it.
    *
-   * @param {string} queue
    * @param {comq.Encoding} contentType
    * @param {AbortSignal} [signal]
    * @return {comq.Request}
    */
-  #createRequest (queue, contentType, signal) {
-    const emitter = this.#emitters.get(queue)
+  #createRequest (contentType, signal) {
+    const emitter = this.#emitter
     const correlationId = emitter.next()
 
     /** @type {comq.amqp.Properties} */
@@ -580,11 +592,7 @@ class IO {
    * @return {Promise<comq.ReplyEmitter>}
    */
   async #createControl () {
-    const queue = 'control'
-
-    await this.#consumeReplies(queue)
-
-    return this.#emitters.get(queue)
+    return await this.#consumeRepliesOf(CONTROL)
   }
 
   /**
@@ -692,6 +700,12 @@ const OCTETS = 'application/octet-stream'
 const DEFAULT = 'application/json'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
+
+/** What this IO's replies arrive on, before the random suffix that makes the queue its own. */
+const REPLY = 'comq.reply'
+
+/** What a producer steers its reply streams from, likewise. */
+const CONTROL = 'control'
 
 /**
  * What a caller passed, settled once: a timeout becomes the moment the Request expires, so that

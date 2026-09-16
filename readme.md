@@ -113,7 +113,8 @@ Send encoded Request message with `replyTo` and `correlationId` properties set a
 return decoded Reply content. The promise stays pending until the Reply arrives, or until the
 [timeout](#timeout) passes.
 
-On the initial call, queues for Requests and Replies are asserted.
+On the initial call, the queue for Requests is asserted, and so is the one this `IO` receives
+every Reply on.
 
 `options` is the encoding, or an object:
 
@@ -550,7 +551,9 @@ requests and are expecting replies.
 - An exchange is asserted as _fanout_ for [Emission](#emission)
   and [Consumption](#consumption), and as _direct_ for [Routing](#routing). One name is one or
   the other: asserting it as both is what the broker refuses.
-- Queues for Replies are _exclusive_ and _auto deleted_.
+- One queue takes every Reply an `IO` receives, `comq.reply..<id>`, _exclusive_ and gone with the
+  connection. A Reply is matched by its `correlationId`, which is unique across processes, so the
+  queue names neither what was called nor what is waiting.
 - A queue [`back`](#addressed-requests) holds is _exclusive_, bound under its Key to a _direct_
   exchange.
 
