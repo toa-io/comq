@@ -28,14 +28,6 @@ class Channel {
   #tags = []
 
   /**
-   * How each queue was declared, so that the queue holding what it could not
-   * process is declared to live exactly as long as it does.
-   *
-   * @type {Map<string, comq.amqp.options.Queue>}
-   */
-  #queues = new Map()
-
-  /**
    * The exchange and key each held queue is bound under, so that sealing withdraws them.
    *
    * @type {Map<string, [string, string]>}
@@ -88,8 +80,7 @@ class Channel {
     // the consumers of the previous channel went down with it, their tags mean nothing here
     this.#tags = []
 
-    // a fresh channel has declared nothing, and bound nothing
-    this.#queues.clear()
+    // a fresh channel has bound nothing
     this.#held.clear()
 
     await this.#channel.prefetch(this.#topology.prefetch)
@@ -384,8 +375,6 @@ class Channel {
 
     const { queue } = await this.#channel.assertQueue(name, options)
 
-    this.#queues.set(queue, options)
-
     return [queue]
   }
 
@@ -485,21 +474,23 @@ class Channel {
    * The queue a message is kept in once it has run out of attempts. It has no consumer
    * either: what is in it is waiting for a person.
    *
-   * It is declared to live exactly as long as the queue it serves, which for a groupless
-   * subscriber means an exclusive queue whose contents go when the connection does. That
-   * is deliberate: such a subscriber is ephemeral by construction, and a durable queue per
-   * generated name would leak one per restart, forever. An ephemeral subscriber's failures
-   * are ephemeral too.
+   * One queue serves every queue this channel consumes, as one retry queue serves every
+   * source that shares its delay. A parked message carries the queue it came from, so a
+   * queue per source would name what the message already says, and stay on the broker
+   * long after the queue it was named for has gone.
    *
-   * @param {string} queue the queue the message was consumed from
+   * It is durable whatever the channel is. A groupless subscriber's own queue goes with
+   * its connection, but what it could not process is waiting for a person, and there is
+   * nobody left to tell.
+   *
    * @returns {Promise<void>}
    */
-  async #assertParkedQueue (queue) {
+  async #assertParkedQueue () {
     if (!this.#topology.acknowledgments) return
 
-    const options = this.#queues.get(queue) ?? (this.#topology.durable ? DURABLE : EXCLUSIVE)
-
-    await this.#assertQueue(parkedQueueOf(queue), options)
+    // declared here rather than when a message is first parked, for the reason the retry
+    // queues are: the failure handler is the least likely moment for a declare to succeed
+    await this.#assertQueue(PARKED, DURABLE)
   }
 
   /** The waits between attempts, as a ladder even when it is one rung. */
@@ -556,8 +547,9 @@ class Channel {
   }
 
   /**
-   * The retry topology is asserted once per channel and a parked queue once per queue:
-   * `lazy` keys an initializer by the arguments it takes, and both again after a recovery.
+   * The retry and parking topology is asserted once per channel: `lazy` keys an
+   * initializer by the arguments it takes, and neither takes any. Both again after
+   * a recovery.
    */
   #consume = lazy(this, [this.#assertRetryQueue, this.#assertParkedQueue],
     /**
@@ -660,7 +652,7 @@ class Channel {
       [PARKED_AT_HEADER]: Date.now()
     })
 
-    await this.#publish(DEFAULT, parkedQueueOf(queue), message.content, properties)
+    await this.#publish(DEFAULT, PARKED, message.content, properties)
 
     this.#channel.ack(message)
 
@@ -775,9 +767,9 @@ const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 const RESOURCE_LOCKED = 405
 
 const RETRY_PREFIX = 'comq.retry.'
-const PARKED_PREFIX = 'comq.parked.'
 
-const parkedQueueOf = (queue) => PARKED_PREFIX + queue
+/** Where every message that has run out of attempts is kept, whatever it was consumed from. */
+const PARKED = 'comq.parked'
 
 // Everything comq writes onto a message, under its own prefix: AMQP defines no retry
 // counter, so this one is comq's invention rather than a convention, and an unprefixed

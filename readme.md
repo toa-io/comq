@@ -113,7 +113,8 @@ Send encoded Request message with `replyTo` and `correlationId` properties set a
 return decoded Reply content. The promise stays pending until the Reply arrives, or until the
 [timeout](#timeout) passes.
 
-On the initial call, queues for Requests and Replies are asserted.
+On the initial call, the queue for Requests is asserted, and so is the one this `IO` receives
+every Reply on.
 
 `options` is the encoding, or an object:
 
@@ -550,7 +551,9 @@ requests and are expecting replies.
 - An exchange is asserted as _fanout_ for [Emission](#emission)
   and [Consumption](#consumption), and as _direct_ for [Routing](#routing). One name is one or
   the other: asserting it as both is what the broker refuses.
-- Queues for Replies are _exclusive_ and _auto deleted_.
+- One queue takes every Reply an `IO` receives, `comq.reply..<id>`, _exclusive_ and gone with the
+  connection. A Reply is matched by its `correlationId`, which is unique across processes, so the
+  queue names neither what was called nor what is waiting.
 - A queue [`back`](#addressed-requests) holds is _exclusive_, bound under its Key to a _direct_
   exchange.
 
@@ -558,7 +561,8 @@ comq declares two kinds of queue of its own, for [failed messages](#retries):
 
 - `comq.retry.<delay>`, with a fanout exchange of the same name, one pair per distinct rung of
   the [backoff ladder](#retries), shared by every queue that uses it.
-- `comq.parked.<queue>`, one per consumed queue, declared to live as long as it does.
+- `comq.parked`, one queue for everything parked, whatever it was consumed from, always
+  _durable_.
 
 See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.html#channel_assertQueue).
 
@@ -638,8 +642,10 @@ verdict's own message.
 
 #### Parked messages
 
-A message that has run out of attempts is published to `comq.parked.<queue>` and acknowledged
-only once the broker confirms it. It is not deleted, and it does not depend on a broker-side
+A message that has run out of attempts is published to `comq.parked` and acknowledged
+only once the broker confirms it. There is one such queue, and it holds what every queue this
+connection consumes could not process — including a groupless subscription's, which the broker
+removes with the connection while what it could not process stays. It is not deleted, and it does not depend on a broker-side
 policy. The [`discard`](#diagnostics) diagnostic event is emitted when it happens, and
 [`retry`](#diagnostics) on every attempt before it.
 
@@ -648,9 +654,12 @@ name where it was originally published, `x-comq-queue` the queue it was consumed
 `x-comq-reason` the exception's message, and `x-comq-at` when it was parked. Its original
 properties are kept as they were.
 
-Parked queues grow until somebody drains them, which is deliberate — the alternative is deleting
-evidence. Alert on [`discard`](#diagnostics), and do not delete `comq.retry.*` or `comq.parked.*`
-queues on a running system.
+A message is found by the queue it names rather than by the queue it is in: `comq.parked` holds
+messages from every source, so reading one source's means matching on `x-comq-queue`.
+
+The queue grows until somebody drains it, which is deliberate — the alternative is deleting
+evidence. Nothing comq does removes it or what it holds. Alert on [`discard`](#diagnostics), and
+do not delete `comq.retry.*` or `comq.parked` on a running system.
 
 > **A parked Request is never answered.** A Consumer awaiting its Reply waits until its
 > [timeout](#timeout), or indefinitely without one, and with a limited prefetch that can deadlock
