@@ -26,7 +26,7 @@ the message properties.
 | `x-comq-attempt` | a retried message | Which attempt this delivery is, counting from one. Absent on the first, so read it as `headers?.['x-comq-attempt'] ?? 1`. The last attempt is one more than the number of rungs in the [backoff ladder](../readme.md#retries). |
 | `x-comq-exchange` | a retried or parked message | The exchange it was originally published to. |
 | `x-comq-key` | a retried or parked message | The routing key it was originally published with. |
-| `x-comq-queue` | a parked message | The queue it was consumed from. |
+| `x-comq-queue` | a parked message | The queue it was consumed from. One `comq.parked` queue holds what every source parked, so this is what tells them apart. |
 | `x-comq-reason` | a parked message | The `message` of the exception that ended its attempts. |
 | `x-comq-cause` | a parked message | The `message` of that exception's `cause`, when it has one — a verdict is usually thrown with the failure that prompted it. |
 | `x-comq-at` | a parked message | When it was parked, as `Date.now()`. |

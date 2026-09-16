@@ -6,7 +6,6 @@ const { Promex } = require('promex')
 const { memo, failsafe, lazy, track } = require('./attributes')
 const { verdictOf, PARK } = require('./verdicts')
 const { Unroutable } = require('./unroutable')
-const { Abandoned } = require('./abandoned')
 
 const { decode } = require('./decode')
 const { encode } = require('./encode')
@@ -31,17 +30,21 @@ class IO {
   /** @type {comq.Channel} */
   #events
 
-  /** @type {Map<string, comq.ReplyEmitter>} */
-  #emitters = new Map()
+  /**
+   * Where this IO's replies arrive. One queue answers every request it makes: a reply is
+   * found by its correlation identifier, which is unique across processes, so a queue per
+   * target would name what the identifier already tells apart — and the broker would hold
+   * one for every distinct queue the caller has ever requested.
+   *
+   * @type {comq.ReplyEmitter}
+   */
+  #emitter
 
   /** @type {comq.ReplyEmitter | null} */
   #control = null
 
   /** @type {Map<Promex, comq.Request>} */
   #pendingReplies = new Map()
-
-  /** Whether this has stopped waiting for Replies, see `abandon`. */
-  #abandoning = false
 
   /** @type {[comq.diagnostics.Event, Function][]} */
   #forwarders = []
@@ -254,30 +257,6 @@ class IO {
     await this.#destroyStreams(this.#replyStreams)
   })
 
-  /**
-   * Stops waiting for Replies: every one still outstanding is rejected with `Abandoned`, and a
-   * Request made from now on is refused with it.
-   *
-   * A close waits for every consumer callback to return, and such a callback may be waiting on
-   * a Request of its own. Where the answer to that Request is the very thing going away — the
-   * process it would come from is shutting down alongside this one — the close waits for as
-   * long as the answer takes. This is how that wait is ended. What the Requests themselves do
-   * is not affected: they were sent and may well be processed; what is given up is this side's
-   * interest in the answers.
-   *
-   * Callable at any time, including while a close is already under way.
-   */
-  abandon = memo(async () => {
-    this.#abandoning = true
-
-    // the same three steps `#abandon` takes for one Reply whose caller stopped waiting
-    for (const [reply, request] of this.#pendingReplies) {
-      request.emitter.off(request.properties.correlationId)
-      this.#pendingReplies.delete(reply)
-      reply.reject(new Abandoned())
-    }
-  })
-
   close = memo(async () => {
     await this.seal()
     await this.#destroyStreams(this.#replyPipes)
@@ -340,13 +319,20 @@ class IO {
     return [buffer, properties]
   }
 
-  async #consumeReplies (queue) {
-    const emitter = io.createReplyEmitter(queue)
-    const consumer = this.#getReplyConsumer(queue, emitter)
+  async #consumeReplies () {
+    this.#emitter = await this.#consumeRepliesOf(REPLY)
+  }
 
-    this.#emitters.set(queue, emitter)
+  /**
+   * @param {string} label
+   * @returns {Promise<comq.ReplyEmitter>}
+   */
+  async #consumeRepliesOf (label) {
+    const emitter = io.createReplyEmitter(label)
 
-    await this.#replies.consume(emitter.queue, consumer)
+    await this.#replies.consume(emitter.queue, this.#getReplyConsumer(emitter))
+
+    return emitter
   }
 
   // endregion
@@ -417,11 +403,10 @@ class IO {
       })
 
   /**
-   * @param {string} queue
    * @param {comq.ReplyEmitter} emitter
    * @returns {comq.channels.Consumer}
    */
-  #getReplyConsumer = (queue, emitter) =>
+  #getReplyConsumer = (emitter) =>
     (message) => {
       const payload = decode(message)
 
@@ -453,11 +438,8 @@ class IO {
 
     signal?.throwIfAborted()
 
-    // one made now would be waited for by nobody: the Replies are abandoned already
-    if (this.#abandoning) throw new Abandoned()
-
     const [buffer, contentType] = this.#encode(payload, terms.encoding)
-    const request = this.#createRequest(target, contentType, signal)
+    const request = this.#createRequest(contentType, signal)
     const properties = { ...request.properties }
 
     if (expires !== undefined) {
@@ -524,13 +506,12 @@ class IO {
    * The request holds no copy of what was sent: a retransmission encodes the
    * payload anew, and an unanswered request would otherwise keep two of it.
    *
-   * @param {string} queue
    * @param {comq.Encoding} contentType
    * @param {AbortSignal} [signal]
    * @return {comq.Request}
    */
-  #createRequest (queue, contentType, signal) {
-    const emitter = this.#emitters.get(queue)
+  #createRequest (contentType, signal) {
+    const emitter = this.#emitter
     const correlationId = emitter.next()
 
     /** @type {comq.amqp.Properties} */
@@ -611,11 +592,7 @@ class IO {
    * @return {Promise<comq.ReplyEmitter>}
    */
   async #createControl () {
-    const queue = 'control'
-
-    await this.#consumeReplies(queue)
-
-    return this.#emitters.get(queue)
+    return await this.#consumeRepliesOf(CONTROL)
   }
 
   /**
@@ -723,6 +700,12 @@ const OCTETS = 'application/octet-stream'
 const DEFAULT = 'application/json'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
+
+/** What this IO's replies arrive on, before the random suffix that makes the queue its own. */
+const REPLY = 'comq.reply'
+
+/** What a producer steers its reply streams from, likewise. */
+const CONTROL = 'control'
 
 /**
  * What a caller passed, settled once: a timeout becomes the moment the Request expires, so that

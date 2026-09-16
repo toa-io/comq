@@ -1,11 +1,10 @@
 'use strict'
 
 const assert = require('node:assert')
-const amqplib = require('amqplib')
 const { Given, When, Then } = require('@cucumber/cucumber')
 
-const { getAddress, USER, PASSWORD } = require('./brokers')
 const { until, timeout } = require('../../test/helpers')
+const { reading, pick } = require('./parking')
 
 Given('a producer failing every request to the {token} queue',
   /**
@@ -52,18 +51,9 @@ When('the parked request from the {token} queue is answered by hand',
    * @this {comq.features.Context}
    */
   async function (queue) {
-    const connection = await amqplib.connect(`amqp://${USER}:${PASSWORD}@${getAddress(0)}`)
-    const channel = await connection.createChannel()
-
-    try {
-      let parked
-
-      await channel.consume('comq.parked.' + queue, (message) => {
-        parked = message
-        channel.ack(message)
-      })
-
-      await until(() => parked !== undefined)
+    await reading(async (channel) => {
+      const parked = await pick(channel,
+        (one) => one.properties.headers?.['x-comq-queue'] === queue)
 
       assert.notEqual(parked, undefined, `Nothing was parked from ${queue}`)
 
@@ -74,15 +64,14 @@ When('the parked request from the {token} queue is answered by hand',
 
       this.answer = { answered: true, was: JSON.parse(parked.content.toString()) }
 
+      channel.ack(parked)
+
       channel.sendToQueue(replyTo, Buffer.from(JSON.stringify(this.answer)),
         { correlationId, contentType })
 
       // let the frame reach the broker before the connection goes
       await timeout(100)
-    } finally {
-      await channel.close()
-      await connection.close()
-    }
+    })
   })
 
 Then('the caller receives the reply',

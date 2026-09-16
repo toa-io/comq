@@ -1040,6 +1040,7 @@ describe('release', () => {
 describe('failed messages', () => {
   const DELAY = 1000
   const RETRY = 'comq.retry.' + DELAY
+  const PARKED = 'comq.parked'
 
   let queue
   let exception
@@ -1108,8 +1109,16 @@ describe('failed messages', () => {
     it('should assert the parked queue', async () => {
       await channel.consume(queue, consumer)
 
-      expect(chan.assertQueue).toHaveBeenCalledWith('comq.parked.' + queue,
+      expect(chan.assertQueue).toHaveBeenCalledWith(PARKED,
         expect.objectContaining({ durable: true }))
+    })
+
+    it('should not name the parked queue after the queue it serves', async () => {
+      await channel.consume(queue, consumer)
+
+      const named = chan.assertQueue.mock.calls.filter(([name]) => name.includes(queue))
+
+      expect(named).toHaveLength(1) // the source queue itself
     })
 
     it('should assert the source queue first', async () => {
@@ -1130,15 +1139,14 @@ describe('failed messages', () => {
       expect(queues).toHaveLength(1)
     })
 
-    it('should assert a parked queue per consumed queue', async () => {
-      const one = generate()
-      const another = generate()
+    it('should assert one parked queue however many queues are consumed', async () => {
+      await channel.consume(generate(), consumer)
+      await channel.consume(generate(), consumer)
+      await channel.consume(generate(), consumer)
 
-      await channel.consume(one, consumer)
-      await channel.consume(another, consumer)
+      const parked = chan.assertQueue.mock.calls.filter(([name]) => name === PARKED)
 
-      expect(chan.assertQueue).toHaveBeenCalledWith('comq.parked.' + one, expect.anything())
-      expect(chan.assertQueue).toHaveBeenCalledWith('comq.parked.' + another, expect.anything())
+      expect(parked).toHaveLength(1)
     })
 
     it('should not assert either without acknowledgments', async () => {
@@ -1156,7 +1164,9 @@ describe('failed messages', () => {
       expect(chan.assertExchange).not.toHaveBeenCalled()
     })
 
-    it('should declare the parked queue exclusive for an exclusive queue', async () => {
+    it('should declare the parked queue durable whatever the channel is', async () => {
+      // what a groupless subscriber could not process is waiting for a person, and
+      // there is nobody left to tell once its own queue has gone with its connection
       jest.clearAllMocks()
 
       topology.durable = false
@@ -1166,9 +1176,10 @@ describe('failed messages', () => {
       await channel.consume(queue, consumer)
 
       const [, options] = chan.assertQueue.mock.calls
-        .find(([name]) => name === 'comq.parked.' + queue)
+        .find(([name]) => name === PARKED)
 
-      expect(options).toMatchObject({ exclusive: true })
+      expect(options).toMatchObject({ durable: true })
+      expect(options.exclusive).toBeUndefined()
     })
 
     it('should re-assert after recovery', async () => {
@@ -1181,7 +1192,7 @@ describe('failed messages', () => {
       const repl = await getCreatedChannel(replacement)
 
       expect(repl.assertExchange).toHaveBeenCalledWith(RETRY, 'fanout', expect.anything())
-      expect(repl.assertQueue).toHaveBeenCalledWith('comq.parked.' + queue, expect.anything())
+      expect(repl.assertQueue).toHaveBeenCalledWith(PARKED, expect.anything())
     })
   })
 
@@ -1471,7 +1482,7 @@ describe('failed messages', () => {
 
       expect(asserted()).toStrictEqual(['comq.retry.1000'])
       expect(publications().map(([exchange, key]) => exchange || key))
-        .toStrictEqual(['comq.retry.1000', 'comq.parked.' + queue])
+        .toStrictEqual(['comq.retry.1000', PARKED])
     })
   })
 
@@ -1486,7 +1497,7 @@ describe('failed messages', () => {
       const [exchange, key] = publications()[0]
 
       expect(exchange).toStrictEqual('')
-      expect(key).toStrictEqual('comq.parked.' + queue)
+      expect(key).toStrictEqual(PARKED)
     })
 
     it('should not retry once the attempts are spent', async () => {
@@ -1563,7 +1574,7 @@ describe('failed messages', () => {
 
       const targets = publications().map(([, key]) => key)
 
-      expect(targets).toStrictEqual([queue, 'comq.parked.' + queue])
+      expect(targets).toStrictEqual([queue, PARKED])
     })
 
     it('should give a message one delivery more than the ladder has rungs', async () => {
@@ -1581,7 +1592,7 @@ describe('failed messages', () => {
 
       const targets = publications().map(([, key]) => key)
 
-      expect(targets).toStrictEqual([queue, queue, 'comq.parked.' + queue])
+      expect(targets).toStrictEqual([queue, queue, PARKED])
     })
   })
 
@@ -1596,7 +1607,7 @@ describe('failed messages', () => {
       const [exchange, key] = publications()[0]
 
       expect(exchange).toStrictEqual('')
-      expect(key).toStrictEqual('comq.parked.' + queue)
+      expect(key).toStrictEqual(PARKED)
       expect(publications()).toHaveLength(1)
     })
 
@@ -1684,7 +1695,7 @@ describe('failed messages', () => {
 
       await deliver(delivery({}))
 
-      expect(publications()[0][1]).toStrictEqual('comq.parked.' + queue)
+      expect(publications()[0][1]).toStrictEqual(PARKED)
     })
   })
 

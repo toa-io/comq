@@ -12,8 +12,13 @@ const IMAGE = 'rabbitmq:4.3-management'
 const USER = 'developer'
 const PASSWORD = 'secret'
 const AMQP_PORT = 5672
+const MANAGEMENT_PORT = 15672
 const BROKERS_AMOUNT = 2
 const HOST_PORTS = [5673, 5674]
+
+// what a scenario reads the topology from: a queue nothing holds open is
+// invisible over AMQP, and its absence is what some of them are about
+const MANAGEMENT_HOST_PORTS = [15673, 15674]
 const HEALTHCHECK_INTERVAL = global.COMQ_TESTING_HEALTHCHECK_INTERVAL ?? 1000
 
 /** @type {import('@testcontainers/rabbitmq').StartedRabbitMQContainer[]} */
@@ -33,7 +38,9 @@ async function startBrokers () {
         })
         .withAutoRemove(false)
         .withName(`comq-rmq-${n}`)
-        .withExposedPorts({ container: AMQP_PORT, host: hostPort })
+        .withExposedPorts(
+          { container: AMQP_PORT, host: hostPort },
+          { container: MANAGEMENT_PORT, host: MANAGEMENT_HOST_PORTS[n] })
         .withHealthCheck({
           test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping'],
           interval: 5000,
@@ -89,6 +96,22 @@ function getAddress (n = 0) {
 }
 
 /**
+ * The queues on a broker, by name.
+ *
+ * @param {number} [n]
+ * @returns {Promise<string[]>}
+ */
+async function queues (n = 0) {
+  const authorization = 'Basic ' + Buffer.from(`${USER}:${PASSWORD}`).toString('base64')
+  const url = `http://localhost:${MANAGEMENT_HOST_PORTS[n]}/api/queues/%2F?columns=name`
+  const response = await fetch(url, { headers: { authorization } })
+
+  if (!response.ok) throw new Error(`Cannot read the queues of broker ${n}: ${response.status}`)
+
+  return (await response.json()).map((queue) => queue.name)
+}
+
+/**
  * @param {number} [n]
  */
 async function healthy (n = 0) {
@@ -129,5 +152,6 @@ module.exports = {
   startBrokers,
   stopBrokers,
   getAddress,
+  queues,
   actions
 }

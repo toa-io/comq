@@ -41,7 +41,7 @@ let replies
 
 let promise
 
-const REPLY = new RegExp(`^${queue}..[0-9a-f]+$`)
+const REPLY = /^comq\.reply\.\.[0-9a-f]+$/
 
 beforeEach(async () => {
   promise = io.request(queue, payload)
@@ -60,6 +60,17 @@ it('should initialize request-reply channels', async () => {
 
 it('should consume replies queue', async () => {
   expect(replies.consume).toHaveBeenCalledWith(expect.stringMatching(REPLY), expect.any(Function))
+})
+
+it('should consume one replies queue however many queues are requested', async () => {
+  // a reply is found by its correlation identifier, so a queue per target would
+  // name what the identifier already tells apart
+  io.request(generate(), payload)
+  io.request(generate(), payload)
+
+  await immediate()
+
+  expect(replies.consume).toHaveBeenCalledTimes(1)
 })
 
 describe('send', () => {
@@ -84,9 +95,8 @@ describe('send', () => {
 
   it('should set replyTo', async () => {
     const properties = call[2]
-    const rx = new RegExp(`^${queue}..[a-z0-9]+`)
 
-    expect(properties.replyTo).toMatch(rx)
+    expect(properties.replyTo).toMatch(REPLY)
   })
 
   it('should consume replyTo', async () => {

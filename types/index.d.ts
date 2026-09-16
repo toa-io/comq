@@ -38,9 +38,3 @@ export class Unroutable extends Error {
 export class Interrupted extends Error {
   readonly reason: string
 }
-
-/**
- * A Reply nobody is waiting for any more, or a Request made once the waiting has stopped.
- * See `IO.abandon`.
- */
-export class Abandoned extends Error {}
