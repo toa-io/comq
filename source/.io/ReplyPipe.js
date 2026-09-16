@@ -60,12 +60,25 @@ class ReplyPipe extends EventEmitter {
       ok: { correlationId, replyTo: feedback.queue, ...CONTROL, headers: FLOW }
     }
 
+    // The source is not read until the confirmation is published, and a blocked broker holds the
+    // publish for as long as it stays blocked. A source failing in the meantime — a reply stream
+    // being relayed times out — would raise an `error` nobody listens to. How it failed is not
+    // reported to the consumer anyway: `#pump` ends the stream once it finds the source destroyed.
+    stream.on('error', noop)
+
     channel.diagnose('return', this.#onReturn)
     feedback.on(correlationId, this.#control)
   }
 
   async pipe () {
-    await this.#transmit(control.ok, this.#properties.ok)
+    try {
+      await this.#transmit(control.ok, this.#properties.ok)
+    } catch (exception) {
+      // nobody is going to read the source now
+      this.#interrupt()
+
+      throw exception
+    }
 
     if (this.#closed) return
 
@@ -197,5 +210,7 @@ const CHUNK = { mandatory: true }
 const CONTROL = { type: 'control', mandatory: true }
 
 const FLOW = { [FLOW_HEADER]: true }
+
+function noop () {}
 
 exports.ReplyPipe = ReplyPipe

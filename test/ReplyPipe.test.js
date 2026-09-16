@@ -168,3 +168,43 @@ it('should heartbeat while idle', async () => {
 
   pipe.destroy()
 })
+
+// the confirmation is published before the source is read, and a blocked broker holds the publish
+// for as long as it is blocked: the source may fail in the meantime, and nobody listens to it yet
+it('should survive a source that fails before the confirmation is sent', async () => {
+  const gate = new Promex()
+
+  reply.mockImplementation(async (message, properties) => {
+    sent.push([message, properties])
+    await gate
+
+    return true
+  })
+
+  const source = new Readable({ objectMode: true, read () {} })
+  const creating = ReplyPipe.create(request, source, channel, feedback, reply)
+
+  source.destroy(new Error('nothing arrived'))
+
+  await timeout(10)
+
+  gate.resolve()
+
+  const pipe = await creating
+
+  await closing(pipe)
+
+  expect(source.destroyed).toStrictEqual(true)
+})
+
+it('should destroy the source if the confirmation cannot be sent', async () => {
+  reply.mockImplementation(async () => {
+    throw new Error('channel closed')
+  })
+
+  const source = new Readable({ objectMode: true, read () {} })
+
+  await expect(ReplyPipe.create(request, source, channel, feedback, reply)).rejects.toThrow('channel closed')
+
+  expect(source.destroyed).toStrictEqual(true)
+})
