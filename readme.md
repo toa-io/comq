@@ -6,8 +6,8 @@ for distributed, eventually consistent systems running on Node.js.
 ## Features
 
 - [Dynamic topology](#topology)
-- [Request](#request)-[reply](#reply) (RPC), with a [timeout](#timeout)
-- [Addressed requests](#addressed-requests) to the one connection holding a Key
+- [Request](#request)-[reply](#reply) (RPC)
+- [Addressed requests](#addressed-requests) to the one connection holding a Key, with a [timeout](#timeout)
 - Events ([pub](#emission)/[sub](#consumption)), fanned out or [routed](#routing)
 - [Tasks](#tasks)
 - [Pipelines](#pipelines)
@@ -107,49 +107,20 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 ## Request
 
-`async IO.request(queue: string, payload: any, options?: string | RequestOptions): any`
+`async IO.request(queue: string, payload: any, encoding?: string): any`
 
 Send encoded Request message with `replyTo` and `correlationId` properties set and
-return decoded Reply content. The promise stays pending until the Reply arrives, or until the
-[timeout](#timeout) passes.
+return decoded Reply content. The promise stays pending until the Reply arrives, however long
+that takes: a Request has no timeout and cannot be withdrawn. One no Producer can answer is
+[parked](#parked-messages), and can still be answered while its caller waits.
 
 On the initial call, the queue for Requests is asserted, and so is the one this `IO` receives
 every Reply on.
-
-`options` is the encoding, or an object:
-
-| Option     | Type          | Default            |
-|------------|---------------|--------------------|
-| `encoding` | `string`      | `application/json` |
-| `timeout`  | `number`, ms  | none               |
-| `signal`   | `AbortSignal` | none               |
 
 ### Example
 
 ```javascript
 const sum = await io.request('add_numbers', { a: 1, b: 2 })
-```
-
-### Timeout
-
-A Request with a `timeout` rejects once it passes, with the `TimeoutError` of
-[`AbortSignal.timeout`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static).
-It is published with that much
-[expiration](https://www.rabbitmq.com/docs/ttl#per-message-ttl-in-publishers), so a Request no
-Producer has taken by then is dropped by the broker and never processed. A Request a Producer has
-already taken is processed to the end, and its Reply is discarded. A Request re-sent after a lost
-connection carries the time it has left.
-
-A `signal` rejects the Request with its reason once aborted, within the `timeout` where both are
-given. It ends the wait and leaves the Request where it is: in its queue until the `timeout`
-passes, or, without a `timeout`, until a Producer takes it. A Request abandoned by its `signal` may
-therefore still be processed.
-
-A Request that failed and waits for its [next attempt](#retries) loses its expiration on the way
-back to its queue, so it may be processed after its caller has stopped waiting.
-
-```javascript
-const sum = await io.request('add_numbers', { a: 1, b: 2 }, { timeout: 5000 })
 ```
 
 ## Consumption
@@ -231,7 +202,7 @@ await io.route('records', 'store.customers', { id: 2 }) // not delivered to the 
 
 `async IO.back(exchange: string, key: string, producer): void`
 
-`async IO.call(exchange: string, key: string, payload: any, options?: string | RequestOptions): any`
+`async IO.call(exchange: string, key: string, payload: any, options?: string | CallOptions): any`
 
 A Request to the one connection holding a Key, where a [Request](#request) goes to whichever
 Producer takes it first.
@@ -245,8 +216,15 @@ is let go when its connection closes, however it closes — once the broker has 
 connection that went without a word. `back` returns once a broker holds the Key. The rest of the
 connection works throughout, and a connection that is restored claims its Keys again the same way.
 
-`call` publishes the encoded Request to the exchange under the `key` and returns the decoded Reply,
-taking the same options as [`request`](#request).
+`call` publishes the encoded Request to the exchange under the `key` and returns the decoded Reply.
+
+`options` is the encoding, or an object:
+
+| Option     | Type          | Default            |
+|------------|---------------|--------------------|
+| `encoding` | `string`      | `application/json` |
+| `timeout`  | `number`, ms  | none               |
+| `signal`   | `AbortSignal` | none               |
 
 A call ends in one of three ways:
 
@@ -271,6 +249,24 @@ once one of them holds it; a shard where it is taken goes on claiming it. Two co
 same Key can therefore hold it on different shards and both answer calls, and `taken` is what says
 so. A call returned by one shard is published on the next, and refused once every shard has
 returned it.
+
+### Timeout
+
+A call with a `timeout` rejects once it passes, with the `TimeoutError` of
+[`AbortSignal.timeout`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static).
+It is published with that much
+[expiration](https://www.rabbitmq.com/docs/ttl#per-message-ttl-in-publishers), so a call its holder
+has not taken by then is dropped by the broker and never processed. A call the holder has already
+taken is processed to the end, and its Reply is discarded. A call re-sent after a lost connection
+carries the time it has left.
+
+A `signal` rejects the call with its reason once aborted, within the `timeout` where both are
+given. It ends the wait and leaves the call where it is: in its queue until the `timeout` passes,
+or, without a `timeout`, until its holder takes it. A call abandoned by its `signal` may therefore
+still be processed.
+
+A call that failed and waits for its [next attempt](#retries) loses its expiration on the way back
+to its queue, so it may be processed after its caller has stopped waiting.
 
 ### Example
 
@@ -661,10 +657,9 @@ The queue grows until somebody drains it, which is deliberate — the alternativ
 evidence. Nothing comq does removes it or what it holds. Alert on [`discard`](#diagnostics), and
 do not delete `comq.retry.*` or `comq.parked` on a running system.
 
-> **A parked Request is never answered.** A Consumer awaiting its Reply waits until its
-> [timeout](#timeout), or indefinitely without one, and with a limited prefetch that can deadlock
-> it. Parking keeps the Request rather than deleting
-> it — and it keeps `replyTo` and `correlationId`, so a Reply can still be produced from it by
+> **A parked Request is never answered.** A Consumer awaiting its Reply waits indefinitely — a
+> call until its [timeout](#timeout) — and with a limited prefetch that can deadlock it. Parking
+> keeps the Request rather than deleting it — and it keeps `replyTo` and `correlationId`, so a Reply can still be produced from it by
 > hand while the caller is alive — but comq itself sends no Reply and reports no error to the
 > caller.
 
