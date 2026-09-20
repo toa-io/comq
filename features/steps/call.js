@@ -84,9 +84,21 @@ Given('a holder never answering {token} under the {token} key',
     await channel.assertExchange(exchange, 'direct', { durable: true })
     await channel.assertQueue(queue, { exclusive: true })
     await channel.bindQueue(queue, exchange, key)
-    await channel.consume(queue, () => undefined)
+    await channel.consume(queue, () => (this.handed = true))
 
     this.silent = connection
+  })
+
+Then('the silent holder has taken the call',
+  /**
+   * The publication is awaited nowhere, and what the crash has to find already queued is what
+   * the holder has been handed.
+   *
+   * @this {comq.features.Context}
+   */
+  async function () {
+    assert.equal(await until(() => this.handed === true, 10_000), true,
+      'The silent holder was handed nothing')
   })
 
 Given('a holder not taking {token} under the {token} key',

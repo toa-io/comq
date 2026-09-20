@@ -65,7 +65,7 @@ Feature: Calls under a key
   Scenario: A caller stops waiting for a holder that crashed
     Given a holder never answering `void` under the `a` key
     When the consumer calls `void` under the `a` key with a 1000ms timeout
-    And after 100ms
+    And the silent holder has taken the call
     And the silent holder crashes
     Then the consumer stops waiting
     And a call to `void` under the `a` key is refused within 10 seconds
