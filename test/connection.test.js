@@ -10,7 +10,7 @@ const { amqplib, connect } = require('./amqplib.mock')
 const { channel: create } = require('./connection.mock')
 const mock = { amqplib, channel: { create } }
 
-jest.mock('amqplib', () => mock.amqplib)
+jest.mock('@toa.io/amqplib', () => mock.amqplib)
 jest.mock('../source/channel', () => mock.channel)
 
 const presets = require('../source/topology')

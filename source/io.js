@@ -84,16 +84,21 @@ class IO {
     })
 
   /**
+   * Waits for the Reply for as long as it takes: a Request is answered eventually, and one no
+   * Producer can answer is parked rather than abandoned.
+   *
    * @param {string} queue
    * @param {any | Readable} payload
-   * @param {comq.Encoding | comq.RequestOptions} [options]
+   * @param {comq.Encoding} [encoding]
    * @returns {Promise<any | Readable>}
    */
-  request (queue, payload, options) {
-    const settled = terms(options)
+  async request (queue, payload, encoding) {
+    // a caller of the version that took a timeout here would otherwise wait on in silence
+    if (typeof encoding === 'object' && encoding !== null) {
+      throw new TypeError('A Request takes an encoding and waits for its Reply')
+    }
 
-    // the channels and the queue a first Request declares are waited for within the terms too
-    return abortable(this.#request(queue, payload, settled), settled.signal)
+    return await this.#request(queue, payload, { encoding })
   }
 
   /**
@@ -103,12 +108,13 @@ class IO {
    * @param {string} exchange
    * @param {string} key
    * @param {any} payload
-   * @param {comq.Encoding | comq.RequestOptions} [options]
+   * @param {comq.Encoding | comq.CallOptions} [options]
    * @returns {Promise<any | Readable>}
    */
   call (exchange, key, payload, options) {
     const settled = terms(options)
 
+    // the channels a first call declares are waited for within the terms too
     return abortable(this.#call(exchange, key, payload, settled), settled.signal)
   }
 
@@ -129,8 +135,7 @@ class IO {
       await this.#requests.held(exchange, exchange + '.' + key, key, consumer)
     })
 
-  // failsafe is aimed to retransmit unanswered messages; the terms are taken once, so a
-  // re-sent Request keeps the deadline of the first
+  // failsafe is aimed to retransmit unanswered messages
   #request = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
     failsafe(this, this.#recover,
       /**
@@ -152,6 +157,7 @@ class IO {
           (buffer, properties) => this.#requests.send(queue, buffer, properties))
       }))
 
+  // the terms are taken once, so a re-sent call keeps the deadline of the first
   #call = lazy(this, [this.#createRequestReplyChannels, this.#consumeReplies],
     failsafe(this, this.#recover,
       /**
@@ -708,10 +714,10 @@ const REPLY = 'comq.reply'
 const CONTROL = 'control'
 
 /**
- * What a caller passed, settled once: a timeout becomes the moment the Request expires, so that
+ * What a caller passed, settled once: a timeout becomes the moment the call expires, so that
  * every attempt of it shares one deadline.
  *
- * @param {comq.Encoding | comq.RequestOptions} [options]
+ * @param {comq.Encoding | comq.CallOptions} [options]
  * @returns {comq.Terms}
  */
 function terms (options) {

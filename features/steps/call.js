@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
-const amqplib = require('amqplib')
+const amqplib = require('@toa.io/amqplib')
 const { Given, When, Then, After } = require('@cucumber/cucumber')
 
 const { connect, Unroutable } = require('../../')
@@ -84,9 +84,74 @@ Given('a holder never answering {token} under the {token} key',
     await channel.assertExchange(exchange, 'direct', { durable: true })
     await channel.assertQueue(queue, { exclusive: true })
     await channel.bindQueue(queue, exchange, key)
-    await channel.consume(queue, () => undefined)
+    await channel.consume(queue, () => (this.handed = true))
 
     this.silent = connection
+  })
+
+Then('the silent holder has taken the call',
+  /**
+   * The publication is awaited nowhere, and what the crash has to find already queued is what
+   * the holder has been handed.
+   *
+   * @this {comq.features.Context}
+   */
+  async function () {
+    assert.equal(await until(() => this.handed === true, 10_000), true,
+      'The silent holder was handed nothing')
+  })
+
+Given('a holder not taking {token} under the {token} key',
+  /**
+   * Holds the key as comq does, and takes nothing until told to, so that a call waits in its
+   * queue. Each scenario holds a key of its own: the broker releases an exclusive queue once it
+   * has noticed the connection close, and a scenario that declared it again before then would be
+   * refused it.
+   *
+   * @param {string} exchange
+   * @param {string} key
+   * @this {comq.features.Context}
+   */
+  async function (exchange, key) {
+    const connection = await amqplib.connect(url(0))
+    const channel = await connection.createChannel()
+    const queue = exchange + '.' + key
+
+    await channel.assertExchange(exchange, 'direct', { durable: true })
+    await channel.assertQueue(queue, { exclusive: true })
+    await channel.bindQueue(queue, exchange, key)
+
+    this.idle = { connection, channel, queue, taken: 0 }
+  })
+
+When('the idle holder starts taking',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    const idle = this.idle
+
+    await idle.channel.consume(idle.queue, () => idle.taken++, { noAck: true })
+  })
+
+When('the consumer calls {token} under the {token} key with a signal',
+  /**
+   * @param {string} exchange
+   * @param {string} key
+   * @this {comq.features.Context}
+   */
+  async function (exchange, key) {
+    this.controller = new AbortController()
+
+    call(this, this.io.call(exchange, key, { key }, { signal: this.controller.signal }))
+  })
+
+When('the signal aborts',
+  /**
+   * @this {comq.features.Context}
+   */
+  function () {
+    this.controller.abort()
   })
 
 When('the silent holder crashes',
@@ -149,16 +214,6 @@ When('the consumer calls {token} under the {token} key {number} times',
     this.replies = await Promise.all(calls)
   })
 
-When('the consumer sends a request to the {token} queue with a {number}ms timeout',
-  /**
-   * @param {string} queue
-   * @param {number} ms
-   * @this {comq.features.Context}
-   */
-  async function (queue, ms) {
-    call(this, this.io.request(queue, { queue }, { timeout: ms }))
-  })
-
 When('the holder is sealed',
   /**
    * @this {comq.features.Context}
@@ -192,19 +247,32 @@ When('the first holder disconnects',
     await this.holder.close()
   })
 
-When('a producer counting requests to the {token} queue',
+Then('the idle holder takes nothing',
   /**
-   * @param {string} queue
    * @this {comq.features.Context}
    */
-  async function (queue) {
-    this.produced = 0
+  async function () {
+    await timeout(500)
 
-    await this.io.reply(queue, () => {
-      this.produced++
+    assert.equal(this.idle.taken, 0, 'An expired call was taken')
+  })
 
-      return null
-    })
+Then('the idle holder takes the call',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    await until(() => this.idle.taken > 0, 5000)
+
+    assert.equal(this.idle.taken, 1)
+  })
+
+Then('the consumer stops waiting for the aborted call',
+  /**
+   * @this {comq.features.Context}
+   */
+  async function () {
+    await assert.rejects(this.reply, (error) => error.name === 'AbortError')
   })
 
 Then('the call is refused as unroutable',
@@ -373,16 +441,6 @@ Then('every call is answered',
     assert.deepEqual(this.replies, this.replies.map((_, n) => n))
   })
 
-Then('the producer receives nothing',
-  /**
-   * @this {comq.features.Context}
-   */
-  async function () {
-    await timeout(500)
-
-    assert.equal(this.produced, 0, 'An expired request was processed')
-  })
-
 After(
   /**
    * @this {comq.features.Context}
@@ -390,9 +448,11 @@ After(
   async function () {
     await Promise.all((this.holders ?? []).map((io) => io.close()))
     await this.silent?.close().catch(() => undefined)
+    await this.idle?.connection.close().catch(() => undefined)
 
     this.holders = []
     this.silent = undefined
+    this.idle = undefined
   })
 
 /**

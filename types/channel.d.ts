@@ -1,4 +1,4 @@
-import { Message, Options, Connection } from 'amqplib'
+import { Message, Options, Connection } from '@toa.io/amqplib'
 import * as _diagnostics from './diagnostic'
 
 declare namespace comq {

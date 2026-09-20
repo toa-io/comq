@@ -65,7 +65,29 @@ Feature: Calls under a key
   Scenario: A caller stops waiting for a holder that crashed
     Given a holder never answering `void` under the `a` key
     When the consumer calls `void` under the `a` key with a 1000ms timeout
-    And after 100ms
+    And the silent holder has taken the call
     And the silent holder crashes
     Then the consumer stops waiting
     And a call to `void` under the `a` key is refused within 10 seconds
+
+  Scenario: A caller stops waiting at its timeout
+    Given a holder on another connection answering `slow` under the `a` key in 1000ms
+    When the consumer calls `slow` under the `a` key with a 200ms timeout
+    Then the consumer stops waiting
+
+  Scenario: A call its holder has not taken in time is never processed
+    Given a holder not taking `later` under the `a` key
+    When the consumer calls `later` under the `a` key with a 200ms timeout
+    Then the consumer stops waiting
+    When after 300ms
+    And the idle holder starts taking
+    Then the idle holder takes nothing
+
+  Scenario: A call abandoned by its signal stays in its queue
+    Given a holder not taking `stray` under the `a` key
+    When the consumer calls `stray` under the `a` key with a signal
+    And after 100ms
+    And the signal aborts
+    Then the consumer stops waiting for the aborted call
+    When the idle holder starts taking
+    Then the idle holder takes the call

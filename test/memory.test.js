@@ -12,7 +12,7 @@ const { timeout } = require('./helpers')
 const mock = require('./amqplib.mock')
 const { amqplib, connect } = mock
 
-jest.mock('amqplib', () => mock.amqplib)
+jest.mock('@toa.io/amqplib', () => mock.amqplib)
 
 const { connect: open, assert } = require('../source')
 const { SingletonConnection } = require('../source/singleton')

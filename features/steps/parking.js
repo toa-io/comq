@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
-const amqplib = require('amqplib')
+const amqplib = require('@toa.io/amqplib')
 const { Given, When, Then } = require('@cucumber/cucumber')
 
 const { getAddress, USER, PASSWORD } = require('./brokers')
@@ -58,7 +58,7 @@ Then('a message parked from the {token} exchange is in the parking queue',
  * Runs `read` against a connection of its own, so that what it does to the parking
  * queue is not what comq is doing to it.
  *
- * @param {(channel: import('amqplib').Channel) => Promise<void>} read
+ * @param {(channel: import('@toa.io/amqplib').Channel) => Promise<void>} read
  */
 async function reading (read) {
   const connection = await amqplib.connect(`amqp://${USER}:${PASSWORD}@${getAddress(0)}`)
@@ -77,9 +77,9 @@ async function reading (read) {
  * every scenario before this one left in it, so everything that does not match is given
  * back; the match is left unacknowledged, for the caller to take or to return.
  *
- * @param {import('amqplib').Channel} channel
- * @param {(message: import('amqplib').GetMessage) => boolean} matches
- * @returns {Promise<import('amqplib').GetMessage | undefined>}
+ * @param {import('@toa.io/amqplib').Channel} channel
+ * @param {(message: import('@toa.io/amqplib').GetMessage) => boolean} matches
+ * @returns {Promise<import('@toa.io/amqplib').GetMessage | undefined>}
  */
 async function pick (channel, matches) {
   const deadline = Date.now() + DEADLINE
