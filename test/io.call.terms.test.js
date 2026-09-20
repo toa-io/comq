@@ -21,7 +21,8 @@ let requests
 /** @type {jest.MockedObject<comq.Channel>} */
 let replies
 
-const queue = generate()
+const exchange = generate()
+const key = generate()
 const payload = { [generate()]: generate() }
 
 beforeEach(async () => {
@@ -34,12 +35,12 @@ beforeEach(async () => {
 // endregion
 
 describe('timeout', () => {
-  it('should expire the Request when the caller stops waiting', async () => {
-    io.request(queue, payload, { timeout: 10000 }).catch(noop)
+  it('should expire the call when the caller stops waiting', async () => {
+    io.call(exchange, key, payload, { timeout: 10000 }).catch(noop)
 
     await initialized()
 
-    const expiration = Number(requests.send.mock.calls[0][2].expiration)
+    const expiration = Number(requests.route.mock.calls[0][3].expiration)
 
     expect(expiration).toBeGreaterThan(9000)
     expect(expiration).toBeLessThanOrEqual(10000)
@@ -48,29 +49,29 @@ describe('timeout', () => {
   it('should keep the encoding', async () => {
     const encoding = 'application/octet-stream'
 
-    io.request(queue, randomBytes(8), { encoding, timeout: 10000 }).catch(noop)
+    io.call(exchange, key, randomBytes(8), { encoding, timeout: 10000 }).catch(noop)
 
     await initialized()
 
-    expect(requests.send.mock.calls[0][2].contentType).toStrictEqual(encoding)
+    expect(requests.route.mock.calls[0][3].contentType).toStrictEqual(encoding)
   })
 
   it('should stop waiting while the channels are being created', async () => {
     connection.createChannel.mockImplementation(() => new Promise(noop))
 
-    const promise = io.request(queue, payload, { timeout: 20 })
+    const promise = io.call(exchange, key, payload, { timeout: 20 })
 
     await expect(promise).rejects.toMatchObject({ name: 'TimeoutError' })
   })
 
   it('should reject once it has passed', async () => {
-    const promise = io.request(queue, payload, { timeout: 20 })
+    const promise = io.call(exchange, key, payload, { timeout: 20 })
 
     await expect(promise).rejects.toMatchObject({ name: 'TimeoutError' })
   })
 
   it('should resolve with a reply that arrives in time', async () => {
-    const promise = io.request(queue, payload, { timeout: 10000 })
+    const promise = io.call(exchange, key, payload, { timeout: 10000 })
     const content = randomBytes(8)
 
     await initialized()
@@ -80,7 +81,7 @@ describe('timeout', () => {
   })
 
   it('should re-send with the time that is left', async () => {
-    io.request(queue, payload, { timeout: 10000 }).catch(noop)
+    io.call(exchange, key, payload, { timeout: 10000 }).catch(noop)
 
     await initialized()
     await timeout(20)
@@ -89,10 +90,10 @@ describe('timeout', () => {
 
     await immediate()
 
-    expect(requests.send).toHaveBeenCalledTimes(2)
+    expect(requests.route).toHaveBeenCalledTimes(2)
 
-    const first = Number(requests.send.mock.calls[0][2].expiration)
-    const second = Number(requests.send.mock.calls[1][2].expiration)
+    const first = Number(requests.route.mock.calls[0][3].expiration)
+    const second = Number(requests.route.mock.calls[1][3].expiration)
 
     expect(second).toBeLessThan(first)
   })
@@ -102,7 +103,7 @@ describe('signal', () => {
   it('should reject with the reason it was aborted for', async () => {
     const controller = new AbortController()
     const reason = new Error(generate())
-    const promise = io.request(queue, payload, { signal: controller.signal })
+    const promise = io.call(exchange, key, payload, { signal: controller.signal })
 
     await initialized()
 
@@ -111,14 +112,14 @@ describe('signal', () => {
     await expect(promise).rejects.toBe(reason)
   })
 
-  it('should leave the Request in its queue', async () => {
+  it('should leave the call in its queue', async () => {
     const controller = new AbortController()
 
-    io.request(queue, payload, { signal: controller.signal }).catch(noop)
+    io.call(exchange, key, payload, { signal: controller.signal }).catch(noop)
 
     await initialized()
 
-    expect(requests.send.mock.calls[0][2].expiration).toBeUndefined()
+    expect(requests.route.mock.calls[0][3].expiration).toBeUndefined()
   })
 
   it('should reject at once when aborted before the channels exist', async () => {
@@ -129,27 +130,27 @@ describe('signal', () => {
 
     controller.abort(reason)
 
-    await expect(io.request(queue, payload, { signal: controller.signal })).rejects.toBe(reason)
+    await expect(io.call(exchange, key, payload, { signal: controller.signal })).rejects.toBe(reason)
   })
 
   it('should send nothing once aborted', async () => {
     const controller = new AbortController()
 
-    // the channels exist before the aborted Request is made
-    io.request(queue, payload).catch(noop)
+    // the channels exist before the aborted call is made
+    io.call(exchange, key, payload).catch(noop)
 
     await initialized()
 
     controller.abort()
 
-    await expect(io.request(queue, payload, { signal: controller.signal })).rejects.toBeDefined()
+    await expect(io.call(exchange, key, payload, { signal: controller.signal })).rejects.toBeDefined()
 
-    expect(requests.send).toHaveBeenCalledTimes(1)
+    expect(requests.route).toHaveBeenCalledTimes(1)
   })
 
   it('should not re-send what it abandoned', async () => {
     const controller = new AbortController()
-    const promise = io.request(queue, payload, { signal: controller.signal })
+    const promise = io.call(exchange, key, payload, { signal: controller.signal })
 
     await initialized()
 
@@ -161,19 +162,19 @@ describe('signal', () => {
 
     await immediate()
 
-    expect(requests.send).toHaveBeenCalledTimes(1)
+    expect(requests.route).toHaveBeenCalledTimes(1)
   })
 
   it('should stop waiting for a publication', async () => {
-    io.request(queue, payload).catch(noop)
+    io.call(exchange, key, payload).catch(noop)
 
     await initialized()
 
-    requests.send.mockImplementationOnce(() => new Promise(noop))
+    requests.route.mockImplementationOnce(() => new Promise(noop))
 
     const controller = new AbortController()
     const reason = new Error(generate())
-    const promise = io.request(queue, payload, { signal: controller.signal })
+    const promise = io.call(exchange, key, payload, { signal: controller.signal })
 
     await immediate()
 
@@ -184,7 +185,7 @@ describe('signal', () => {
 
   it('should discard a reply that arrives afterwards', async () => {
     const controller = new AbortController()
-    const promise = io.request(queue, payload, { signal: controller.signal })
+    const promise = io.call(exchange, key, payload, { signal: controller.signal })
 
     await initialized()
 
@@ -197,7 +198,7 @@ describe('signal', () => {
 
   it('should end the wait within the timeout', async () => {
     const controller = new AbortController()
-    const promise = io.request(queue, payload, { signal: controller.signal, timeout: 20 })
+    const promise = io.call(exchange, key, payload, { signal: controller.signal, timeout: 20 })
 
     await expect(promise).rejects.toMatchObject({ name: 'TimeoutError' })
   })
@@ -216,7 +217,7 @@ async function initialized () {
  * @param {Buffer} [content]
  */
 async function answer (index, content = randomBytes(8)) {
-  const { correlationId } = requests.send.mock.calls[index][2]
+  const { correlationId } = requests.route.mock.calls[index][3]
   const deliver = replies.consume.mock.calls[0][1]
 
   await deliver({ content, properties: { correlationId } })

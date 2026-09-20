@@ -37,19 +37,19 @@ declare namespace comq {
     signal?: AbortSignal
   }
 
-  /** How long a caller waits for a Reply. */
-  interface RequestOptions {
+  /** How long a caller waits for the Reply to a call. */
+  interface CallOptions {
     encoding?: _encoding.Encoding
 
     /**
-     * Milliseconds to wait for the Reply. A Request nobody has taken by then is dropped by the
+     * Milliseconds to wait for the Reply. A call nobody has taken by then is dropped by the
      * broker; one already taken may still be processed, and its Reply is discarded.
      */
     timeout?: number
 
     /**
-     * Ends the wait when aborted, within the timeout. The Request stays in its queue until the
-     * timeout passes, or, without one, until a Producer takes it.
+     * Ends the wait when aborted, within the timeout. The call stays in its queue until the
+     * timeout passes, or, without one, until its holder takes it.
      */
     signal?: AbortSignal
   }
@@ -64,15 +64,16 @@ declare namespace comq {
   interface IO extends _diagnostics.Diagnosable {
     reply(queue: string, produce: Producer): Promise<void>
 
-    request<Reply = any, Request = any>(queue: string, payload: Request, options?: _encoding.Encoding | RequestOptions): Promise<Reply> | Promise<Readable>
+    /** Waits for the Reply for as long as it takes. */
+    request<Reply = any, Request = any>(queue: string, payload: Request, encoding?: _encoding.Encoding): Promise<Reply> | Promise<Readable>
 
-    request(queue: string, stream: Readable, options?: _encoding.Encoding | RequestOptions): Promise<Readable>
+    request(queue: string, stream: Readable, encoding?: _encoding.Encoding): Promise<Readable>
 
     /**
      * Sends a Request to whoever holds `key` on the routed `exchange`, through `back`. One that
      * nobody holds is refused with `Unroutable`.
      */
-    call<Reply = any, Request = any>(exchange: string, key: string, payload: Request, options?: _encoding.Encoding | RequestOptions): Promise<Reply> | Promise<Readable>
+    call<Reply = any, Request = any>(exchange: string, key: string, payload: Request, options?: _encoding.Encoding | CallOptions): Promise<Reply> | Promise<Readable>
 
     /**
      * Answers the Requests `call` sends under `key`, from a queue this connection alone holds.

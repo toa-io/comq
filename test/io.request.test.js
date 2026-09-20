@@ -115,6 +115,19 @@ describe('send', () => {
     expect(call[2]).toMatchObject({ contentType })
   })
 
+  it('should not expire', async () => {
+    expect(call[2].expiration).toBeUndefined()
+  })
+
+  it('should refuse options other than the encoding', async () => {
+    requests.send.mockClear()
+
+    await expect(io.request(queue, payload, { timeout: 1000 })).rejects.toBeInstanceOf(TypeError)
+    await expect(io.request(queue, payload, { signal: new AbortController().signal })).rejects.toBeInstanceOf(TypeError)
+
+    expect(requests.send).not.toHaveBeenCalled()
+  })
+
   it('should throw if encoding is not supported', async () => {
     const encoding = /** @type {comq.Encoding} */ 'wtf/' + generate()
 
