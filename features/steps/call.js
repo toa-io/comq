@@ -104,7 +104,9 @@ Then('the silent holder has taken the call',
 Given('a holder not taking {token} under the {token} key',
   /**
    * Holds the key as comq does, and takes nothing until told to, so that a call waits in its
-   * queue.
+   * queue. Each scenario holds a key of its own: the broker releases an exclusive queue once it
+   * has noticed the connection close, and a scenario that declared it again before then would be
+   * refused it.
    *
    * @param {string} exchange
    * @param {string} key

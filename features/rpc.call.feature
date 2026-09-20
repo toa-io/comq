@@ -84,8 +84,8 @@ Feature: Calls under a key
     Then the idle holder takes nothing
 
   Scenario: A call abandoned by its signal stays in its queue
-    Given a holder not taking `later` under the `a` key
-    When the consumer calls `later` under the `a` key with a signal
+    Given a holder not taking `stray` under the `a` key
+    When the consumer calls `stray` under the `a` key with a signal
     And after 100ms
     And the signal aborts
     Then the consumer stops waiting for the aborted call
