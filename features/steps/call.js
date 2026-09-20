@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
-const amqplib = require('amqplib')
+const amqplib = require('@toa.io/amqplib')
 const { Given, When, Then, After } = require('@cucumber/cucumber')
 
 const { connect, Unroutable } = require('../../')

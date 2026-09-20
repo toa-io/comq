@@ -1,4 +1,4 @@
-import * as amqplib from 'amqplib'
+import * as amqplib from '@toa.io/amqplib'
 
 declare namespace comq.amqp {
 

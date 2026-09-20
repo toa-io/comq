@@ -58,7 +58,7 @@ class Connection extends EventEmitter {
 
 const connect = async (url) => new Connection(url)
 
-/** @type {jest.MockedObject<import('amqplib')>} */
+/** @type {jest.MockedObject<import('@toa.io/amqplib')>} */
 const amqplib = {
   connect: jest.fn(connect)
 }

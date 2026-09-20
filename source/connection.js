@@ -1,7 +1,7 @@
 'use strict'
 
 const { setTimeout: delay } = require('node:timers/promises')
-const amqp = require('amqplib')
+const amqp = require('@toa.io/amqplib')
 const { Promex } = require('promex')
 const { retry } = require('reretry')
 

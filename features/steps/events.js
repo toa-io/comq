@@ -225,7 +225,7 @@ async function consumed (group) {
 /**
  * @param {string} exchange
  * @param {any} message
- * @param {import('amqplib').Options.Publish} [properties]
+ * @param {import('@toa.io/amqplib').Options.Publish} [properties]
  * @return {Promise<void>}
  * @this {comq.features.Context}
  */
