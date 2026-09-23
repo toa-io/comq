@@ -96,9 +96,13 @@ it('should pull the source no faster than the channel takes', async () => {
 })
 
 it('should hold the source while the consumer has asked for a pause', async () => {
-  const pipe = await ReplyPipe.create(request, Readable.from([1, 2, 3]), channel, feedback, reply)
+  // the pause is asked for while the confirmation is still being published: the pipe does not
+  // read its source until that has been published, so nothing can be in flight yet
+  const opening = ReplyPipe.create(request, Readable.from([1, 2, 3]), channel, feedback, reply)
 
   feedback.emit(request.properties.correlationId, control.pause, {})
+
+  const pipe = await opening
 
   await timeout(10)
 
