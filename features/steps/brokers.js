@@ -139,7 +139,7 @@ const actions = {
     await docker('docker', ['kill', `comq-rmq-${n}`])
   },
   // a frozen broker keeps its connections open while answering nothing, which is
-  // what a publisher cannot tell from a working one until the watchdog fires
+  // what a publisher cannot tell from a working one until its heartbeats go missing
   frozen: async (n = 0) => {
     await docker('docker', ['pause', `comq-rmq-${n}`])
   }

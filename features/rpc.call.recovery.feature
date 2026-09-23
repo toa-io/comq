@@ -17,14 +17,14 @@ Feature: Calls under a key across failures
     it the key. The holder finds the key taken until the broker lets that connection go, and
     claims it then.
 
-    Given watchdog interval is set to 2000ms with 60s AMQP heartbeat
+    Given 1s AMQP heartbeat
     And a network that can go silent
     And an active connection to the broker
     And a holder answering `echo` under the `a` key:
       """
       (payload) => payload
       """
-    When the network goes silent
+    When the network goes silent, with the broker still hearing heartbeats
     Then the connection is lost within 10 seconds
     And the holder finds its key taken while the broker holds the silent connection
     When the silent connection is let go

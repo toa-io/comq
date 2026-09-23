@@ -5,6 +5,16 @@ const { timeout } = require('../../test/helpers')
 
 const { Given, When, Then } = require('@cucumber/cucumber')
 
+Given('{number}s AMQP heartbeat',
+  /**
+   * A connection that has received nothing for two heartbeats is taken for lost.
+   *
+   * @param {number} heartbeat
+   */
+  function (heartbeat) {
+    global.COMQ_TESTING_AMQP_HEARTBEAT = heartbeat
+  })
+
 Given('an active connection to the broker',
   /**
    * @this {comq.features.Context}
@@ -174,6 +184,19 @@ Then('the connection is lost within {number} second(s)',
    */
   async function (seconds) {
     await emitted.call(this, 'close', seconds, 'connection was not lost')
+  })
+
+Then('the connection is not lost for {number} seconds',
+  /**
+   * @param {number} seconds
+   * @this {comq.features.Context}
+   */
+  async function (seconds) {
+    delete this.events.close
+
+    await timeout(seconds * 1000)
+
+    assert.equal(this.events.close, undefined, 'The connection was lost')
   })
 
 Then('publishing is {paused-event} within {number} second(s)',

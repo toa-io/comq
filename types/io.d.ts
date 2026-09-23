@@ -35,6 +35,15 @@ declare namespace comq {
     emitter: ReplyEmitter
     properties: _amqp.Properties
     signal?: AbortSignal
+
+    /** The shard the Request is published through, over a sharded connection. */
+    shard?: number
+
+    /** Whether the Request is being published. */
+    publishing?: boolean
+
+    /** Whether its shard was lost while it was being published, which re-sends it once it is. */
+    lost?: boolean
   }
 
   /** How long a caller waits for the Reply to a call. */

@@ -49,7 +49,11 @@ declare namespace comq.features {
     readonly address: string
 
     open(): Promise<void>
-    silence(): void
+    silence(heard?: boolean): void
+    refuse(): void
+    admit(): void
+    release(): void
+    cut(): void
     close(): Promise<void>
   }
 
@@ -57,6 +61,7 @@ declare namespace comq.features {
     client: Socket
     upstream: Socket
     silent: boolean
+    heartbeat?: NodeJS.Timeout
   }
 
 }

@@ -29,14 +29,12 @@ beforeEach(() => {
   amqplib.connect.mockImplementation(async (url) => wired(await connect(url)))
 
   global.COMQ_TESTING_SHUTDOWN_TIMEOUT = 1
-  global.COMQ_TESTING_WATCHDOG_INTERVAL = 60_000
 })
 
 afterEach(() => {
   SingletonConnection.__lets_pretend_this_method_doesnt_exist()
 
   delete global.COMQ_TESTING_SHUTDOWN_TIMEOUT
-  delete global.COMQ_TESTING_WATCHDOG_INTERVAL
 })
 
 afterAll(() => {
