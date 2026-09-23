@@ -1,7 +1,7 @@
 'use strict'
 
 const { Readable } = require('node:stream')
-const { Promex } = require('promex')
+const { Promex } = require('../source/promex')
 const { ReplyPipe } = require('../source/.io/ReplyPipe')
 const { createReplyEmitter } = require('../source/.io/createReplyEmitter')
 const { control, FLOW_HEADER } = require('../source/.io/const')
