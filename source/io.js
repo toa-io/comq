@@ -154,7 +154,7 @@ class IO {
         }
 
         return await this.#ask(queue, payload, terms,
-          (buffer, properties) => this.#requests.send(queue, buffer, properties))
+          (buffer, properties, via) => this.#requests.send(queue, buffer, properties, via))
       }))
 
   // the terms are taken once, so a re-sent call keeps the deadline of the first
@@ -170,7 +170,8 @@ class IO {
       async (exchange, key, payload, terms) => {
         // mandatory: a Request nobody holds the key of is returned rather than dropped
         return await this.#ask(exchange, payload, terms,
-          (buffer, properties) => this.#requests.route(exchange, key, buffer, { ...properties, mandatory: true }))
+          (buffer, properties, via) =>
+            this.#requests.route(exchange, key, buffer, { ...properties, mandatory: true }, via))
       }))
 
   consume = lazy(this, this.#createEventChannel,
@@ -357,12 +358,20 @@ class IO {
     return channel
   }
 
+  /**
+   * On a sharded connection, what is re-sent is what the shard in question holds: the index of
+   * the shard comes with each of the events, and a Request that went through another shard is
+   * answered through that one.
+   */
   #setupRetransmission () {
     if (this.#requests.sharded === true) {
       // a shard leaves the pool when it rejects a publish, and is lost when its
       // connection drops, which leaves an already sent request unanswered
       this.#requests.diagnose('remove', this.#retransmit)
       this.#requests.diagnose('lost', this.#retransmit)
+
+      // a returned call is published on another shard, and is held by that one from then on
+      this.#requests.diagnose('reroute', this.#rerouted)
     } else {
       this.#requests.diagnose('recover', this.#retransmit)
     }
@@ -462,9 +471,31 @@ class IO {
 
     if (signal !== undefined) this.#abandon(request, reply, signal)
 
-    await abortable(publish(buffer, properties), signal)
+    request.publishing = true
+
+    try {
+      await abortable(publish(buffer, properties, (index) => this.#board(request, index)), signal)
+    } finally {
+      request.publishing = false
+    }
+
+    // the shard it went through was lost while it was being published, and it has not failed
+    // over to another since
+    if (request.lost === true) this.#resend(request, reply)
 
     return reply
+  }
+
+  /**
+   * Records the shard a Request is published through. It is recorded as the shard is chosen,
+   * rather than once the publish is done, so that a shard lost in between is known to hold it.
+   *
+   * @param {comq.Request} request
+   * @param {number} index
+   */
+  #board (request, index) {
+    request.shard = index
+    request.lost = false
   }
 
   /**
@@ -494,17 +525,41 @@ class IO {
    * @param {comq.amqp.Message} message
    */
   #returned = (message) => {
+    const pending = this.#pendingOf(message)
+
+    if (pending === undefined) return
+
+    const [reply, request] = pending
+
+    request.emitter.off(request.properties.correlationId)
+    this.#pendingReplies.delete(reply)
+    reply.reject(new Unroutable(message.fields.exchange, message.fields.routingKey))
+  }
+
+  /**
+   * A Request one shard returned is published on another.
+   *
+   * @param {comq.amqp.Message} message
+   * @param {number} index
+   */
+  #rerouted = (message, index) => {
+    const pending = this.#pendingOf(message)
+
+    if (pending !== undefined) this.#board(pending[1], index)
+  }
+
+  /**
+   * @param {comq.amqp.Message} message
+   * @return {[Promex, comq.Request] | undefined}
+   */
+  #pendingOf (message) {
     const { correlationId, replyTo } = message.properties
 
     for (const [reply, request] of this.#pendingReplies) {
       if (request.properties.correlationId !== correlationId) continue
       if (request.emitter.queue !== replyTo) continue
 
-      request.emitter.off(correlationId)
-      this.#pendingReplies.delete(reply)
-      reply.reject(new Unroutable(message.fields.exchange, message.fields.routingKey))
-
-      return
+      return [reply, request]
     }
   }
 
@@ -665,22 +720,42 @@ class IO {
     // an unroutable reply must be returned by the broker rather than dropped
     properties.mandatory = true
 
-    return await this.#replies.fire(replyTo, buffer, properties)
+    // back the way the request came: see `fire` of a sharded channel
+    return await this.#replies.fire(replyTo, buffer, properties, request)
   }
 
   #recover (exception) {
     if (exception !== RETRANSMISSION) return false
   }
 
-  #retransmit = () => {
+  /**
+   * Re-sends the Requests awaiting their replies on a shard, or on the connection when no shard
+   * is given. A Request that went through another shard is not re-sent: it is answered through
+   * that shard, and it is not for comq to assume that it is idempotent.
+   *
+   * @param {number} [index]
+   */
+  #retransmit = (index) => {
     for (const [reply, request] of this.#pendingReplies) {
-      // detaching this attempt alone leaves the listeners of the reply streams
-      // that are still flowing over the other shards in place
-      request.emitter.off(request.properties.correlationId)
+      if (index !== undefined && request.shard !== index) continue
 
-      // trigger failsafe attribute
-      reply.reject(RETRANSMISSION)
+      // one still being published is re-sent once it is, unless it fails over to another shard
+      if (request.publishing === true) request.lost = true
+      else this.#resend(request, reply)
     }
+  }
+
+  /**
+   * @param {comq.Request} request
+   * @param {Promex} reply
+   */
+  #resend (request, reply) {
+    // detaching this attempt alone leaves the listeners of the reply streams
+    // that are still flowing over the other shards in place
+    request.emitter.off(request.properties.correlationId)
+
+    // trigger failsafe attribute
+    reply.reject(RETRANSMISSION)
   }
 
   /**

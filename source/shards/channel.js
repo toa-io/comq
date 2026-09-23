@@ -57,8 +57,12 @@ class Channel {
     await Promise.any(promises)
   }
 
+  /**
+   * A message is told which shard it arrived on, so that whatever answers it can go back the same
+   * way. See `fire`.
+   */
   async consume (queue, consumer) {
-    return await this.#every((channel) => channel.consume(queue, consumer))
+    return await this.#every((channel) => channel.consume(queue, arrival(consumer, channel)))
   }
 
   async subscribe (queue, group, consumer) {
@@ -74,24 +78,51 @@ class Channel {
    * claiming it, and holds it as well once it is let go.
    */
   async held (exchange, queue, key, consumer) {
-    await Promise.any(this.#apply((channel) => channel.held(exchange, queue, key, consumer)))
+    await Promise.any(this.#apply((channel) => channel.held(exchange, queue, key, arrival(consumer, channel))))
   }
 
-  async send (queue, buffer, options) {
-    await this.#one((channel) => channel.send(queue, buffer, options))
+  /**
+   * @param {string} queue
+   * @param {Buffer} buffer
+   * @param {comq.amqp.options.Publish} [options]
+   * @param {(index: number) => void} [via] told which shard the message is published through,
+   * as soon as one is chosen and again whenever the publish fails over to another
+   */
+  async send (queue, buffer, options, via) {
+    await this.#one((channel) => channel.send(queue, buffer, options), { via })
   }
 
   async publish (exchange, buffer, options) {
     await this.#one((channel) => channel.publish(exchange, buffer, options))
   }
 
-  async route (exchange, key, buffer, options) {
-    await this.#one((channel) => channel.route(exchange, key, buffer, options))
+  /**
+   * @param {string} exchange
+   * @param {string} key
+   * @param {Buffer} buffer
+   * @param {comq.amqp.options.Publish} [options]
+   * @param {(index: number) => void} [via] as `send` has it
+   */
+  async route (exchange, key, buffer, options, via) {
+    await this.#one((channel) => channel.route(exchange, key, buffer, options), { via })
   }
 
-  async fire (queue, buffer, options) {
+  /**
+   * A reply goes back through the shard the message it answers arrived on. Whoever sent that
+   * message re-sends what it sent through a shard once the shard is lost, and nothing else, so a
+   * reply taking another way could be lost with a shard that nothing is re-sent for. It takes
+   * another way when that shard is not reachable, which leaves its message unacknowledged there,
+   * to be delivered and answered again.
+   *
+   * @param {string} queue
+   * @param {Buffer} buffer
+   * @param {comq.amqp.options.Publish} [options]
+   * @param {comq.amqp.Message} [origin] the message this one answers
+   * @return {Promise<boolean>}
+   */
+  async fire (queue, buffer, options, origin) {
     // noinspection  JSValidateTypes
-    return await this.#one((channel) => channel.fire(queue, buffer, options))
+    return await this.#one((channel) => channel.fire(queue, buffer, options), { prefer: origin?.[ARRIVAL] })
   }
 
   async close () {
@@ -229,6 +260,9 @@ class Channel {
     }
 
     const next = rest[Math.floor(Math.random() * rest.length)]
+
+    // the message is on that shard now, and is lost with it rather than with this one
+    this.#diagnostics.emit(REROUTE, message, next.index)
 
     // a Request under a key goes through its routed exchange, which `route` declares on that
     // shard before publishing: publishing to an exchange a broker lacks closes the connection
@@ -374,9 +408,13 @@ class Channel {
   }
 
   /**
+   * Publishes through a shard chosen at random, or through the one preferred while it is
+   * reachable, and fails over to another when that one fails.
+   *
    * @param {(channel: comq.Channel) => void} fn
+   * @param {{ via?: (index: number) => void, prefer?: number }} [route]
    */
-  async #one (fn) {
+  async #one (fn, route = {}) {
     // capture before the check: recover may replace `#recovery` in between
     const waiting = this.#recovery
     const pool = this.#reachable()
@@ -384,18 +422,35 @@ class Channel {
     if (pool.length === 0) {
       await waiting
 
-      return this.#one(fn)
+      return this.#one(fn, route)
     }
 
-    const channel = pool[Math.floor(Math.random() * pool.length)]
+    const channel = pool.find((channel) => channel.index === route.prefer) ??
+      pool[Math.floor(Math.random() * pool.length)]
+
+    // told before the publish is awaited: a shard lost while it is under way has it on board
+    route.via?.(channel.index)
 
     try {
       return await fn(channel)
     } catch {
       this.#remove(channel)
 
-      return this.#one(fn)
+      return this.#one(fn, route)
     }
+  }
+}
+
+/**
+ * @param {comq.channels.Consumer} consumer
+ * @param {comq.Channel} channel
+ * @return {comq.channels.Consumer}
+ */
+function arrival (consumer, channel) {
+  return (message) => {
+    message[ARRIVAL] = channel.index
+
+    return consumer(message)
   }
 }
 
@@ -417,6 +472,12 @@ const RETURN = 'return'
 const REMOVE = 'remove'
 const RETURN_HEADER = 'x-return'
 const LOST = 'lost'
+
+/** A returned message published on another shard, which is where it can be lost from now on. */
+const REROUTE = 'reroute'
+
+/** Which shard a consumed message arrived on. */
+const ARRIVAL = Symbol('arrival')
 
 function noop () {}
 

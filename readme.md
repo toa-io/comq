@@ -481,6 +481,10 @@ connection is re-established.
 
 Incoming messages are consumed from all shards.
 
+A Reply goes back through the shard its Request arrived on, while that shard is reachable. When a
+shard is lost, the Requests sent through it that are still unanswered are re-sent through the
+others, since their Replies may be lost with it; a Request sent through another shard is not.
+
 `async connect(...shards: string[]): IO`
 
 Returns an instance of `IO` once connections to the shards are established.
@@ -796,8 +800,8 @@ Subscribe to one of the diagnostic events:
   an argument.
 - `drain`: back pressure is removed from a channel. Channel type is passed.
 - `remove`: channel is removed from the [pool](#sharded-connection), having failed to publish.
-- `lost`: a shard has lost its connection, hence the requests awaiting their replies on it are
-  re-sent. Channel type is passed.
+- `lost`: a shard has lost its connection, hence the requests sent through it that are awaiting
+  their replies are re-sent. Channel type is passed.
 - `recover`: channel's topology is recovered. Channel type is passed.
 - `discard`: message is [parked](#parked-messages), having run out of attempts. Channel type,
   raw [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_consume)

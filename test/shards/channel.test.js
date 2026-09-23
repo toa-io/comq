@@ -230,7 +230,17 @@ describe.each(['consume', 'subscribe'])('%s', (method) => {
 
     await channel[method](...args)
 
-    for (const chan of channels) expect(chan[method]).toHaveBeenCalledWith(...args)
+    for (const chan of channels) {
+      const call = chan[method].mock.calls[0]
+      const message = /** @type {comq.amqp.Message} */ {}
+
+      expect(call.slice(0, -1)).toStrictEqual(args.slice(0, -1))
+
+      // a consumed message may be told which shard it arrived on on its way
+      await call.at(-1)(message)
+
+      expect(processor).toHaveBeenCalledWith(message)
+    }
   })
 
   it(`should not resolve ${method} until pending channels are created`, async () => {
@@ -593,6 +603,23 @@ describe('diagnose', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
+  it('should tell where a returned message is published next', async () => {
+    const listener = /** @type {jest.MockedFunction} */ jest.fn()
+    const index = random(channels.length)
+    const chan = channels[index]
+    const message = returned()
+
+    message.fields.exchange = generate()
+    channel.diagnose('reroute', listener)
+
+    emitReturn(chan, message)
+
+    const next = channels.find((one) => one.route.mock.calls.length > 0)
+
+    expect(next).not.toBe(chan)
+    expect(listener).toHaveBeenCalledWith(message, next.index)
+  })
+
   it('should report a returned retry at once', async () => {
     const listener = /** @type {jest.MockedFunction} */ jest.fn()
     const index = random(channels.length)
@@ -620,7 +647,15 @@ describe('diagnose', () => {
 
     await channel.held(exchange, queue, key, consumer)
 
-    for (const one of channels) expect(one.held).toHaveBeenCalledWith(exchange, queue, key, consumer)
+    for (const one of channels) {
+      expect(one.held).toHaveBeenCalledWith(exchange, queue, key, expect.any(Function))
+
+      const message = /** @type {comq.amqp.Message} */ {}
+
+      await one.held.mock.calls[0][3](message)
+
+      expect(consumer).toHaveBeenCalledWith(message)
+    }
   })
 
   it('should hold a queue once any shard holds it', async () => {
@@ -819,3 +854,134 @@ describe('routed', () => {
     expect(used[0].route).toHaveBeenCalledWith(exchange, key, buffer, undefined)
   })
 })
+
+describe('shards of messages', () => {
+  const queue = generate()
+  const buffer = randomBytes(8)
+
+  /** @type {jest.MockedObject<comq.Channel>[]} */
+  let channels
+
+  beforeEach(async () => {
+    channel = await create(connections, type)
+    channels = await getCreatedChannels()
+  })
+
+  it.each(['send', 'route'])('should tell `%s` which shard a message goes through', async (method) => {
+    const via = /** @type {jest.MockedFunction} */ jest.fn()
+    const args = method === 'send' ? [queue, buffer, {}] : [generate(), queue, buffer, {}]
+
+    await channel[method](...args, via)
+
+    const used = channels.find((chan) => chan[method].mock.calls.length > 0)
+
+    expect(via).toHaveBeenCalledTimes(1)
+    expect(via).toHaveBeenCalledWith(used.index)
+  })
+
+  it('should tell which shard a message goes through before it is published', async () => {
+    const via = /** @type {jest.MockedFunction} */ jest.fn()
+    const publishing = new Promex()
+
+    for (const chan of channels) chan.send.mockImplementationOnce(() => publishing)
+
+    const sending = channel.send(queue, buffer, {}, via)
+
+    await immediate()
+
+    // a shard lost from now on has it on board
+    expect(via).toHaveBeenCalledTimes(1)
+
+    publishing.resolve()
+
+    await sending
+  })
+
+  it('should tell the shard a message fails over to', async () => {
+    const via = /** @type {jest.MockedFunction} */ jest.fn()
+
+    for (const chan of channels) chan.send.mockImplementationOnce(async () => { throw new Error() })
+
+    // both shards fail once, and the one recovered first takes the message
+    setImmediate(() => emitRecover(channels[1]))
+
+    await channel.send(queue, buffer, {}, via)
+
+    const [first, second] = via.mock.calls.map(([index]) => index)
+
+    expect(via).toHaveBeenCalledTimes(3)
+    expect(second).not.toStrictEqual(first)
+    expect(via).toHaveBeenLastCalledWith(1)
+  })
+
+  it.each([0, 1])('should fire a reply through the shard its request arrived on (%i)', async (index) => {
+    const consumer = /** @type {jest.MockedFunction} */ jest.fn()
+
+    await channel.consume(queue, consumer)
+
+    const request = /** @type {comq.amqp.Message} */ {}
+
+    await channels[index].consume.mock.calls[0][1](request)
+
+    for (let i = 0; i < 20; i++) await channel.fire(queue, buffer, {}, request)
+
+    expect(channels[index].fire).toHaveBeenCalledTimes(20)
+    expect(channels[1 - index].fire).not.toHaveBeenCalled()
+  })
+
+  it('should fire a reply through the shard a held request arrived on', async () => {
+    await channel.held(generate(), generate(), generate(), jest.fn())
+
+    const request = /** @type {comq.amqp.Message} */ {}
+
+    await channels[1].held.mock.calls[0][3](request)
+
+    for (let i = 0; i < 20; i++) await channel.fire(queue, buffer, {}, request)
+
+    expect(channels[1].fire).toHaveBeenCalledTimes(20)
+    expect(channels[0].fire).not.toHaveBeenCalled()
+  })
+
+  it('should fire a reply through another shard when its own is lost', async () => {
+    await channel.consume(queue, jest.fn())
+
+    const request = /** @type {comq.amqp.Message} */ {}
+
+    await channels[1].consume.mock.calls[0][1](request)
+
+    lose(connections[1])
+
+    await channel.fire(queue, buffer, {}, request)
+
+    expect(channels[0].fire).toHaveBeenCalledTimes(1)
+    expect(channels[1].fire).not.toHaveBeenCalled()
+
+    restore(connections[1])
+  })
+
+  it('should fire a reply through another shard when its own fails', async () => {
+    await channel.consume(queue, jest.fn())
+
+    const request = /** @type {comq.amqp.Message} */ {}
+
+    await channels[1].consume.mock.calls[0][1](request)
+
+    channels[1].fire.mockImplementationOnce(async () => { throw new Error() })
+
+    await channel.fire(queue, buffer, {}, request)
+
+    expect(channels[1].fire).toHaveBeenCalledTimes(1)
+    expect(channels[0].fire).toHaveBeenCalledTimes(1)
+
+    emitRecover(channels[1])
+  })
+})
+
+/**
+ * @param {jest.MockedObject<comq.Channel>} chan
+ */
+function emitRecover (chan) {
+  const calls = chan.diagnose.mock.calls.filter((call) => call[0] === 'recover')
+
+  for (const call of calls) call[1]()
+}

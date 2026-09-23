@@ -70,7 +70,9 @@ class Channel {
     this.#failfast = index !== undefined
     this.#release = release
 
-    if (this.#failfast) failsafe.disable(this.send, this.publish)
+    // a shard's publish fails rather than waits for its connection to come back: the pool
+    // fails it over to another shard, and whoever published it is told where it went
+    if (this.#failfast) failsafe.disable(this.send, this.publish, this.route)
   }
 
   async create () {

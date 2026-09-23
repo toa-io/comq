@@ -76,6 +76,17 @@ class Network {
   }
 
   /**
+   * Takes the broker away from whoever is connected through this network: the tunnels that are
+   * open are closed at both ends, and a connection attempted from now on is refused until the
+   * network admits it.
+   */
+  cut () {
+    this.refuse()
+
+    for (const tunnel of this.#tunnels) this.#collapse(tunnel)
+  }
+
+  /**
    * Closes the tunnels that went silent, at both ends, so the broker learns that the
    * connection it was still holding is gone — the moment its heartbeat would otherwise tell it.
    */
