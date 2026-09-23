@@ -88,12 +88,6 @@ Given('idle timeout is set to {number}ms',
     global.COMQ_TESTING_IDLE_INTERVAL = value
   })
 
-Given('watchdog interval is set to {number}ms with {number}s AMQP heartbeat',
-  function (watchdog, heartbeat) {
-    global.COMQ_TESTING_WATCHDOG_INTERVAL = watchdog
-    global.COMQ_TESTING_AMQP_HEARTBEAT = heartbeat
-  })
-
 Given('a producer replying {token} queue',
   /**
    * @param {string} queue

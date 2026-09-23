@@ -48,9 +48,19 @@ class Network {
   /**
    * Only the tunnels that are already open go silent: a connection established
    * afterwards is forwarded as usual, just as it is once a machine is awake.
+   *
+   * The broker notices a silent connection by its heartbeat as soon as the client does. One
+   * that is to be held by the broker for as long as the scenario needs is kept heard from:
+   * heartbeats are sent to the broker in the client's stead, until the network lets it go.
+   *
+   * @param {boolean} [heard] whether the broker goes on hearing heartbeats
    */
-  silence () {
-    for (const tunnel of this.#tunnels) tunnel.silent = true
+  silence (heard = false) {
+    for (const tunnel of this.#tunnels) {
+      tunnel.silent = true
+
+      if (heard) tunnel.heartbeat ??= setInterval(() => tunnel.upstream.write(HEARTBEAT), HEARTBEAT_MS)
+    }
   }
 
   /**
@@ -117,10 +127,18 @@ class Network {
    * @param {comq.features.Tunnel} tunnel
    */
   #collapse (tunnel) {
+    clearInterval(tunnel.heartbeat)
+
     this.#tunnels.delete(tunnel)
     tunnel.client.destroy()
     tunnel.upstream.destroy()
   }
 }
+
+/** An AMQP heartbeat frame: type 8, channel 0, no payload, and the frame end. */
+const HEARTBEAT = Buffer.from([8, 0, 0, 0, 0, 0, 0, 0xCE])
+
+/** Often enough for the shortest heartbeat a scenario asks for. */
+const HEARTBEAT_MS = 250
 
 exports.Network = Network

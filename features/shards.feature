@@ -49,7 +49,7 @@ Feature: Sharded Connection
     Then the broker is up
 
   Scenario: Shard stops responding while requests are sent
-    Given watchdog interval is set to 3000ms with 1s AMQP heartbeat
+    Given 1s AMQP heartbeat
     And an active sharded connection
     And a producer replying `stalled` queue
     When the consumer sends 10 requests to the `stalled` queue as a broker freezes

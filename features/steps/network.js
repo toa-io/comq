@@ -26,6 +26,14 @@ When('the network goes silent',
     silence.call(this)
   })
 
+When('the network goes silent, with the broker still hearing heartbeats',
+  /**
+   * @this {comq.features.Context}
+   */
+  function () {
+    silence.call(this, true)
+  })
+
 When('the network goes silent and refuses new connections',
   /**
    * @this {comq.features.Context}
@@ -66,11 +74,12 @@ When('the consumer sends a request to the {token} queue as the network goes sile
   })
 
 /**
+ * @param {boolean} [heard]
  * @this {comq.features.Context}
  */
-function silence () {
+function silence (heard) {
   // only a connection lost from now on counts as lost
   delete this.events.close
 
-  for (const network of this.networks) network.silence()
+  for (const network of this.networks) network.silence(heard)
 }
