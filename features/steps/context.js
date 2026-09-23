@@ -114,8 +114,7 @@ class Context extends World {
     const url = PROTOCOL + user + ':' + password + '@' + address
     const query = []
 
-    // the watchdog measures silence, so it may only be shortened along with the
-    // interval at which a healthy broker is expected to say something
+    // a connection gone silent is told by its missing heartbeats, so a short one tells it soon
     if (global.COMQ_TESTING_AMQP_HEARTBEAT !== undefined) {
       query.push('heartbeat=' + global.COMQ_TESTING_AMQP_HEARTBEAT)
     }

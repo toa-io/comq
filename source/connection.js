@@ -35,17 +35,8 @@ class Connection {
   /** @type {boolean} */
   #closed = false
 
-  /** @type {NodeJS.Timeout | null} */
-  #heartbeatTimer = null
-
   /** @type {comq.topology.Overrides} */
   #overrides
-
-  /** @type {import('node:net').Socket | null} */
-  #heartbeatSocket = null
-
-  /** @type {(() => void) | null} */
-  #heartbeatReset = null
 
   #diagnostics = emitter.create()
 
@@ -147,7 +138,6 @@ class Connection {
     connection.on('close', (error) => this.#close(connection, error))
     this.#connection = connection
 
-    this.#armWatchdog(connection)
     this.#diagnostics.emit('open')
 
     try {
@@ -177,10 +167,13 @@ class Connection {
   #close = (connection, error) => {
     if (this.#connection !== connection) return
 
-    this.#disarmWatchdog()
     this.#diagnostics.emit('close', error)
     connection.removeAllListeners()
     this.#connection = undefined
+
+    // amqplib only ends the socket of a connection it has given up on, and a peer that has gone
+    // silent never ends its side, which would leave the socket to the kernel's keepalive
+    if (error !== undefined) connection.connection?.stream?.destroy()
 
     if (error !== undefined && !this.#closed) {
       this.#reopen().catch((exception) => this.#diagnostics.emit('error', exception))
@@ -224,10 +217,7 @@ class Connection {
    * @param {comq.amqp.Connection} connection
    */
   #drop (connection) {
-    if (this.#connection === connection) {
-      this.#disarmWatchdog()
-      this.#connection = undefined
-    }
+    if (this.#connection === connection) this.#connection = undefined
 
     connection.removeAllListeners()
 
@@ -294,46 +284,6 @@ class Connection {
     }
   }
 
-  /**
-   * @param {comq.amqp.Connection} connection
-   * @param {number} [timeoutMs]
-   */
-  #armWatchdog (connection, timeoutMs = tolerance(connection)) {
-    this.#disarmWatchdog()
-
-    const socket = connection.connection?.stream
-
-    if (socket === undefined || timeoutMs === undefined) return
-
-    const reset = () => {
-      clearTimeout(this.#heartbeatTimer)
-      // destroying a socket without an error tells amqplib nothing: it only
-      // listens for 'error' and 'end', so a bare destroy() leaves the connection
-      // silently dead — no 'close' event, no recovery, every pending operation
-      // hanging forever
-      this.#heartbeatTimer = setTimeout(() => socket.destroy(silence()), timeoutMs)
-      this.#heartbeatTimer.unref()
-    }
-
-    this.#heartbeatSocket = socket
-    this.#heartbeatReset = reset
-
-    reset()
-    socket.on('data', reset)
-  }
-
-  #disarmWatchdog () {
-    clearTimeout(this.#heartbeatTimer)
-    this.#heartbeatTimer = null
-
-    // otherwise a byte arriving on a replaced socket rearms the watchdog of a
-    // connection that is already gone, leaving the current one unguarded
-    this.#heartbeatSocket?.off('data', this.#heartbeatReset)
-
-    this.#heartbeatSocket = null
-    this.#heartbeatReset = null
-  }
-
   #transient (exception) {
     if (this.#running) return true
     if (TRANSIENT_CODES.has(exception.code)) return true
@@ -348,21 +298,16 @@ class Connection {
  * to suggest one that leaves a connection lost for minutes before anything
  * notices, and RabbitMQ suggests 60 by default.
  *
+ * It is amqplib that tells a connection gone silent: one that has received nothing
+ * for two heartbeats is closed with an error, whatever the broker and the operating
+ * system have reported, which is what restores it.
+ *
  * @type {number}
  */
 const HEARTBEAT_S = 15
 
 /** @type {number} */
 const KEEPALIVE_MS = 10_000
-
-/** How many heartbeats a connection may miss before it is destroyed. */
-const MISSED_HEARTBEATS = 3
-
-/** @type {number} */
-const WATCHDOG_MIN_MS = 15_000
-
-/** The watchdog interval used when the negotiated heartbeat is unknown. */
-const WATCHDOG_MS = 60_000
 
 /** @type {number} */
 const CONNECT_MS = 30_000
@@ -420,28 +365,6 @@ function heartbeaten (url) {
   if (HEARTBEAT_SET.test(url)) return url
 
   return url + (url.includes('?') ? '&' : '?') + 'heartbeat=' + HEARTBEAT_S
-}
-
-/**
- * The watchdog measures silence, so it cannot be shorter than the interval at
- * which a healthy broker is expected to say something, which is a heartbeat
- * frame every half a heartbeat. A connection that has agreed to no heartbeats
- * says nothing at all while it is idle, leaving nothing to measure.
- *
- * @param {comq.amqp.Connection} connection
- * @return {number | undefined}
- */
-function tolerance (connection) {
-  const override = global.COMQ_TESTING_WATCHDOG_INTERVAL
-
-  if (override !== undefined) return override
-
-  const heartbeat = connection.connection?.heartbeat
-
-  if (heartbeat === undefined) return WATCHDOG_MS
-  if (heartbeat === 0) return undefined
-
-  return Math.max(heartbeat * MISSED_HEARTBEATS * 1000, WATCHDOG_MIN_MS)
 }
 
 /**

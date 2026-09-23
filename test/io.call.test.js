@@ -52,7 +52,7 @@ describe('call', () => {
 
   it('should publish to the exchange under the key', async () => {
     expect(requests.route).toHaveBeenCalledWith(exchange, key, expect.any(Buffer),
-      expect.objectContaining({ mandatory: true }))
+      expect.objectContaining({ mandatory: true }), expect.any(Function))
   })
 
   it('should declare no queue to publish to', async () => {
@@ -116,14 +116,16 @@ describe('back', () => {
     const contentType = 'application/json'
     const properties = { contentType, correlationId: generate(), replyTo: generate() }
 
-    await consumer({ content: encode(payload, contentType), properties })
+    const request = { content: encode(payload, contentType), properties }
+
+    await consumer(request)
 
     replies = await findChannel('reply')
 
     expect(producer).toHaveBeenCalledWith(payload)
 
     expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, expect.any(Buffer),
-      expect.objectContaining({ correlationId: properties.correlationId }))
+      expect.objectContaining({ correlationId: properties.correlationId }), request)
   })
 })
 

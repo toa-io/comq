@@ -457,8 +457,9 @@ Reconnection attempts will be made indefinitely, with intervals increasing up to
 Unless the URL sets one, a 15 second heartbeat is requested, so that a connection that is gone
 without a word, such as after a machine wakes from sleep, is noticed within a minute instead of
 being left to whatever the broker suggests.
-A connection that stays silent for three heartbeats is destroyed regardless of what the broker and
-the operating system have reported, since neither is guaranteed to report anything at all.
+A connection that has received nothing for two heartbeats is closed and restored regardless of what
+the broker and the operating system have reported, since neither is guaranteed to report anything
+at all. A connection that is merely idle receives the broker's heartbeats, and is kept.
 Requesting `heartbeat=0` disables both.
 If the broker rejects the connection, for example, due to access being denied, an exception will be thrown.
 Once reconnected, the topology will be recovered, and any unanswered requests and unconfirmed events will be
@@ -479,6 +480,10 @@ remaining shards in the pool. If no shards are available, `send` / `publish` / `
 connection is re-established.
 
 Incoming messages are consumed from all shards.
+
+A Reply goes back through the shard its Request arrived on, while that shard is reachable. When a
+shard is lost, the Requests sent through it that are still unanswered are re-sent through the
+others, since their Replies may be lost with it; a Request sent through another shard is not.
 
 `async connect(...shards: string[]): IO`
 
@@ -795,8 +800,8 @@ Subscribe to one of the diagnostic events:
   an argument.
 - `drain`: back pressure is removed from a channel. Channel type is passed.
 - `remove`: channel is removed from the [pool](#sharded-connection), having failed to publish.
-- `lost`: a shard has lost its connection, hence the requests awaiting their replies on it are
-  re-sent. Channel type is passed.
+- `lost`: a shard has lost its connection, hence the requests sent through it that are awaiting
+  their replies are re-sent. Channel type is passed.
 - `recover`: channel's topology is recovered. Channel type is passed.
 - `discard`: message is [parked](#parked-messages), having run out of attempts. Channel type,
   raw [amqp message object](https://amqp-node.github.io/amqplib/channel_api.html#channel_consume)

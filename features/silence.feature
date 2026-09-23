@@ -2,10 +2,11 @@ Feature: Silent Connection Tolerance
 
   A connection that has gone silent is what a machine that woke from sleep is
   left with: the socket is open, neither the broker nor the operating system
-  reports anything, and nothing but the watchdog tells it from an idle connection.
+  reports anything, and nothing but the missing heartbeats tell it from an idle
+  connection.
 
   Background:
-    Given watchdog interval is set to 2000ms with 60s AMQP heartbeat
+    Given 1s AMQP heartbeat
     And a network that can go silent
 
   Scenario: Restoring a connection that has gone silent

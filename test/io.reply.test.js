@@ -98,7 +98,8 @@ describe('reply', () => {
     const reply = await produce.mock.results[0].value
     const buffer = encode(reply, properties.contentType)
 
-    expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, buffer, expect.anything())
+    // the request goes along, so that the reply goes back the way it came
+    expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, buffer, expect.anything(), message)
   })
 
   it('should throw if producer returned undefined', async () => {
@@ -190,7 +191,7 @@ describe('encoding', () => {
       mandatory: true
     }
 
-    expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, reply, props)
+    expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, reply, props, message)
   })
 
   it('should set octet-stream for Buffer reply', async () => {
@@ -215,7 +216,8 @@ describe('encoding', () => {
       .toHaveBeenCalledWith(
         expect.any(String),
         buffer,
-        expect.objectContaining({ contentType: 'application/octet-stream' })
+        expect.objectContaining({ contentType: 'application/octet-stream' }),
+        message
       )
   })
 

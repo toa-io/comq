@@ -5,6 +5,7 @@
 const stream = require('node:stream')
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
+const { Promex } = require('promex')
 const { immediate } = require('./helpers')
 const { encode } = require('../source/encode')
 
@@ -327,15 +328,276 @@ describe('send', () => {
   })
 })
 
+describe('shards', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks()
+
+    connection = mock.connection(true)
+    io = new IO(connection)
+  })
+
+  /**
+   * Sends a Request through a shard.
+   *
+   * @param {number} index
+   * @param {string} target
+   * @return {Promise<void>}
+   */
+  async function ask (index, target) {
+    requests = await requestChannel()
+
+    requests.send.mockImplementationOnce(async (_queue, _buffer, _options, via) => via(index))
+
+    io.request(target, payload)
+
+    await immediate()
+  }
+
+  /**
+   * @return {Promise<jest.MockedObject<comq.Channel>>}
+   */
+  async function requestChannel () {
+    if (connection.createChannel.mock.calls.length === 0) {
+      // the channels are created with the first Request
+      io.request(generate(), payload)
+
+      await immediate()
+    }
+
+    return findChannel('request')
+  }
+
+  /**
+   * @param {jest.MockedObject<comq.Channel>} channel
+   * @return {string[]} the queues each publish went to
+   */
+  const targets = (channel) => channel.send.mock.calls.map(([queue]) => queue)
+
+  it('should re-send only the requests the lost shard holds', async () => {
+    const a = generate()
+    const b = generate()
+
+    await ask(0, a)
+    await ask(1, b)
+
+    requests.send.mockClear()
+
+    await lose(1)
+
+    expect(targets(requests)).toStrictEqual([b])
+
+    requests.send.mockClear()
+
+    // b has been re-sent through the shard that stays, and is held by it now
+    await lose(0)
+
+    expect(targets(requests)).toContain(a)
+    expect(targets(requests)).toContain(b)
+  })
+
+  it('should re-send only the requests of a shard whose reply channel recovers', async () => {
+    const a = generate()
+    const b = generate()
+
+    await ask(0, a)
+    await ask(1, b)
+
+    replies = await findChannel('reply')
+    requests.send.mockClear()
+
+    const calls = replies.diagnose.mock.calls.filter((call) => call[0] === 'recover')
+
+    for (const [, listener] of calls) listener(1)
+
+    await immediate()
+
+    expect(targets(requests)).toStrictEqual([b])
+  })
+
+  it('should re-send only the requests of a shard removed from the pool', async () => {
+    const a = generate()
+    const b = generate()
+
+    await ask(0, a)
+    await ask(1, b)
+
+    requests.send.mockClear()
+
+    const calls = requests.diagnose.mock.calls.filter((call) => call[0] === 'remove')
+
+    for (const [, listener] of calls) listener(0)
+
+    await immediate()
+
+    expect(targets(requests).includes(a)).toStrictEqual(true)
+    expect(targets(requests).includes(b)).toStrictEqual(false)
+  })
+
+  it('should re-send a request the lost shard held while it was being published', async () => {
+    requests = await requestChannel()
+
+    const published = new Promex()
+
+    requests.send.mockImplementationOnce(async (_queue, _buffer, _options, via) => {
+      via(1)
+
+      await published
+    })
+
+    const target = generate()
+
+    io.request(target, payload)
+
+    await immediate()
+    await lose(1)
+
+    // not before it is published
+    expect(targets(requests).filter((queue) => queue === target)).toHaveLength(1)
+
+    published.resolve()
+
+    await immediate()
+    await immediate()
+
+    expect(targets(requests).filter((queue) => queue === target)).toHaveLength(2)
+  })
+
+  it('should not re-send a request that failed over to another shard', async () => {
+    requests = await requestChannel()
+
+    const published = new Promex()
+
+    requests.send.mockImplementationOnce(async (_queue, _buffer, _options, via) => {
+      via(1)
+
+      await published
+
+      // the pool fails over from the lost shard
+      via(0)
+    })
+
+    const target = generate()
+
+    io.request(target, payload)
+
+    await immediate()
+    await lose(1)
+
+    published.resolve()
+
+    await immediate()
+    await immediate()
+
+    expect(targets(requests).filter((queue) => queue === target)).toHaveLength(1)
+
+    // it is held by the shard it went through
+    await lose(0)
+
+    expect(targets(requests).filter((queue) => queue === target)).toHaveLength(2)
+  })
+
+  it('should not re-send a request that went through another shard than the one lost as it was published', async () => {
+    requests = await requestChannel()
+
+    const published = new Promex()
+
+    requests.send.mockImplementationOnce(async (_queue, _buffer, _options, via) => {
+      via(0)
+
+      await published
+    })
+
+    const target = generate()
+
+    io.request(target, payload)
+
+    await immediate()
+    await lose(1)
+
+    published.resolve()
+
+    await immediate()
+    await immediate()
+
+    expect(targets(requests).filter((queue) => queue === target)).toHaveLength(1)
+  })
+
+  it('should re-send a returned call from the shard it was published on next', async () => {
+    requests = await requestChannel()
+
+    const key = generate()
+
+    requests.route.mockImplementationOnce(async (_exchange, _key, _buffer, _options, via) => via(0))
+
+    io.call(generate(), key, payload)
+
+    await immediate()
+
+    const [,,, properties] = requests.route.mock.calls[0]
+    const message = { fields: { exchange: generate(), routingKey: key }, properties }
+    const calls = requests.diagnose.mock.calls.filter((call) => call[0] === 'reroute')
+
+    expect(calls.length).toBeGreaterThan(0)
+
+    for (const [, listener] of calls) listener(message, 1)
+
+    await lose(0)
+
+    expect(requests.route).toHaveBeenCalledTimes(1)
+
+    await lose(1)
+
+    expect(requests.route).toHaveBeenCalledTimes(2)
+  })
+
+  it('should re-send a call the lost shard holds', async () => {
+    requests = await requestChannel()
+
+    requests.route.mockImplementationOnce(async (_exchange, _key, _buffer, _options, via) => via(1))
+
+    io.call(generate(), generate(), payload)
+
+    await immediate()
+    await lose(0)
+
+    expect(requests.route).toHaveBeenCalledTimes(1)
+
+    await lose(1)
+
+    expect(requests.route).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('recovery', () => {
+  it('should re-send every unanswered Request of a connection that is not sharded', async () => {
+    const other = generate()
+
+    io.request(other, payload)
+
+    await immediate()
+
+    requests.send.mockClear()
+
+    const calls = requests.diagnose.mock.calls.filter((call) => call[0] === 'recover')
+
+    for (const [, listener] of calls) listener()
+
+    await immediate()
+
+    expect(requests.send.mock.calls.map(([queue]) => queue).sort()).toStrictEqual([queue, other].sort())
+  })
+})
+
 /**
  * Fires the listeners the IO has attached to the shard loss diagnostic.
  *
+ * @param {number} [index]
  * @return {Promise<void>}
  */
-async function lose () {
+async function lose (index = 0) {
   const calls = requests.diagnose.mock.calls.filter((call) => call[0] === 'lost')
 
-  for (const [, listener] of calls) listener(0)
+  for (const [, listener] of calls) listener(index)
 
   await immediate()
   await immediate()
