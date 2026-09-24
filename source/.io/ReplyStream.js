@@ -1,7 +1,7 @@
 'use strict'
 
 const { Readable } = require('node:stream')
-const { Promex } = require('promex')
+const { Promex } = require('../promex')
 const { IDLE_INTERVAL, FLOW_HEADER, control } = require('./const')
 const { Interrupted } = require('../interrupted')
 

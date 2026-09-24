@@ -2,7 +2,7 @@
 
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
-const { Promex } = require('promex')
+const { Promex } = require('../source/promex')
 const { immediate } = require('./helpers')
 
 const mock = require('./connection.mock')

@@ -2,7 +2,7 @@
 
 const stream = require('node:stream')
 const { setTimeout } = require('node:timers/promises')
-const { Promex } = require('promex')
+const { Promex } = require('./promex')
 const { memo, failsafe, lazy, track } = require('./attributes')
 const { verdictOf, PARK } = require('./verdicts')
 const { Unroutable } = require('./unroutable')

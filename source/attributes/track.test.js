@@ -1,7 +1,7 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { Promex } = require('promex')
+const { Promex } = require('../promex')
 
 const { track } = require('./track')
 

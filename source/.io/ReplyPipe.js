@@ -1,7 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('node:events')
-const { Promex } = require('promex')
+const { Promex } = require('../promex')
 const { control, FLOW_HEADER, HEARTBEAT_INTERVAL } = require('./const')
 
 /** @typedef {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} Reply */
