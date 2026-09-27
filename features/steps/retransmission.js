@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
-const { Promex } = require('promex')
+const { Promex } = require('../../source/promex')
 const { Given, When, Then, After } = require('@cucumber/cucumber')
 
 const { connect } = require('../../')

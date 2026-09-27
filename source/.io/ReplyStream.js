@@ -1,8 +1,8 @@
 'use strict'
 
 const { Readable } = require('node:stream')
-const { Promex } = require('promex')
-const { IDLE_INTERVAL, FLOW_HEADER, control } = require('./const')
+const { Promex } = require('../promex')
+const { IDLE_INTERVAL, FLOW_HEADER, batch, control } = require('./const')
 const { Interrupted } = require('../interrupted')
 
 class ReplyStream extends Readable {
@@ -133,8 +133,27 @@ class ReplyStream extends Readable {
 
     if (properties.type === 'control')
       this._control(payload, properties)
+    else if (properties.type === batch.values)
+      this._values(payload)
+    else if (properties.type === batch.buffers)
+      this._values(split(payload))
     else if (!this.push(payload))
       this._throttle()
+  }
+
+  /**
+   * The values of one message, pushed whatever the consumer's room: they have arrived, and a
+   * pause asked for now holds back the messages after them.
+   *
+   * @param {unknown[]} values
+   * @private
+   */
+  _values (values) {
+    let room = true
+
+    for (const value of values) room = this.push(value) && room
+
+    if (!room) this._throttle()
   }
 
   /**
@@ -211,6 +230,26 @@ class ReplyStream extends Readable {
     clearTimeout(this.#timeout)
     this.#emitter.off(this.#correlationId)
   }
+}
+
+/**
+ * The buffers of a message that carries each prefixed with its length.
+ *
+ * @param {Buffer} buffer
+ * @returns {Buffer[]}
+ */
+function split (buffer) {
+  const buffers = []
+
+  for (let offset = 0; offset < buffer.length;) {
+    const length = buffer.readUInt32BE(offset)
+    const start = offset + 4
+
+    buffers.push(buffer.subarray(start, start + length))
+    offset = start + length
+  }
+
+  return buffers
 }
 
 const MAX_BUFFER_SIZE = 1000

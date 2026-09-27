@@ -1,6 +1,6 @@
 'use strict'
 
-const { Promex } = require('promex')
+const { Promex } = require('../promex')
 const { RETRY_PREFIX } = require('../channel')
 const events = require('../events')
 const emitter = require('../emitter')

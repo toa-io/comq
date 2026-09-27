@@ -4,7 +4,7 @@
 
 const { generate } = require('randomstring')
 
-const { Promex } = require('promex')
+const { Promex } = require('../source/promex')
 const { timeout, random } = require('./helpers')
 const { amqplib, connect } = require('./amqplib.mock')
 const { channel: create } = require('./connection.mock')

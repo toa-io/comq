@@ -2,8 +2,8 @@
 
 const { setTimeout: delay } = require('node:timers/promises')
 const amqp = require('@toa.io/amqplib')
-const { Promex } = require('promex')
-const { retry } = require('reretry')
+const { Promex } = require('./promex')
+const { retry } = require('./retry')
 
 const { failsafe } = require('./attributes')
 const presets = require('./topology')

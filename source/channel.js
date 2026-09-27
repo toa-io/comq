@@ -1,7 +1,7 @@
 'use strict'
 
-const { Promex } = require('promex')
-const { retry } = require('reretry')
+const { Promex } = require('./promex')
+const { retry } = require('./retry')
 const { failsafe, lazy, recall } = require('./attributes')
 const { verdictOf, PARK } = require('./verdicts')
 const emitter = require('./emitter')

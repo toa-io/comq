@@ -14,5 +14,11 @@ exports.control = {
  */
 exports.FLOW_HEADER = 'x-flow'
 
+/** The type of a message carrying values: a list of them, or buffers prefixed with their length. */
+exports.batch = {
+  values: 'batch',
+  buffers: 'buffers'
+}
+
 exports.HEARTBEAT_INTERVAL = 5_000
 exports.IDLE_INTERVAL = 12_000

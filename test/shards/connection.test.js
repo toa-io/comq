@@ -1,15 +1,14 @@
 'use strict'
 
 const { generate } = require('randomstring')
-const { Promex } = require('promex')
+const { Promex } = require('../../source/promex')
 const { random, immediate } = require('../helpers')
-
-const { Connection } = require('../../source/shards')
 
 const mock = require('../connection.mock')
 
 jest.mock('../../source/shards/channel')
 
+const { Connection } = require('../../source/shards')
 const { create } = require('../../source/shards/channel')
 
 it('should be', async () => {
