@@ -2,7 +2,7 @@
 
 const { EventEmitter } = require('node:events')
 const { Promex } = require('../promex')
-const { control, FLOW_HEADER, HEARTBEAT_INTERVAL } = require('./const')
+const { control, batch, BATCH_HEADER, FLOW_HEADER, HEARTBEAT_INTERVAL } = require('./const')
 
 /** @typedef {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} Reply */
 
@@ -36,6 +36,9 @@ class ReplyPipe extends EventEmitter {
   /** @type {Reply} */
   #reply
 
+  /** Whether the requester reads values in batches, and the encoding can carry a list of them. */
+  #batches
+
   /**
    * @param {comq.amqp.Message} request
    * @param {stream.Readable} stream
@@ -54,8 +57,13 @@ class ReplyPipe extends EventEmitter {
     this.#reply = reply
     this.#replyTo = replyTo
 
+    this.#batches = request.properties.headers?.[BATCH_HEADER] === true &&
+      request.properties.contentType === LISTS
+
     this.#properties = {
       chunk: { correlationId, ...CHUNK },
+      batch: { correlationId, ...CHUNK, type: batch.values },
+      buffers: { correlationId, ...CHUNK, type: batch.buffers },
       control: { correlationId, replyTo: feedback.queue, ...CONTROL },
       ok: { correlationId, replyTo: feedback.queue, ...CONTROL, headers: FLOW }
     }
@@ -99,21 +107,93 @@ class ReplyPipe extends EventEmitter {
    */
   async #pump () {
     try {
-      for await (const chunk of this.#stream) {
-        if (this.#gate !== null) await this.#gate
-        if (this.#closed) break
-
-        await this.#transmit(chunk, this.#properties.chunk)
-
-        if (this.#closed) break
-
-        this.#heartbeat()
-      }
+      if (this.#batches) await this.#pumpBatches()
+      else
+        for await (const chunk of this.#stream) {
+          if (!(await this.#send(chunk, this.#properties.chunk))) break
+        }
     } catch {
       // the source has been destroyed, by this pipe or by whoever made it
     }
 
     this.#close()
+  }
+
+  /**
+   * Values go out together while they arrive together: what the source yields before the event
+   * loop turns joins the message, and the first value that has to be waited for leaves with the
+   * ones before it rather than waiting for company. A cursor yielding the documents of a batch it
+   * holds sends them as one message; a source yielding one value at a time sends each as it
+   * comes. Values and buffers travel in messages of their own.
+   */
+  async #pumpBatches () {
+    const iterator = this.#stream[Symbol.asyncIterator]()
+
+    let pending = next(iterator)
+
+    while (true) {
+      const first = await pending
+
+      if (first.done === true) return
+
+      const chunks = [first.value]
+      const buffers = Buffer.isBuffer(first.value)
+      const turn = immediate()
+
+      let done = false
+
+      pending = next(iterator)
+
+      while (chunks.length < MAX_BATCH) {
+        const arrived = await Promise.race([pending, turn])
+
+        if (arrived === TURN) break
+
+        if (arrived.done === true) {
+          done = true
+
+          break
+        }
+
+        // of the other kind, it starts the next message
+        if (Buffer.isBuffer(arrived.value) !== buffers) {
+          pending = Promise.resolve(arrived)
+
+          break
+        }
+
+        chunks.push(arrived.value)
+        pending = next(iterator)
+      }
+
+      if (!(await this.#send(...this.#message(chunks, buffers)))) {
+        await iterator.return?.()
+
+        return
+      }
+
+      if (done) return
+    }
+  }
+
+  #message (chunks, buffers) {
+    if (chunks.length === 1) return [chunks[0], this.#properties.chunk]
+    else if (buffers) return [prefixed(chunks), this.#properties.buffers]
+    else return [chunks, this.#properties.batch]
+  }
+
+  /** Answers whether the pipe goes on. */
+  async #send (data, properties) {
+    if (this.#gate !== null) await this.#gate
+    if (this.#closed) return false
+
+    await this.#transmit(data, properties)
+
+    if (this.#closed) return false
+
+    this.#heartbeat()
+
+    return true
   }
 
   async #transmit (data, properties) {
@@ -205,6 +285,49 @@ class ReplyPipe extends EventEmitter {
 
 /** @type {comq.amqp.options.Publish} */
 const CHUNK = { mandatory: true }
+
+/** the most values a message carries */
+const MAX_BATCH = 128
+
+/** the encoding a batch of values is a list in */
+const LISTS = 'application/json'
+
+const TURN = Symbol('turn')
+
+/**
+ * The next value, asked for ahead of when it is awaited. A source that fails while a message is
+ * being sent is found failed by the loop that awaits it next, or by nobody where the pipe has
+ * stopped — and a rejection nobody awaits is an unhandled one.
+ */
+function next (iterator) {
+  const pending = iterator.next()
+
+  pending.catch(noop)
+
+  return pending
+}
+
+/** Settles once the event loop has turned, with what says so. */
+function immediate () {
+  return new Promise((resolve) => setImmediate(resolve, TURN))
+}
+
+/**
+ * @param {Buffer[]} buffers
+ * @returns {Buffer}
+ */
+function prefixed (buffers) {
+  const parts = []
+
+  for (const buffer of buffers) {
+    const length = Buffer.allocUnsafe(4)
+
+    length.writeUInt32BE(buffer.length)
+    parts.push(length, buffer)
+  }
+
+  return Buffer.concat(parts)
+}
 
 /** @type {comq.amqp.options.Publish} */
 const CONTROL = { type: 'control', mandatory: true }

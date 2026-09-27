@@ -204,3 +204,36 @@ describe('flow', () => {
     }
   })
 })
+
+describe('batches', () => {
+  const ok = { headers: { index: 0, [FLOW_HEADER]: true }, type: 'control' }
+  const end = (index) => [control.end, { headers: { index }, type: 'control' }]
+
+  it('should yield each value of a batch, in order', async () => {
+    stream.arrange(control.ok, ok)
+    stream.arrange([1, 2, 3], { headers: { index: 1 }, type: 'batch' })
+    stream.arrange(4, { headers: { index: 2 } })
+    stream.arrange(...end(3))
+
+    expect(await stream.toArray()).toStrictEqual([1, 2, 3, 4])
+  })
+
+  it('should yield each buffer of a batch of buffers', async () => {
+    const buffers = Buffer.from([0, 0, 0, 2, 0x61, 0x62, 0, 0, 0, 0, 0, 0, 0, 1, 0x63])
+
+    stream.arrange(control.ok, ok)
+    stream.arrange(buffers, { headers: { index: 1 }, type: 'buffers' })
+    stream.arrange(...end(2))
+
+    expect(await stream.toArray()).toStrictEqual([Buffer.from('ab'), Buffer.alloc(0), Buffer.from('c')])
+  })
+
+  it('should hold a batch that arrives out of order until the gap is filled', async () => {
+    stream.arrange(control.ok, ok)
+    stream.arrange([3, 4], { headers: { index: 2 }, type: 'batch' })
+    stream.arrange([1, 2], { headers: { index: 1 }, type: 'batch' })
+    stream.arrange(...end(3))
+
+    expect(await stream.toArray()).toStrictEqual([1, 2, 3, 4])
+  })
+})

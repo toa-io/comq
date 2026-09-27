@@ -354,6 +354,12 @@ for await (const number of stream)
   console.log(number)
 ```
 
+Values a producer yields together travel together: what the iterator yields before the event loop
+turns is sent as one message, up to 128 values, and a value that has to be waited for is sent as
+it comes. Buffers travel in messages of their own. The stream returned by `IO.request` yields each
+value on its own either way. A request made by a version of comq that reads no batches is answered
+a value per message, and so is a request in an encoding other than `application/json`.
+
 ### Stream topology
 
 <picture>

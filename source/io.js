@@ -13,6 +13,7 @@ const { pipeline, transform } = require('./pipeline')
 const events = require('./events')
 const emitter = require('./emitter')
 const io = require('./.io')
+const { BATCH_HEADER } = require('./.io/const')
 
 /**
  * @implements {comq.IO}
@@ -576,7 +577,7 @@ class IO {
     const correlationId = emitter.next()
 
     /** @type {comq.amqp.Properties} */
-    const properties = { contentType, correlationId, replyTo: emitter.queue }
+    const properties = { contentType, correlationId, replyTo: emitter.queue, headers: BATCHES }
 
     return { emitter, properties, signal }
   }
@@ -781,6 +782,9 @@ const OCTETS = 'application/octet-stream'
 const DEFAULT = 'application/json'
 
 const RETRANSMISSION = /** @type {Error} */ Symbol('retransmission')
+
+/** what a requester says of itself: it reads a reply stream's values in batches */
+const BATCHES = Object.freeze({ [BATCH_HEADER]: true })
 
 /** What this IO's replies arrive on, before the random suffix that makes the queue its own. */
 const REPLY = 'comq.reply'

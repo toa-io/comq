@@ -31,6 +31,10 @@ the message properties.
 | `x-comq-cause` | a parked message | The `message` of that exception's `cause`, when it has one — a verdict is usually thrown with the failure that prompted it. |
 | `x-comq-at` | a parked message | When it was parked, as `Date.now()`. |
 
+A request carries `x-batch`: the requester reads a [reply stream](../readme.md#reply-streams)'s
+values in batches. A reply stream's confirmation carries `x-flow`: the producer honours `pause` and
+`resume`.
+
 `x-comq-exchange` and `x-comq-key` are recorded on the first failure rather than read at parking
 time: a message returning from the retry queue arrives through the default exchange, so by then
 its own delivery fields describe that hop rather than where it was published.
