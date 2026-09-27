@@ -21,6 +21,34 @@ Feature: Reply streams
       [0, 1, 2, 3, 4]
       """
 
+  Scenario: Requesting a stream of many values at once
+    Given function replying `get_numbers` queue:
+      """
+      function * ({ limit }) {
+        for (let i = 0; i < limit; i++) yield { i }
+      }
+      """
+    When the consumer requests a stream with the following request to the `get_numbers` queue:
+      """yaml
+      limit: 300
+      """
+    Then the consumer receives a stream of 300 values in order
+
+  Scenario: Requesting a stream of buffers
+    Given function replying `get_bytes` queue:
+      """
+      function * () {
+        yield Buffer.from('first')
+        yield Buffer.alloc(0)
+        yield Buffer.from('third')
+      }
+      """
+    When the consumer requests a stream with request to the `get_bytes` queue
+    Then the consumer receives the stream of buffers:
+      """yaml
+      [first, '', third]
+      """
+
   Scenario: Requesting streams concurrently
     Given a number generator with 10ms increasing delay replying `get_numbers` queue
     When the consumer0 requests a stream with request to the `get_numbers` queue

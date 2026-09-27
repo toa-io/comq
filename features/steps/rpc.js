@@ -291,7 +291,37 @@ Then('the consumer receives the stream:',
 
     for await (const reply of this.stream) replies.push(reply)
 
-    assert.equal(values.length, replies.length, `Stream length mismatch: expected ${values.length}, received ${replies.length}`)
+    assert.deepStrictEqual(replies, values)
+  })
+
+Then('the consumer receives a stream of {number} values in order',
+  /**
+   * @param {number} count
+   * @this {comq.features.Context}
+   */
+  async function (count) {
+    const replies = []
+
+    for await (const reply of this.stream) replies.push(reply)
+
+    assert.deepStrictEqual(replies, Array.from({ length: count }, (_, i) => ({ i })))
+  })
+
+Then('the consumer receives the stream of buffers:',
+  /**
+   * @param {string} yaml what each buffer holds, as text
+   * @this {comq.features.Context}
+   */
+  async function (yaml) {
+    const values = parse(yaml)
+    const replies = []
+
+    for await (const reply of this.stream) {
+      assert.ok(Buffer.isBuffer(reply), `Not a buffer: ${JSON.stringify(reply)}`)
+      replies.push(reply.toString())
+    }
+
+    assert.deepStrictEqual(replies, values)
   })
 
 Then('the consumer receives the stream',

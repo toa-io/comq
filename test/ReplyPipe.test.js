@@ -212,3 +212,68 @@ it('should destroy the source if the confirmation cannot be sent', async () => {
 
   expect(source.destroyed).toStrictEqual(true)
 })
+
+describe('batches', () => {
+  beforeEach(() => {
+    request.properties.contentType = 'application/json'
+  })
+
+  it('should send the values its source holds as one message', async () => {
+    const pipe = await ReplyPipe.create(request, Readable.from([1, 2, 3]), channel, feedback, reply)
+
+    await closing(pipe)
+
+    expect(messages()).toStrictEqual([control.ok, [1, 2, 3], control.end])
+    expect(sent[1][1].type).toStrictEqual('batch')
+  })
+
+  it('should send each value that arrives on its own as it arrives', async () => {
+    async function * source () {
+      yield 1
+      await timeout(10)
+      yield 2
+    }
+
+    const pipe = await ReplyPipe.create(request, Readable.from(source()), channel, feedback, reply)
+
+    await closing(pipe)
+
+    expect(messages()).toStrictEqual([control.ok, 1, 2, control.end])
+    expect(sent[1][1].type).toBeUndefined()
+  })
+
+  it('should send buffers as one message, each prefixed with its length', async () => {
+    const source = Readable.from([Buffer.from('ab'), Buffer.from('cde')])
+    const pipe = await ReplyPipe.create(request, source, channel, feedback, reply)
+
+    await closing(pipe)
+
+    const expected = Buffer.from([0, 0, 0, 2, 0x61, 0x62, 0, 0, 0, 3, 0x63, 0x64, 0x65])
+
+    expect(messages()[1]).toStrictEqual(expected)
+    expect(sent[1][1].type).toStrictEqual('buffers')
+  })
+
+  it('should send values one at a time in an encoding that holds no list', async () => {
+    request.properties.contentType = 'text/plain'
+
+    const pipe = await ReplyPipe.create(request, Readable.from(['a', 'b']), channel, feedback, reply)
+
+    await closing(pipe)
+
+    expect(messages()).toStrictEqual([control.ok, 'a', 'b', control.end])
+  })
+
+  it('should keep a batch within its limit', async () => {
+    const values = Array.from({ length: 300 }, (_, i) => i)
+    const source = Readable.from(values, { highWaterMark: 1000 })
+    const pipe = await ReplyPipe.create(request, source, channel, feedback, reply)
+
+    await closing(pipe)
+
+    const batches = messages().slice(1, -1)
+
+    expect(batches.flat()).toStrictEqual(values)
+    expect(Math.max(...batches.map((batch) => [batch].flat().length))).toBeLessThanOrEqual(128)
+  })
+})
