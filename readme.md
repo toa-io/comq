@@ -358,8 +358,7 @@ Values a producer yields together travel together: what the iterator yields befo
 turns is sent as one message, up to 128 values, and a value that has to be waited for is sent as
 it comes. Buffers travel in messages of their own. The stream returned by `IO.request` yields each
 value on its own either way. Values in an encoding other than `application/json` travel one to a
-message. A requester of a version before this one takes a batch for one value, so both ends of a
-reply stream run this version or a later one.
+message.
 
 ### Stream topology
 
