@@ -4,7 +4,7 @@ const { Readable } = require('node:stream')
 const { Promex } = require('../source/promex')
 const { ReplyPipe } = require('../source/.io/ReplyPipe')
 const { createReplyEmitter } = require('../source/.io/createReplyEmitter')
-const { control, FLOW_HEADER, BATCH_HEADER } = require('../source/.io/const')
+const { control, FLOW_HEADER } = require('../source/.io/const')
 const { timeout } = require('./helpers')
 
 /** @type {jest.Mock} */
@@ -215,11 +215,10 @@ it('should destroy the source if the confirmation cannot be sent', async () => {
 
 describe('batches', () => {
   beforeEach(() => {
-    request.properties.headers = { [BATCH_HEADER]: true }
     request.properties.contentType = 'application/json'
   })
 
-  it('should send the values its source holds as one message, where the requester reads batches', async () => {
+  it('should send the values its source holds as one message', async () => {
     const pipe = await ReplyPipe.create(request, Readable.from([1, 2, 3]), channel, feedback, reply)
 
     await closing(pipe)
@@ -253,16 +252,6 @@ describe('batches', () => {
 
     expect(messages()[1]).toStrictEqual(expected)
     expect(sent[1][1].type).toStrictEqual('buffers')
-  })
-
-  it('should send values one at a time to a requester that reads no batches', async () => {
-    delete request.properties.headers
-
-    const pipe = await ReplyPipe.create(request, Readable.from([1, 2]), channel, feedback, reply)
-
-    await closing(pipe)
-
-    expect(messages()).toStrictEqual([control.ok, 1, 2, control.end])
   })
 
   it('should send values one at a time in an encoding that holds no list', async () => {

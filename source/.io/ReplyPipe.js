@@ -2,7 +2,7 @@
 
 const { EventEmitter } = require('node:events')
 const { Promex } = require('../promex')
-const { control, batch, BATCH_HEADER, FLOW_HEADER, HEARTBEAT_INTERVAL } = require('./const')
+const { control, batch, FLOW_HEADER, HEARTBEAT_INTERVAL } = require('./const')
 
 /** @typedef {(message: any, properties?: comq.amqp.options.Publish) => Promise<void>} Reply */
 
@@ -36,8 +36,8 @@ class ReplyPipe extends EventEmitter {
   /** @type {Reply} */
   #reply
 
-  /** Whether the requester reads values in batches, and the encoding can carry a list of them. */
-  #batches
+  /** Whether the encoding can carry a list of values. */
+  #lists
 
   /**
    * @param {comq.amqp.Message} request
@@ -57,8 +57,7 @@ class ReplyPipe extends EventEmitter {
     this.#reply = reply
     this.#replyTo = replyTo
 
-    this.#batches = request.properties.headers?.[BATCH_HEADER] === true &&
-      request.properties.contentType === LISTS
+    this.#lists = request.properties.contentType === LISTS
 
     this.#properties = {
       chunk: { correlationId, ...CHUNK },
@@ -107,11 +106,7 @@ class ReplyPipe extends EventEmitter {
    */
   async #pump () {
     try {
-      if (this.#batches) await this.#pumpBatches()
-      else
-        for await (const chunk of this.#stream) {
-          if (!(await this.#send(chunk, this.#properties.chunk))) break
-        }
+      await this.#pumpBatches()
     } catch {
       // the source has been destroyed, by this pipe or by whoever made it
     }
@@ -124,7 +119,8 @@ class ReplyPipe extends EventEmitter {
    * loop turns joins the message, and the first value that has to be waited for leaves with the
    * ones before it rather than waiting for company. A cursor yielding the documents of a batch it
    * holds sends them as one message; a source yielding one value at a time sends each as it
-   * comes. Values and buffers travel in messages of their own.
+   * comes. Values and buffers travel in messages of their own, and values in an encoding that
+   * holds no list travel one to a message.
    */
   async #pumpBatches () {
     const iterator = this.#stream[Symbol.asyncIterator]()
@@ -144,7 +140,7 @@ class ReplyPipe extends EventEmitter {
 
       pending = next(iterator)
 
-      while (chunks.length < MAX_BATCH) {
+      while (chunks.length < (buffers || this.#lists ? MAX_BATCH : 1)) {
         const arrived = await Promise.race([pending, turn])
 
         if (arrived === TURN) break

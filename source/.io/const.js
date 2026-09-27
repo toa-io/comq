@@ -14,12 +14,6 @@ exports.control = {
  */
 exports.FLOW_HEADER = 'x-flow'
 
-/**
- * Set on a request by a requester that reads a reply stream's values in batches, so that a
- * producer never sends one to a requester that would take it for a single value.
- */
-exports.BATCH_HEADER = 'x-batch'
-
 /** The type of a message carrying values: a list of them, or buffers prefixed with their length. */
 exports.batch = {
   values: 'batch',
