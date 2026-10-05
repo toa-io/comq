@@ -1251,6 +1251,31 @@ describe('failed messages', () => {
       expect(chan.ack).toHaveBeenCalled()
     })
 
+    it('should release the original before the channel is given back', async () => {
+      await channel.consume(queue, consumer)
+
+      let confirm
+
+      chan.publish.mockImplementationOnce((_0, _1, _2, _3, callback) => (confirm = callback))
+
+      const delivering = deliver(delivery())
+
+      // closed while the copy is on its way: an original still unacknowledged then is
+      // requeued by the broker, and the message is held twice
+      const closing = channel.close()
+
+      await new Promise((resolve) => setImmediate(resolve))
+
+      confirm(null)
+
+      await closing
+      await delivering
+
+      expect(chan.ack).toHaveBeenCalledTimes(1)
+      expect(chan.ack.mock.invocationCallOrder[0])
+        .toBeLessThan(chan.close.mock.invocationCallOrder[0])
+    })
+
     it('should increment the attempt', async () => {
       await channel.consume(queue, consumer)
 

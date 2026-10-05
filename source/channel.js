@@ -49,6 +49,9 @@ class Channel {
   /** @type {Set<Promex>} */
   #confirmations = new Set()
 
+  /** @type {Set<Promise<void>>} failed messages on their way to a retry or the parking queue */
+  #settling = new Set()
+
   #diagnostics = emitter.create()
 
   #closed = false
@@ -220,6 +223,10 @@ class Channel {
     this.#closed = true
 
     await this.seal()
+
+    // a failed message is moved in two steps, its copy placed and then the original
+    // released; a channel closed between them leaves the broker holding both
+    await Promise.allSettled(this.#settling)
 
     // a channel that went down with its connection is the outcome this asks for
     await this.#channel?.close().catch(noop)
@@ -587,7 +594,13 @@ class Channel {
       } catch (exception) {
         if (exception?.message === 'Channel closed') { return } // the message is requeued by the broker
 
-        await this.#failed(queue, message, exception)
+        const settling = this.#failed(queue, message, exception)
+
+        this.#settling.add(settling)
+
+        await settling
+
+        this.#settling.delete(settling)
       }
     }
 
