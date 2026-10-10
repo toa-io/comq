@@ -120,6 +120,24 @@ describe('send', () => {
     expect(call[2].expiration).toBeUndefined()
   })
 
+  it('should send the properties it is given, as a Request still', async () => {
+    requests.send.mockClear()
+
+    const headers = { [generate()]: generate() }
+
+    setImmediate(reply)
+
+    await io.request(queue, payload, { headers, contentType: 'text/plain', replyTo: generate() })
+
+    const [, buffer, properties] = requests.send.mock.calls[0]
+
+    expect(buffer).toStrictEqual(encode(payload, 'text/plain'))
+    expect(properties.headers).toStrictEqual(headers)
+    expect(properties.contentType).toStrictEqual('text/plain')
+    expect(properties.replyTo).toStrictEqual(call[2].replyTo)
+    expect(properties.correlationId).toBeDefined()
+  })
+
   it('should refuse options other than the encoding', async () => {
     requests.send.mockClear()
 

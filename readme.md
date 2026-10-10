@@ -81,10 +81,10 @@ Event published to a fanout exchange carries none.
 
 `async IO.reply(queue: string, producer): void`
 
-`producer` function's signature is `async? (message: any): any`
+`producer` function's signature is `async? (message: any, properties?): any`
 
 Assert a `queue` and start consuming Requests. Received messages are decoded and the resulting
-content is passed to the `producer`. The result returned by the `producer` is then encoded and sent
+content is passed to the `producer`, followed by the [properties](docs/headers.md) of the Request. The result returned by the `producer` is then encoded and sent
 back to the queue specified in the `replyTo` property of the Request, along with a `correlationId`
 that has the same value as in the Request.
 
@@ -109,8 +109,11 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 `async IO.request(queue: string, payload: any, encoding?: string): any`
 
+`async IO.request(queue: string, payload: any, properties?): any`
+
 Send encoded Request message with `replyTo` and `correlationId` properties set and
-return decoded Reply content. The promise stays pending until the Reply arrives, however long
+return decoded Reply content. A Request may carry [properties](docs/headers.md) of its own, such
+as `headers`. The promise stays pending until the Reply arrives, however long
 that takes: a Request has no timeout and cannot be withdrawn. One no Producer can answer is
 [parked](#parked-messages), and can still be answered while its caller waits.
 

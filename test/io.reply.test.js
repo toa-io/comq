@@ -102,6 +102,17 @@ describe('reply', () => {
     expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, buffer, expect.anything(), message)
   })
 
+  it('should pass the properties of the request to the producer', async () => {
+    const content = randomBytes(10)
+    const properties = { contentType: 'text/plain', headers: { [generate()]: generate() } }
+    const message = /** @type {comq.amqp.Message} */ { content, properties }
+    const producer = requests.consume.mock.calls[0][1]
+
+    await producer(message)
+
+    expect(produce).toHaveBeenCalledWith(expect.anything(), properties)
+  })
+
   it('should throw if producer returned undefined', async () => {
     jest.clearAllMocks()
 
@@ -161,7 +172,7 @@ describe('encoding', () => {
 
     await producer(message)
 
-    expect(produce).toHaveBeenCalledWith(value)
+    expect(produce).toHaveBeenCalledWith(value, properties)
   })
 
   it.each(encodings)('should encode reply with same encoding (%s)', async (encoding) => {
