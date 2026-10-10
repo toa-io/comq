@@ -61,12 +61,52 @@ describe('sharded connection', () => {
     expect(shards.Connection).toHaveBeenCalled()
   })
 
-  it('should pass single connection instances', async () => {
-    urls.forEach((url) => expect(Connection).toHaveBeenCalledWith(url, {}))
+  it('should pass the urls, and what makes a connection to a broker', async () => {
+    expect(shards.Connection).toHaveBeenCalledWith(urls, expect.any(Function), undefined)
 
-    const instances = Connection.mock.instances
+    const make = shards.Connection.mock.calls[0][1]
+    const servername = generate()
+    const instance = make(urls[0], servername)
 
-    expect(shards.Connection).toHaveBeenCalledWith(instances)
+    expect(Connection).toHaveBeenCalledWith(urls[0], {}, servername)
+    expect(instance).toStrictEqual(Connection.mock.instances[0])
+  })
+
+  it('should not connect by itself', async () => {
+    expect(Connection).not.toHaveBeenCalled()
+  })
+})
+
+describe('ranges', () => {
+  it('should expand a range into the urls of a sharded connection', async () => {
+    await connect('amqp://rmq[0..3].example.com')
+
+    const expanded = ['amqp://rmq0.example.com', 'amqp://rmq1.example.com', 'amqp://rmq2.example.com']
+
+    expect(shards.Connection).toHaveBeenCalledWith(expanded, expect.any(Function), undefined)
+  })
+
+  it('should connect to a range of one as to a single url', async () => {
+    await connect('amqp://rmq[0..1].example.com')
+
+    expect(Connection).toHaveBeenCalledWith('amqp://rmq0.example.com', {})
+    expect(shards.Connection).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolution', () => {
+  it('should pass how the names are followed, apart from the overrides', async () => {
+    const urls = [generate(), generate()]
+    const resolution = { interval: 1, settle: 2, linger: 3 }
+    const overrides = { event: { delay: 100 } }
+
+    await connect(...urls, { ...overrides, resolution })
+
+    expect(shards.Connection).toHaveBeenCalledWith(urls, expect.any(Function), resolution)
+
+    shards.Connection.mock.calls[0][1](urls[0])
+
+    expect(Connection).toHaveBeenCalledWith(urls[0], overrides, undefined)
   })
 })
 
@@ -85,8 +125,10 @@ describe('topology overrides', () => {
 
     await connect(...urls, overrides)
 
-    urls.forEach((url) => expect(Connection).toHaveBeenCalledWith(url, overrides))
-    expect(shards.Connection).toHaveBeenCalled()
+    const make = shards.Connection.mock.calls[0][1]
+
+    urls.forEach((url) => make(url))
+    urls.forEach((url) => expect(Connection).toHaveBeenCalledWith(url, overrides, undefined))
   })
 
   it('should not take a url as overrides', async () => {
@@ -94,7 +136,6 @@ describe('topology overrides', () => {
 
     await connect(...urls)
 
-    expect(Connection).toHaveBeenCalledTimes(2)
-    urls.forEach((url) => expect(Connection).toHaveBeenCalledWith(url, {}))
+    expect(shards.Connection).toHaveBeenCalledWith(urls, expect.any(Function), undefined)
   })
 })

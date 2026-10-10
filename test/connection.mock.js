@@ -17,6 +17,9 @@ const channel = /** @type {jest.MockedFunction<(sharded?: boolean, index?: numbe
     diagnose: jest.fn(async () => undefined),
     forget: jest.fn(() => undefined),
     seal: jest.fn(async () => undefined),
+    settled: jest.fn(async () => undefined),
+    quiet: jest.fn(async () => 0),
+    occupy: jest.fn(() => undefined),
     close: jest.fn(async () => undefined),
     closed: false,
     recover: jest.fn(async () => undefined)

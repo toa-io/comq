@@ -38,18 +38,21 @@ class Connection {
   /** @type {comq.topology.Overrides} */
   #overrides
 
+  /** @type {object} */
+  #options
+
   #diagnostics = emitter.create()
 
   /**
    * @param {string} url
-   */
-  /**
-   * @param {string} url
    * @param {comq.topology.Overrides} [overrides] per channel type, merged over the presets
+   * @param {string} [servername] the name TLS verifies the broker by, when the URL has its
+   * address in place of the name
    */
-  constructor (url, overrides = {}) {
+  constructor (url, overrides = {}, servername = undefined) {
     this.#url = heartbeaten(url)
     this.#overrides = overrides
+    this.#options = servername === undefined ? SOCKET_OPTIONS : { ...SOCKET_OPTIONS, servername }
   }
 
   get connected () {
@@ -255,7 +258,7 @@ class Connection {
    * @return {Promise<comq.amqp.Connection>}
    */
   async #connect () {
-    const connecting = amqp.connect(this.#url, SOCKET_OPTIONS)
+    const connecting = amqp.connect(this.#url, this.#options)
 
     let timer
 

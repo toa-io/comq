@@ -44,6 +44,29 @@ declare namespace comq {
 
     seal (): Promise<void>
 
+    /** resolves once what was delivered and what was published is done with */
+    settled? (): Promise<void>
+
+    /** since when there has been nothing to do, which is now while there is */
+    quiet? (): Promise<number>
+
+    /** over a sharded connection: whether a shard is one of the channel's */
+    has? (index: number): boolean
+
+    /** takes a shard in, consuming from it what is consumed from the rest */
+    join? (connection: any, index: number): Promise<void>
+
+    /** stops publishing through a shard, which goes on being consumed from */
+    retire? (index: number): void
+
+    restore? (index: number): void
+
+    /** lets a shard go, once what it has delivered is done with */
+    leave? (index: number): Promise<void>
+
+    /** told by whoever publishes whether a shard owes it something */
+    occupy? (occupied: (index: number) => boolean): void
+
     close (): Promise<void>
 
     readonly closed: boolean

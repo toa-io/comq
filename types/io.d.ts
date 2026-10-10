@@ -157,6 +157,15 @@ declare namespace comq {
 
     diagnose(event: 'taken', listener: (channel: _topology.type, queue: string, index?: number) => void): void
 
+    /** a broker the names of the shards stand for has joined the pool, or is back in it */
+    diagnose(event: 'join', listener: (index: number, address: string) => void): void
+
+    /** no name stands for the broker any longer: nothing new is published to it */
+    diagnose(event: 'retire', listener: (index: number, address: string) => void): void
+
+    /** a retired broker has had nothing more to give, and is disconnected */
+    diagnose(event: 'leave', listener: (index: number, address: string) => void): void
+
     diagnose(event: 'pause', listener: (channel: _topology.type) => void): void
 
     diagnose(event: 'resume', listener: (channel: _topology.type) => void): void

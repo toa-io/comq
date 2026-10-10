@@ -985,3 +985,414 @@ function emitRecover (chan) {
 
   for (const call of calls) call[1]()
 }
+
+describe('a shard that joins', () => {
+  /** @type {jest.MockedObject<comq.Connection>} */
+  let joiner
+
+  /** @type {jest.MockedObject<comq.Channel>} */
+  let joined
+
+  const consumer = jest.fn()
+
+  const channelOf = async (connection) => await connection.createChannel.mock.results.at(-1).value
+
+  const sendMany = async () => {
+    for (let i = 0; i < 100; i++) await channel.send(generate(), randomBytes(8))
+  }
+
+  beforeEach(async () => {
+    channel = await create(connections, type)
+    joiner = mock.connection()
+  })
+
+  it('should tell whether a shard is its own', async () => {
+    expect(channel.has(1)).toStrictEqual(true)
+    expect(channel.has(2)).toStrictEqual(false)
+
+    await channel.join(joiner, 2)
+
+    expect(channel.has(2)).toStrictEqual(true)
+  })
+
+  it('should create a channel of the type, numbered as the shard is', async () => {
+    await channel.join(joiner, 2)
+
+    expect(joiner.createChannel).toHaveBeenCalledWith(type, 2)
+  })
+
+  it('should not join twice', async () => {
+    await channel.join(joiner, 2)
+    await channel.join(joiner, 2)
+
+    expect(joiner.createChannel).toHaveBeenCalledTimes(1)
+  })
+
+  it('should consume what has been consumed', async () => {
+    await channel.consume('q', consumer)
+    await channel.subscribe('x', 'g', consumer)
+    await channel.bound('x', 'q', 'k', consumer)
+    await channel.held('x', 'q', 'k', consumer)
+
+    await channel.join(joiner, 2)
+
+    joined = await channelOf(joiner)
+
+    expect(joined.consume).toHaveBeenCalledWith('q', expect.any(Function))
+    expect(joined.subscribe).toHaveBeenCalledWith('x', 'g', consumer)
+    expect(joined.bound).toHaveBeenCalledWith('x', 'q', 'k', consumer)
+    expect(joined.held).toHaveBeenCalledWith('x', 'q', 'k', expect.any(Function))
+  })
+
+  it('should consume what is consumed afterwards', async () => {
+    await channel.join(joiner, 2)
+    await channel.consume('q', consumer)
+
+    joined = await channelOf(joiner)
+
+    expect(joined.consume).toHaveBeenCalledTimes(1)
+  })
+
+  it('should not be published through before it consumes', async () => {
+    const consuming = new Promex()
+
+    await channel.consume('q', consumer)
+
+    joiner.createChannel.mockImplementationOnce(async (type, index) => {
+      const chan = mock.channel(false, index)
+
+      chan.consume.mockImplementation(() => consuming)
+
+      return chan
+    })
+
+    const joining = channel.join(joiner, 2)
+
+    await immediate()
+    await sendMany()
+
+    joined = await channelOf(joiner)
+
+    expect(joined.consume).toHaveBeenCalled()
+    expect(joined.send).not.toHaveBeenCalled()
+
+    consuming.resolve()
+
+    await joining
+    await sendMany()
+
+    expect(joined.send).toHaveBeenCalled()
+  })
+
+  it('should not wait for a key that is held by another', async () => {
+    await channel.held('x', 'q', 'k', consumer)
+
+    joiner.createChannel.mockImplementationOnce(async (type, index) => {
+      const chan = mock.channel(false, index)
+
+      chan.held.mockImplementation(() => new Promex())
+
+      return chan
+    })
+
+    await channel.join(joiner, 2)
+    await sendMany()
+
+    joined = await channelOf(joiner)
+
+    expect(joined.send).toHaveBeenCalled()
+  })
+
+  it('should not consume what a sealed channel consumed', async () => {
+    await channel.consume('q', consumer)
+    await channel.seal()
+    await channel.join(joiner, 2)
+
+    joined = await channelOf(joiner)
+
+    expect(joined.consume).not.toHaveBeenCalled()
+  })
+
+  it('should not be its shard when no channel can be made for it', async () => {
+    const exception = new Error('No channels left to allocate')
+
+    joiner.createChannel.mockImplementationOnce(async () => { throw exception })
+
+    await expect(channel.join(joiner, 2)).rejects.toThrow(exception)
+
+    expect(channel.has(2)).toStrictEqual(false)
+
+    // and may be joined again
+    await channel.join(joiner, 2)
+
+    expect(channel.has(2)).toStrictEqual(true)
+  })
+
+  it('should not join when it cannot consume what the rest do', async () => {
+    const exception = new Error('PRECONDITION_FAILED')
+
+    await channel.consume('q', consumer)
+
+    joiner.createChannel.mockImplementationOnce(async (type, index) => {
+      const chan = mock.channel(false, index)
+
+      chan.consume.mockImplementation(async () => { throw exception })
+
+      return chan
+    })
+
+    await expect(channel.join(joiner, 2)).rejects.toThrow(exception)
+
+    joined = await channelOf(joiner)
+
+    await sendMany()
+
+    expect(channel.has(2)).toStrictEqual(false)
+    expect(joined.close).toHaveBeenCalled()
+    expect(joined.send).not.toHaveBeenCalled()
+  })
+
+  it('should not consume what no shard could', async () => {
+    const chans = await Promise.all(connections.map((conn) => channelOf(conn)))
+
+    for (const chan of chans) chan.consume.mockImplementationOnce(async () => { throw new Error('oops') })
+
+    await expect(channel.consume('q', consumer)).rejects.toThrow()
+    await channel.join(joiner, 2)
+
+    joined = await channelOf(joiner)
+
+    expect(joined.consume).not.toHaveBeenCalled()
+  })
+
+  it.each(['seal', 'close'])('should %s a shard that is joining with the rest', async (method) => {
+    const consuming = new Promex()
+
+    await channel.consume('q', consumer)
+
+    joiner.createChannel.mockImplementationOnce(async (type, index) => {
+      const chan = mock.channel(false, index)
+
+      chan.consume.mockImplementation(() => consuming)
+
+      return chan
+    })
+
+    const joining = channel.join(joiner, 2)
+
+    await immediate()
+    await channel[method]()
+
+    joined = await channelOf(joiner)
+
+    expect(joined[method]).toHaveBeenCalled()
+
+    consuming.resolve()
+
+    await joining
+  })
+
+  it('should not be published through when closed while joining', async () => {
+    const consuming = new Promex()
+
+    await channel.consume('q', consumer)
+
+    joiner.createChannel.mockImplementationOnce(async (type, index) => {
+      const chan = mock.channel(false, index)
+
+      chan.consume.mockImplementation(() => consuming)
+
+      return chan
+    })
+
+    const joining = channel.join(joiner, 2)
+
+    await immediate()
+    await channel.close()
+
+    consuming.resolve()
+
+    await joining
+
+    joined = await channelOf(joiner)
+
+    expect(joined.close).toHaveBeenCalled()
+    expect(joined.send).not.toHaveBeenCalled()
+  })
+
+  it('should tell which shard a message arrived on', async () => {
+    await channel.consume('q', consumer)
+    await channel.join(joiner, 2)
+
+    joined = await channelOf(joiner)
+
+    const message = { content: randomBytes(8) }
+
+    await joined.consume.mock.calls[0][1](message)
+    await channel.fire('reply', randomBytes(8), {}, message)
+
+    expect(joined.fire).toHaveBeenCalled()
+  })
+})
+
+describe('a shard that retires', () => {
+  /** @type {jest.MockedObject<comq.Channel>[]} */
+  let chans
+
+  const sendMany = async () => {
+    for (let i = 0; i < 100; i++) await channel.send(generate(), randomBytes(8))
+  }
+
+  beforeEach(async () => {
+    channel = await create(connections, type)
+    chans = await Promise.all(connections.map((conn) => conn.createChannel.mock.results.at(-1).value))
+  })
+
+  it('should not be published through', async () => {
+    channel.retire(1)
+
+    await sendMany()
+
+    expect(chans[0].send).toHaveBeenCalledTimes(100)
+    expect(chans[1].send).not.toHaveBeenCalled()
+  })
+
+  it('should still take back what answers a message that arrived on it', async () => {
+    await channel.consume('q', jest.fn())
+
+    const message = { content: randomBytes(8) }
+
+    await chans[1].consume.mock.calls[0][1](message)
+
+    channel.retire(1)
+
+    for (let i = 0; i < 20; i++) await channel.fire('reply', randomBytes(8), {}, message)
+
+    expect(chans[1].fire).toHaveBeenCalledTimes(20)
+  })
+
+  it('should go on being consumed from', async () => {
+    channel.retire(1)
+
+    await channel.consume('q', jest.fn())
+
+    expect(chans[1].consume).toHaveBeenCalled()
+  })
+
+  it('should pause once no other shard is left', async () => {
+    const pause = jest.fn()
+    const resume = jest.fn()
+
+    channel.diagnose('pause', pause)
+    channel.diagnose('resume', resume)
+
+    channel.retire(0)
+    channel.retire(1)
+
+    expect(pause).toHaveBeenCalled()
+
+    channel.restore(1)
+
+    expect(resume).toHaveBeenCalled()
+  })
+
+  it('should be published through again once restored', async () => {
+    channel.retire(1)
+    channel.restore(1)
+
+    await sendMany()
+
+    expect(chans[1].send).toHaveBeenCalled()
+  })
+
+  it('should tell since when it has had nothing to do', async () => {
+    chans[1].quiet.mockImplementation(async () => 42)
+
+    await expect(channel.quiet(1)).resolves.toStrictEqual(42)
+  })
+
+  it('should have something to do while whoever publishes says so', async () => {
+    channel.occupy((index) => index === 1)
+
+    const now = Date.now()
+
+    expect(await channel.quiet(1)).toBeGreaterThanOrEqual(now)
+    expect(await channel.quiet(0)).toStrictEqual(0)
+  })
+
+  describe('and leaves', () => {
+    it('should seal its channel, wait for what it delivered, and close it', async () => {
+      const order = []
+
+      chans[1].seal.mockImplementation(async () => order.push('seal'))
+      chans[1].settled.mockImplementation(async () => order.push('settled'))
+      chans[1].close.mockImplementation(async () => order.push('close'))
+
+      await channel.leave(1)
+
+      expect(order).toStrictEqual(['seal', 'settled', 'close'])
+      expect(chans[0].close).not.toHaveBeenCalled()
+    })
+
+    it('should be the way back until what it delivered is done with', async () => {
+      const settled = new Promex()
+
+      await channel.consume('q', jest.fn())
+
+      const message = { content: randomBytes(8) }
+
+      await chans[1].consume.mock.calls[0][1](message)
+
+      chans[1].settled.mockImplementation(() => settled)
+      channel.retire(1)
+
+      const leaving = channel.leave(1)
+
+      await immediate()
+      await channel.fire('reply', randomBytes(8), {}, message)
+
+      expect(chans[1].fire).toHaveBeenCalled()
+
+      settled.resolve()
+
+      await leaving
+      await channel.fire('reply', randomBytes(8), {}, message)
+
+      expect(chans[0].fire).toHaveBeenCalled()
+    })
+
+    it('should not be its shard any longer', async () => {
+      await channel.leave(1)
+
+      expect(channel.has(1)).toStrictEqual(false)
+
+      await sendMany()
+
+      expect(chans[1].send).not.toHaveBeenCalled()
+    })
+
+    it('should not be consumed from', async () => {
+      await channel.leave(1)
+      await channel.consume('q', jest.fn())
+
+      expect(chans[1].consume).not.toHaveBeenCalled()
+    })
+
+    it('should not come back when its channel recovers', async () => {
+      await channel.leave(1)
+
+      for (const [event, listener] of chans[1].diagnose.mock.calls) if (event === 'recover') listener()
+
+      await sendMany()
+
+      expect(chans[1].send).not.toHaveBeenCalled()
+    })
+
+    it('should stop listening to its connection', async () => {
+      await channel.leave(1)
+
+      expect(connections[1].forget).toHaveBeenCalledWith('close', expect.any(Function))
+      expect(connections[1].forget).toHaveBeenCalledWith('open', expect.any(Function))
+    })
+  })
+})

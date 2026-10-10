@@ -25,24 +25,42 @@ class Network {
 
   #refusing = false
 
+  /** @type {string} */
+  #listenHost
+
+  /** @type {number} */
+  #listenPort
+
   /**
    * @param {number} [n] broker index
+   * @param {string} [host] the address the broker is found at through this network
+   * @param {number} [port] any that is free unless given
    */
-  constructor (n = 0) {
-    const [host, port] = getAddress(n).split(':')
+  constructor (n = 0, host = '127.0.0.1', port = 0) {
+    const [brokerHost, brokerPort] = getAddress(n).split(':')
 
-    this.#host = host
-    this.#port = Number(port)
+    this.#host = brokerHost
+    this.#port = Number(brokerPort)
+    this.#listenHost = host
+    this.#listenPort = port
   }
 
   get address () {
     return 'localhost:' + this.#server.address().port
   }
 
+  /** How many connections are open through this network. */
+  get connections () {
+    return this.#tunnels.size
+  }
+
   async open () {
     this.#server = net.createServer(this.#tunnel)
 
-    await new Promise((resolve) => this.#server.listen(0, '127.0.0.1', resolve))
+    await new Promise((resolve, reject) => {
+      this.#server.once('error', reject)
+      this.#server.listen(this.#listenPort, this.#listenHost, resolve)
+    })
   }
 
   /**
