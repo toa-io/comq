@@ -122,7 +122,7 @@ describe('back', () => {
 
     replies = await findChannel('reply')
 
-    expect(producer).toHaveBeenCalledWith(payload)
+    expect(producer).toHaveBeenCalledWith(payload, properties)
 
     expect(replies.fire).toHaveBeenCalledWith(properties.replyTo, expect.any(Buffer),
       expect.objectContaining({ correlationId: properties.correlationId }), request)

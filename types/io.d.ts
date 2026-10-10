@@ -7,7 +7,7 @@ import * as _amqp from './amqp'
 
 declare namespace comq {
 
-  type Producer<Input = any, Output = any> = (message: Input) => Output | Promise<Output>
+  type Producer<Input = any, Output = any> = (message: Input, properties?: _amqp.Properties) => Output | Promise<Output>
   type Consumer<T = any> = (message: T, headers?: _amqp.Properties) => void | Promise<void>
 
   type ReplyHandler = (payload: any, properties: _amqp.Properties, size?: number) => void
@@ -66,6 +66,9 @@ declare namespace comq {
   /** The options of a Request, settled once for all its attempts. */
   interface Terms {
     encoding?: _encoding.Encoding
+
+    /** What a Request is sent with besides what makes it one. */
+    properties?: _amqp.Properties
     expires?: number
     signal?: AbortSignal
   }
@@ -76,7 +79,11 @@ declare namespace comq {
     /** Waits for the Reply for as long as it takes. */
     request<Reply = any, Request = any>(queue: string, payload: Request, encoding?: _encoding.Encoding): Promise<Reply> | Promise<Readable>
 
+    request<Reply = any, Request = any>(queue: string, payload: Request, properties?: _amqp.Properties): Promise<Reply> | Promise<Readable>
+
     request(queue: string, stream: Readable, encoding?: _encoding.Encoding): Promise<Readable>
+
+    request(queue: string, stream: Readable, properties?: _amqp.Properties): Promise<Readable>
 
     /**
      * Sends a Request to whoever holds `key` on the routed `exchange`, through `back`. One that

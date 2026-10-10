@@ -144,6 +144,18 @@ When('the consumer sends the following request to the {token} queue:',
     await send.call(this, queue, payload)
   })
 
+When('the consumer sends the following request to the {token} queue with properties:',
+  /**
+   * @param {string} queue
+   * @param {string} yaml
+   * @this {comq.features.Context}
+   */
+  async function (queue, yaml) {
+    const { payload, properties } = parse(yaml)
+
+    await send.call(this, queue, payload, properties)
+  })
+
 When('the consumer sends a request to the {token} queue',
   /**
    * @param {string} queue
@@ -567,10 +579,10 @@ function sendMany (amount, queue) {
   }
 }
 
-async function send (queue, payload) {
+async function send (queue, payload, properties) {
   if (this.expected) await this.expected
 
-  this.reply = this.io.request(queue, payload)
+  this.reply = this.io.request(queue, payload, properties)
 }
 
 /**

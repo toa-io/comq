@@ -89,16 +89,22 @@ class IO {
    *
    * @param {string} queue
    * @param {any | Readable} payload
-   * @param {comq.Encoding} [encoding]
+   * @param {comq.Encoding | comq.amqp.Properties} [encoding]
    * @returns {Promise<any | Readable>}
    */
   async request (queue, payload, encoding) {
-    // a caller of the version that took a timeout here would otherwise wait on in silence
-    if (typeof encoding === 'object' && encoding !== null) {
-      throw new TypeError('A Request takes an encoding and waits for its Reply')
+    if (typeof encoding !== 'object' || encoding === null) {
+      return await this.#request(queue, payload, { encoding })
     }
 
-    return await this.#request(queue, payload, { encoding })
+    // a caller of the version that took a timeout here would otherwise wait on in silence
+    if ('timeout' in encoding || 'signal' in encoding) {
+      throw new TypeError('A Request takes an encoding or properties and waits for its Reply')
+    }
+
+    const { contentType, ...properties } = encoding
+
+    return await this.#request(queue, payload, { encoding: contentType, properties })
   }
 
   /**
@@ -396,7 +402,7 @@ class IO {
        */
       async (request) => {
         const payload = decode(request)
-        const reply = await produce(producer, payload)
+        const reply = await produce(producer, payload, request.properties)
 
         if (request.properties.replyTo === undefined) return
 
@@ -458,7 +464,9 @@ class IO {
 
     const [buffer, contentType] = this.#encode(payload, terms.encoding)
     const request = this.#createRequest(contentType, signal)
-    const properties = { ...request.properties }
+
+    // what makes it a Request is comq's to set, whatever it was sent with
+    const properties = { ...terms.properties, ...request.properties }
 
     if (expires !== undefined) {
       const left = Math.ceil(expires - Date.now())
@@ -869,10 +877,11 @@ async function abortable (promise, signal) {
  *
  * @param {comq.Producer} producer
  * @param {any} payload
+ * @param {comq.amqp.Properties} properties
  */
-async function produce (producer, payload) {
+async function produce (producer, payload, properties) {
   try {
-    return await producer(payload)
+    return await producer(payload, properties)
   } catch (exception) {
     if (verdictOf(exception) !== PARK) throw exception
 
