@@ -449,6 +449,31 @@ describe('names', () => {
     expect(heard.retire).not.toHaveBeenCalled()
   })
 
+  it('should not take a broker that cannot be consumed from for one that has joined', async () => {
+    const exception = new Error('PRECONDITION_FAILED')
+    const listener = jest.fn()
+
+    connection.diagnose('error', listener)
+    channels[0].join.mockImplementationOnce(async () => { throw exception })
+
+    addresses.three = '10.0.0.3'
+    addresses.four = '10.0.0.3'
+
+    await tick(SETTLE + INTERVAL)
+
+    expect(listener).toHaveBeenCalledWith(exception, 2)
+    expect(heard.join).not.toHaveBeenCalled()
+    expect(heard.retire).not.toHaveBeenCalled()
+    expect(channels[0].leave).toHaveBeenCalledWith(2)
+    expect(connections[2].close).toHaveBeenCalled()
+
+    // and joins it anew later
+    await tick()
+
+    expect(heard.join).toHaveBeenCalledWith(3, '10.0.0.3')
+    expect(heard.retire).toHaveBeenCalledWith(1, '10.0.0.2')
+  })
+
   it('should ask again a broker that refused', async () => {
     const exception = new Error('ACCESS-REFUSED')
     const listener = jest.fn()

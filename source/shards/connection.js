@@ -307,12 +307,15 @@ class Connection {
       (channel) => channel.join(shard.connection, shard.index))
 
     const results = await Promise.allSettled(joining)
+    const failures = results.filter((result) => result.status === 'rejected')
 
-    for (const result of results) {
-      if (result.status === 'rejected') this.#diagnostics.emit('error', result.reason, shard.index)
-    }
+    for (const failure of failures) this.#diagnostics.emit('error', failure.reason, shard.index)
 
     if (shard.state !== JOINING) return
+
+    // a broker that cannot be consumed from has not joined: taken for one that has, it would
+    // let the broker that is consumed from be retired
+    if (failures.length > 0) return await this.#leave(shard, true)
 
     shard.state = ACTIVE
 
@@ -347,9 +350,11 @@ class Connection {
 
   /**
    * @param {comq.shards.Shard} shard
+   * @param {boolean} [failed] whether it is let go for having failed to join, which is tried
+   * again later rather than at once
    * @return {Promise<void>}
    */
-  async #leave (shard) {
+  async #leave (shard, failed = false) {
     const retired = shard.state === RETIRING
 
     shard.state = LEAVING
@@ -364,7 +369,8 @@ class Connection {
     // one that never joined is not said to have left
     if (retired) this.#diagnostics.emit(LEAVE, shard.index, shard.address)
 
-    this.#reconcile()
+    if (failed) this.#later(() => this.#reconcile())
+    else this.#reconcile()
   }
 
   /**

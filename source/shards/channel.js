@@ -110,24 +110,44 @@ class Channel {
     this.#connections.set(index, connection)
     this.#watch(connection, index)
 
-    const channel = await connection.createChannel(this.#type, index)
+    /** @type {comq.Channel} */
+    let channel
+
+    try {
+      channel = await connection.createChannel(this.#type, index)
+    } catch (exception) {
+      // not its shard, so that it may be joined again
+      if (!this.#abandoned(connection, index)) await this.leave(index)
+
+      throw exception
+    }
 
     if (this.#abandoned(connection, index)) return await channel.close()
 
     this.#joining.add(channel)
     this.#attach(channel, index)
 
-    // what is consumed while this is under way is consumed here too, as the list grows
-    for (let i = 0; i < this.#consumptions.length; i++) {
-      const { apply, awaited } = this.#consumptions[i]
-      const applied = apply(channel).catch(noop)
+    try {
+      // what is consumed while this is under way is consumed here too, as the list grows
+      for (let i = 0; i < this.#consumptions.length; i++) {
+        const { apply, awaited } = this.#consumptions[i]
+        const applied = apply(channel)
 
-      if (awaited) await applied
+        if (awaited) await applied
+        else applied.catch(noop)
+      }
+    } catch (exception) {
+      // a shard that cannot be consumed from is not one to publish through: whoever took the
+      // shard for joined would let go of the one that is consumed from
+      if (!this.#abandoned(connection, index)) await this.leave(index)
+
+      throw exception
+    } finally {
+      this.#joining.delete(channel)
     }
 
-    this.#joining.delete(channel)
-
-    if (this.#abandoned(connection, index)) return
+    // sealed or closed with the rest while it was joining, or let go
+    if (this.#abandoned(connection, index)) return await channel.close()
 
     this.#add(channel)
   }
@@ -209,16 +229,21 @@ class Channel {
    * way. See `fire`.
    */
   async consume (queue, consumer) {
-    return await this.#every(this.#consumption(
-      (channel) => channel.consume(queue, arrival(consumer, channel))))
+    return await this.#consumption(
+      (channel) => channel.consume(queue, arrival(consumer, channel)),
+      (apply) => this.#every(apply))
   }
 
   async subscribe (queue, group, consumer) {
-    await this.#every(this.#consumption((channel) => channel.subscribe(queue, group, consumer)))
+    await this.#consumption(
+      (channel) => channel.subscribe(queue, group, consumer),
+      (apply) => this.#every(apply))
   }
 
   async bound (exchange, queue, key, consumer) {
-    await this.#every(this.#consumption((channel) => channel.bound(exchange, queue, key, consumer)))
+    await this.#consumption(
+      (channel) => channel.bound(exchange, queue, key, consumer),
+      (apply) => this.#every(apply))
   }
 
   /**
@@ -227,10 +252,9 @@ class Channel {
    */
   async held (exchange, queue, key, consumer) {
     // a shard that joins is not waited for either: the key may be held there by another
-    const apply = this.#consumption(
-      (channel) => channel.held(exchange, queue, key, arrival(consumer, channel)), false)
-
-    await Promise.any(this.#apply(apply))
+    await this.#consumption(
+      (channel) => channel.held(exchange, queue, key, arrival(consumer, channel)),
+      (apply) => Promise.any(this.#apply(apply)), false)
   }
 
   /**
@@ -345,14 +369,29 @@ class Channel {
   }
 
   /**
+   * Consumes from the shards there are, and from the ones that join later. What no shard could
+   * consume is not consumed from those either: it has failed for whoever asked for it.
+   *
    * @param {(channel: comq.Channel) => Promise<any>} apply
+   * @param {(apply: (channel: comq.Channel) => Promise<any>) => Promise<any>} consume
    * @param {boolean} [awaited] whether a shard that joins waits for it before it is published to
-   * @return {(channel: comq.Channel) => Promise<any>}
+   * @return {Promise<any>}
    */
-  #consumption (apply, awaited = true) {
-    this.#consumptions.push({ apply, awaited })
+  async #consumption (apply, consume, awaited = true) {
+    const consumption = { apply, awaited }
 
-    return apply
+    // before it is applied, for a shard that joins meanwhile
+    this.#consumptions.push(consumption)
+
+    try {
+      return await consume(apply)
+    } catch (exception) {
+      const index = this.#consumptions.indexOf(consumption)
+
+      if (index !== -1) this.#consumptions.splice(index, 1)
+
+      throw exception
+    }
   }
 
   /**
@@ -600,6 +639,9 @@ class Channel {
    */
   async #all (fn) {
     const promises = this.#apply(fn)
+
+    // a shard that is joining is sealed and closed with the rest
+    for (const channel of this.#joining) promises.push(fn(channel))
 
     await Promise.all(promises)
   }

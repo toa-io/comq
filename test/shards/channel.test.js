@@ -1113,6 +1113,113 @@ describe('a shard that joins', () => {
     expect(joined.consume).not.toHaveBeenCalled()
   })
 
+  it('should not be its shard when no channel can be made for it', async () => {
+    const exception = new Error('No channels left to allocate')
+
+    joiner.createChannel.mockImplementationOnce(async () => { throw exception })
+
+    await expect(channel.join(joiner, 2)).rejects.toThrow(exception)
+
+    expect(channel.has(2)).toStrictEqual(false)
+
+    // and may be joined again
+    await channel.join(joiner, 2)
+
+    expect(channel.has(2)).toStrictEqual(true)
+  })
+
+  it('should not join when it cannot consume what the rest do', async () => {
+    const exception = new Error('PRECONDITION_FAILED')
+
+    await channel.consume('q', consumer)
+
+    joiner.createChannel.mockImplementationOnce(async (type, index) => {
+      const chan = mock.channel(false, index)
+
+      chan.consume.mockImplementation(async () => { throw exception })
+
+      return chan
+    })
+
+    await expect(channel.join(joiner, 2)).rejects.toThrow(exception)
+
+    joined = await channelOf(joiner)
+
+    await sendMany()
+
+    expect(channel.has(2)).toStrictEqual(false)
+    expect(joined.close).toHaveBeenCalled()
+    expect(joined.send).not.toHaveBeenCalled()
+  })
+
+  it('should not consume what no shard could', async () => {
+    const chans = await Promise.all(connections.map((conn) => channelOf(conn)))
+
+    for (const chan of chans) chan.consume.mockImplementationOnce(async () => { throw new Error('oops') })
+
+    await expect(channel.consume('q', consumer)).rejects.toThrow()
+    await channel.join(joiner, 2)
+
+    joined = await channelOf(joiner)
+
+    expect(joined.consume).not.toHaveBeenCalled()
+  })
+
+  it.each(['seal', 'close'])('should %s a shard that is joining with the rest', async (method) => {
+    const consuming = new Promex()
+
+    await channel.consume('q', consumer)
+
+    joiner.createChannel.mockImplementationOnce(async (type, index) => {
+      const chan = mock.channel(false, index)
+
+      chan.consume.mockImplementation(() => consuming)
+
+      return chan
+    })
+
+    const joining = channel.join(joiner, 2)
+
+    await immediate()
+    await channel[method]()
+
+    joined = await channelOf(joiner)
+
+    expect(joined[method]).toHaveBeenCalled()
+
+    consuming.resolve()
+
+    await joining
+  })
+
+  it('should not be published through when closed while joining', async () => {
+    const consuming = new Promex()
+
+    await channel.consume('q', consumer)
+
+    joiner.createChannel.mockImplementationOnce(async (type, index) => {
+      const chan = mock.channel(false, index)
+
+      chan.consume.mockImplementation(() => consuming)
+
+      return chan
+    })
+
+    const joining = channel.join(joiner, 2)
+
+    await immediate()
+    await channel.close()
+
+    consuming.resolve()
+
+    await joining
+
+    joined = await channelOf(joiner)
+
+    expect(joined.close).toHaveBeenCalled()
+    expect(joined.send).not.toHaveBeenCalled()
+  })
+
   it('should tell which shard a message arrived on', async () => {
     await channel.consume('q', consumer)
     await channel.join(joiner, 2)
