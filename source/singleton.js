@@ -19,8 +19,9 @@ class SingletonConnection extends Connection {
    *
    * @param {string} url
    * @param {comq.topology.Overrides} [overrides]
+   * @param {string} [servername]
    */
-  constructor (url, overrides = {}) {
+  constructor (url, overrides = {}, servername = undefined) {
     const instance = instances.get(url)
 
     if (instance !== undefined) {
@@ -31,7 +32,7 @@ class SingletonConnection extends Connection {
       return instance
     }
 
-    super(url, overrides)
+    super(url, overrides, servername)
 
     this.#url = url
     this.#overrides = overrides

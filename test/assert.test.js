@@ -50,9 +50,14 @@ it('should create sharded connection', async () => {
 
   io = await assert(...urls)
 
-  for (const url of urls) expect(SingletonConnection).toHaveBeenCalledWith(url, {})
+  expect(shards.Connection).toHaveBeenCalledWith(urls, expect.any(Function), undefined)
 
-  expect(shards.Connection).toHaveBeenCalledWith(SingletonConnection.mock.instances)
+  // a connection to a broker is shared, as one to a single URL is
+  const make = shards.Connection.mock.calls[0][1]
+
+  for (const url of urls) make(url)
+  for (const url of urls) expect(SingletonConnection).toHaveBeenCalledWith(url, {}, undefined)
+
   expect(IO).toHaveBeenCalledWith(shards.Connection.mock.instances[0])
   expect(io).toStrictEqual(IO.mock.instances[0])
 })

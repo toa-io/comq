@@ -27,3 +27,42 @@ Feature: Message properties
       """yaml
       appId: test
       """
+
+  Scenario: Sending a request with headers
+    Given function replying `greet` queue:
+      """
+      ({ name }, properties) => properties.headers.greeting + ' ' + name
+      """
+    When the consumer sends the following request to the `greet` queue with properties:
+      """yaml
+      payload:
+        name: world
+      properties:
+        headers:
+          greeting: hello
+      """
+    Then the consumer receives the reply:
+      """yaml
+      hello world
+      """
+
+  Scenario: A retried request keeps its headers
+    Given function replying `greet` queue:
+      """
+      (_, properties) => {
+        if (properties.headers['x-comq-attempt'] === undefined) throw new Error('once')
+
+        return properties.headers.greeting
+      }
+      """
+    When the consumer sends the following request to the `greet` queue with properties:
+      """yaml
+      payload: {}
+      properties:
+        headers:
+          greeting: hello
+      """
+    Then the consumer receives the reply:
+      """yaml
+      hello
+      """

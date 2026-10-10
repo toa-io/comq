@@ -18,6 +18,7 @@ for distributed, eventually consistent systems running on Node.js.
 - [Poison message handling](#messages)
 - [Connection tolerance](#connection-tolerance) and broker restart resilience
 - [Sharded connection](#sharded-connection) :rocket:
+- [Virtual shards](#virtual-shards) that follow DNS
 - [Singleton connection](#singleton-connection)
 - [Graceful shutdown](#graceful-shutdown)
 
@@ -81,10 +82,10 @@ Event published to a fanout exchange carries none.
 
 `async IO.reply(queue: string, producer): void`
 
-`producer` function's signature is `async? (message: any): any`
+`producer` function's signature is `async? (message: any, properties?): any`
 
 Assert a `queue` and start consuming Requests. Received messages are decoded and the resulting
-content is passed to the `producer`. The result returned by the `producer` is then encoded and sent
+content is passed to the `producer`, followed by the [properties](docs/headers.md) of the Request. The result returned by the `producer` is then encoded and sent
 back to the queue specified in the `replyTo` property of the Request, along with a `correlationId`
 that has the same value as in the Request.
 
@@ -109,8 +110,11 @@ await io.reply('add_numbers', ({ a, b }) => (a + b))
 
 `async IO.request(queue: string, payload: any, encoding?: string): any`
 
+`async IO.request(queue: string, payload: any, properties?): any`
+
 Send encoded Request message with `replyTo` and `correlationId` properties set and
-return decoded Reply content. The promise stays pending until the Reply arrives, however long
+return decoded Reply content. A Request may carry [properties](docs/headers.md) of its own, such
+as `headers`. The promise stays pending until the Reply arrives, however long
 that takes: a Request has no timeout and cannot be withdrawn. One no Producer can answer is
 [parked](#parked-messages), and can still be answered while its caller waits.
 
@@ -508,6 +512,89 @@ const io = await connect(shard0, shard1)
 await io.close()
 ```
 
+### Virtual shards
+
+The URLs of a sharded connection are *names*, and several of them may stand for one broker. A
+connection is made to each broker rather than to each name: thirty-two names resolving to two
+addresses are two connections.
+
+```javascript
+const io = await connect('amqp://rmq0.example.com', 'amqp://rmq1.example.com', /* ... */)
+```
+
+A range in a host is as many URLs. Its end is exclusive, so a range that starts at zero names as
+many hosts as its end says, and a start written with leading zeros pads every number to its
+width:
+
+```javascript
+await connect('amqp://developer:secret@rmq[0..32].example.com') // rmq0 … rmq31
+await connect('amqp://developer:secret@rmq[00..32].example.com') // rmq00 … rmq31
+```
+
+This is what lets the number of brokers change without anyone being reconfigured: the names stay,
+and what they resolve to moves.
+
+A broker is told by its address, port, virtual host and credentials. A name with several
+addresses is still one broker, connected through one of them: two connections to one broker
+would compete for the queues that are exclusive to a connection. Different addresses are taken
+for different brokers.
+
+#### Following the names
+
+The names are resolved again every `interval`. What they resolve to is seldom seen changing
+whole: records are updated one after another, and until their TTL has run out caches answer
+with the old address and the new one in turn. So a change is acted upon only once the answer has
+stayed the same for the `settle` time, and anything else observed meanwhile starts that time
+anew. A name that fails to resolve keeps its address, which is reported as `error`.
+
+Then the brokers are brought in line with the names, making before breaking:
+
+1. **Join.** A connection is made to each broker that is newly named. Whatever is consumed is
+   consumed from it as well, and then it joins the pool. Until every named broker has joined,
+   nothing below happens: a name pointing at a broker that is not there yet takes nothing away.
+2. **Retire.** A broker no name stands for is taken out of the pool: nothing new is published to
+   it. It goes on being consumed from, and a Reply still goes back through it.
+3. **Leave.** A retired broker is disconnected once, for the whole `linger` time, it has had
+   nothing to do: the queues consumed on it are empty, no message is with its consumer or
+   waiting to be [retried](#retries), no publication awaits its confirmation, and no Request
+   sent through it awaits its Reply.
+
+Everyone connected follows the names on their own, and not at the same moment. The `linger` time
+is what covers the difference: what is published to a retired broker by those who have not seen
+the names move yet is consumed by those who have. There is no deadline, since leaving a broker
+that is still published to would strand the messages. A retired broker that is named again is
+back in the pool, and one that stays out of reach for the `linger` time is given up on.
+
+A broker that is out of reach is not waited for: what its names resolve to next is taken at
+once, as it is when a single connection is restored by its name.
+
+The [guarantees](#what-is-guaranteed) are the ones a sharded connection has. A publication is
+confirmed by whichever broker took it, a consumer does not leave a queue that holds messages,
+and a Request is either answered through the broker it was sent to or re-sent as it is when a
+shard is lost.
+
+#### Timing
+
+The trailing argument of `connect` takes it next to the [topology settings](#settings), in
+milliseconds:
+
+```javascript
+await connect(...urls, { resolution: { interval: 10_000, settle: 60_000, linger: 60_000 } })
+```
+
+- `interval`: how often the names are resolved, 10 seconds by default.
+- `settle`: how long an answer is to hold before it is acted upon.
+- `linger`: how long a retired broker is to stay idle before it is left.
+
+Unless given, `settle` and `linger` are the longest TTL the names have been answered with, and
+no less than 30 seconds: a TTL bounds how long a cache may answer with what is no longer true,
+and says nothing of records being updated one by one. A name that is not found in DNS itself (one
+from the hosts file, or one completed by the resolver's search list) has no TTL, and makes them
+60 seconds.
+
+A single URL is one connection made by its name, as it always was, and nothing here applies to
+it.
+
 ## Singleton connection
 
 `async assert(url: string): IO`
@@ -821,6 +908,12 @@ Subscribe to one of the diagnostic events:
   reported only once every shard has rejected it.
 - `taken`: a Key [`back`](#addressed-requests) claims is held by another connection on this broker, and
   is claimed again. Channel type and the queue name are passed.
+- `join`: a broker the names of the [virtual shards](#virtual-shards) stand for has joined the
+  pool, or a retired one is back in it. The shard number and the address are passed.
+- `retire`: no name stands for a broker any longer, and nothing new is published to it. The
+  shard number and the address are passed.
+- `leave`: a retired broker has had nothing more to give, and is disconnected. The shard number
+  and the address are passed.
 - `pause`: channel is paused. Channel type is passed.
   In the case of a [sharded connection](#sharded-connection), it means that there is no shard left
   to publish to, be it because every one of them has rejected a publish or lost its connection.
@@ -830,7 +923,9 @@ In the case of a [sharded connection](#sharded-connection), an additional argume
 shard number will be passed to listeners.
 This is applicable except for the `pause` and `resume` events,
 which are emitted when the associated channels are paused or resumed across all shards.
-The shard number corresponds to the position of the argument used in the `connect` function call.
+A shard is a broker, and is numbered in the order the brokers are first named: with a URL per
+broker that is the position of the argument used in the `connect` function call. A broker that
+[joins](#virtual-shards) later takes the next number, and a number is not given twice.
 
 [^3]: As the [`connect`](#connect) function returns an instance of `IO` *after* the connection has been
 established, there is no way to capture the initial `open` event.
@@ -847,6 +942,9 @@ io.diagnose('close', (error, shard) => console.log('AMQP connection closed', { m
 io.diagnose('error', (error, shard) => console.log('AMQP connection failed', { message: error.message, shard }))
 io.diagnose('lost', (type, shard) => console.log('AMQP shard lost', { type, shard }))
 io.diagnose('recover', (type, shard) => console.log('AMQP channel recovered', { type, shard }))
+io.diagnose('join', (shard, address) => console.log('AMQP broker joined', { shard, address }))
+io.diagnose('retire', (shard, address) => console.log('AMQP broker retired', { shard, address }))
+io.diagnose('leave', (shard, address) => console.log('AMQP broker left', { shard, address }))
 ```
 
 # Gratitude

@@ -1,6 +1,7 @@
 # Message Properties
 
-Events may be emitted and consumed with custom properties using an optional `properties` argument.
+Events and Requests may be sent and received with custom properties using an optional `properties`
+argument.
 
 ## Emission
 
@@ -15,6 +16,20 @@ to [amqplib.publish](https://amqp-node.github.io/amqplib/channel_api.html#channe
 
 `consumer` function's signature
 is `async? (payload: any, [properties: comq.amqp.Properties]): void`
+
+## Request
+
+`async IO.request(queue: string, payload: any, [properties: comq.amqp.Properties]): any`
+
+`replyTo` and `correlationId` are set by comq whatever is passed, and `contentType` is the
+encoding of the Request. A Request takes no `timeout` and no `signal`.
+
+## Reply
+
+`async IO.reply(queue: string, producer): void`
+
+`producer` function's signature
+is `async? (payload: any, [properties: comq.amqp.Properties]): any`
 
 ## Headers set by comq
 
