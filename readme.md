@@ -592,9 +592,6 @@ and says nothing of records being updated one by one. A name that is not found i
 from the hosts file, or one completed by the resolver's search list) has no TTL, and makes them
 60 seconds.
 
-A single URL is one connection made by its name, as it always was, and nothing here applies to
-it.
-
 ## Singleton connection
 
 `async assert(url: string): IO`
