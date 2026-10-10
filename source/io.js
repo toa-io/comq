@@ -63,7 +63,7 @@ class IO {
   constructor (connection) {
     this.#connection = connection
 
-    for (const event of events.connection) {
+    for (const event of [...events.connection, ...events.shards]) {
       const forwarder = (...args) => this.#diagnostics.emit(event, ...args)
 
       this.#connection.diagnose(event, forwarder)
@@ -293,6 +293,9 @@ class IO {
     this.#replies = await this.#createChannel('reply')
 
     this.#setupRetransmission()
+
+    // a shard that is being retired is not left while it owes a Reply
+    this.#requests.occupy?.((index) => this.#awaiting(index))
 
     // on a sharded connection, only once every shard has returned it
     this.#requests.diagnose('return', this.#returned)
@@ -743,6 +746,16 @@ class IO {
       if (request.publishing === true) request.lost = true
       else this.#resend(request, reply)
     }
+  }
+
+  /**
+   * @param {number} index
+   * @return {boolean} whether a Request sent through a shard is yet to be answered
+   */
+  #awaiting (index) {
+    for (const request of this.#pendingReplies.values()) if (request.shard === index) return true
+
+    return false
   }
 
   /**

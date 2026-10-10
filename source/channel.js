@@ -52,6 +52,21 @@ class Channel {
   /** @type {Set<Promise<void>>} failed messages on their way to a retry or the parking queue */
   #settling = new Set()
 
+  /** @type {Set<string>} the queues being consumed */
+  #queues = new Set()
+
+  /** @type {number} how many deliveries are with their consumers */
+  #handling = 0
+
+  /** @type {Promex | null} resolved once no delivery is with its consumer */
+  #rest = null
+
+  /** @type {number} when a message was last published, or a delivery was last done with */
+  #active = 0
+
+  /** @type {number} when the last of the messages waiting to be retried is delivered again */
+  #awaited = 0
+
   #diagnostics = emitter.create()
 
   #closed = false
@@ -87,6 +102,7 @@ class Channel {
 
     // a fresh channel has bound nothing
     this.#held.clear()
+    this.#queues.clear()
 
     await this.#channel.prefetch(this.#topology.prefetch)
 
@@ -267,6 +283,44 @@ class Channel {
     return this.#closed
   }
 
+  /**
+   * Resolves once the deliveries that are with their consumers are done with, and so is what
+   * was published. It is waited for between sealing and closing by whoever means to lose none
+   * of them: a channel that is closed takes back what it has delivered.
+   *
+   * @return {Promise<void>}
+   */
+  async settled () {
+    while (this.#handling > 0) await (this.#rest ??= new Promex())
+
+    await Promise.allSettled([...this.#confirmations, ...this.#settling])
+  }
+
+  /**
+   * Since when the channel has had nothing to do, which is now while it has: a delivery with
+   * its consumer, a publication awaiting its confirmation, a failed message that is yet to come
+   * back, or a message in a queue it consumes. It is what a broker that is being left is
+   * asked, since whatever is left behind on it is lost to this connection.
+   *
+   * @return {Promise<number>}
+   */
+  async quiet () {
+    const now = Date.now()
+
+    const busy = this.#handling > 0 || this.#confirmations.size > 0 ||
+      this.#settling.size > 0 || this.#paused !== null || this.#awaited > now
+
+    if (busy) return now
+
+    try {
+      if (await this.#depth() > 0) return now
+    } catch {
+      return now // what cannot be told is not taken for nothing
+    }
+
+    return Math.max(this.#active, this.#awaited)
+  }
+
   async recover (connection) {
     this.#connection = connection
 
@@ -370,6 +424,45 @@ class Channel {
     await probe.close().catch(noop)
 
     return true
+  }
+
+  /**
+   * @return {Promise<number>} how many messages wait in the queues being consumed
+   */
+  async #depth () {
+    let depth = 0
+
+    for (const queue of this.#queues) depth += await this.#count(queue)
+
+    return depth
+  }
+
+  /**
+   * Asked on a channel of its own, for the reason `#declare` has one: a queue that is gone is
+   * answered by closing the channel that asked.
+   *
+   * @param {string} queue
+   * @return {Promise<number>}
+   */
+  async #count (queue) {
+    const probe = await this.#connection.createChannel()
+
+    /** @type {Error & { code?: number } | undefined} */
+    let refusal
+
+    probe.on('error', (error) => { refusal = error })
+
+    try {
+      const { messageCount } = await probe.checkQueue(queue)
+
+      await probe.close().catch(noop)
+
+      return messageCount
+    } catch (exception) {
+      if (refusal?.code === NOT_FOUND) return 0
+
+      throw refusal ?? exception
+    }
   }
 
   // region initializers
@@ -532,6 +625,8 @@ class Channel {
 
     options = Object.assign({ persistent: this.#topology.persistent }, options)
 
+    this.#active = Date.now()
+
     const confirmation = this.#topology.confirms ? this.#confirmation() : undefined
     const resume = this.#channel.publish(exchange, queue, buffer, options, confirmation?.callback)
 
@@ -570,15 +665,57 @@ class Channel {
       /** @type {comq.amqp.options.Consume} */
       const options = {}
 
-      if (this.#topology.acknowledgments) consumer = this.#getAcknowledgingConsumer(queue, consumer)
-      else options.noAck = true
+      if (this.#topology.acknowledgments) {
+        consumer = this.#getAcknowledgingConsumer(queue, consumer)
+      } else {
+        consumer = this.#attended(consumer)
+        options.noAck = true
+      }
 
       const response = await this.#channel.consume(queue, consumer, options)
 
       this.#tags.push(response.consumerTag)
+      this.#queues.add(queue)
 
       return response.consumerTag
     })
+
+  /**
+   * Counts the deliveries that are with a consumer nothing is acknowledged for, without a
+   * promise of its own for the ones that are done with as they arrive.
+   *
+   * @param {comq.channels.Consumer} consumer
+   * @returns {comq.channels.Consumer}
+   */
+  #attended = (consumer) =>
+    (message) => {
+      this.#handling++
+
+      let result
+
+      try {
+        result = consumer(message)
+      } catch (exception) {
+        this.#attendedTo()
+
+        throw exception
+      }
+
+      if (typeof result?.then === 'function') result.then(this.#attendedTo, this.#attendedTo)
+      else this.#attendedTo()
+
+      return result
+    }
+
+  #attendedTo = () => {
+    this.#handling--
+    this.#active = Date.now()
+
+    if (this.#handling === 0 && this.#rest !== null) {
+      this.#rest.resolve()
+      this.#rest = null
+    }
+  }
 
   /**
    * @param {string} queue the queue being consumed
@@ -587,6 +724,8 @@ class Channel {
    */
   #getAcknowledgingConsumer = (queue, consumer) =>
     async (message) => {
+      this.#handling++
+
       try {
         await consumer(message)
 
@@ -601,6 +740,8 @@ class Channel {
         await settling
 
         this.#settling.delete(settling)
+      } finally {
+        this.#attendedTo()
       }
     }
 
@@ -647,6 +788,7 @@ class Channel {
     await this.#publish(this.#retryQueueOf(attempt), queue, message.content, properties)
 
     this.#channel.ack(message)
+    this.#awaited = Math.max(this.#awaited, Date.now() + this.#delays[attempt - 1])
 
     // the attempt that just failed, rather than the one it is about to get
     this.#diagnostics.emit('retry', message, exception, attempt)
@@ -780,6 +922,9 @@ const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 
 // the AMQP reply code a broker closes a channel with when another connection holds the queue
 const RESOURCE_LOCKED = 405
+
+// and the one it closes a channel with when asked about a queue it does not have
+const NOT_FOUND = 404
 
 const RETRY_PREFIX = 'comq.retry.'
 
