@@ -42,6 +42,21 @@ describe('initial connection', () => {
       expect.objectContaining({ timeout: expect.any(Number) }))
   })
 
+  it('should connect without a name to verify the broker by', async () => {
+    await connection.open()
+
+    expect(amqplib.connect.mock.calls[0][1]).not.toHaveProperty('servername')
+  })
+
+  it('should verify the broker by the name its address was resolved from', async () => {
+    connection = new Connection(url, {}, 'rmq.example.com')
+
+    await connection.open()
+
+    expect(amqplib.connect).toHaveBeenCalledWith(expect.stringContaining(url),
+      expect.objectContaining({ servername: 'rmq.example.com', timeout: expect.any(Number) }))
+  })
+
   it.each(/** @type {[string, Partial<Error>][]} */[
     ['Socket closed', { message: 'Socket closed abruptly during opening handshake' }],
     ['TLS disconnect', { message: 'Client network socket disconnected before secure TLS connection was established' }],

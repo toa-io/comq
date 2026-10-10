@@ -42,6 +42,15 @@ class Context extends World {
   /** @type {comq.features.Network[]} */
   networks = []
 
+  /** @type {Record<string, string>} the address each name of a shard resolves to */
+  names = {}
+
+  /** @type {comq.shards.Timing} */
+  resolution = { interval: 50, settle: 300, linger: 600 }
+
+  /** @type {Record<'join' | 'retire' | 'leave', string[]>} the addresses of the brokers that did */
+  brokers = { join: [], retire: [], leave: [] }
+
   async connect (user, password) {
     const urls = this.#urls(user, password)
 
@@ -52,6 +61,23 @@ class Context extends World {
     const urls = this.#urls(user, password)
 
     await this.#connect(urls, assert)
+  }
+
+  /**
+   * Connects to the names of the shards, which a broker is found behind at whatever port the
+   * names are given: see `names.js`.
+   *
+   * @param {string[]} hosts
+   * @param {number} port
+   */
+  async connectNames (hosts, port) {
+    const urls = hosts.map((host) => PROTOCOL + USER + ':' + PASSWORD + '@' + host + ':' + port)
+
+    await this.#connect(urls, connect, { ...TOPOLOGY, resolution: this.resolution })
+
+    for (const event of Object.keys(this.brokers)) {
+      this.io.diagnose(event, (_index, address) => this.brokers[event].push(address))
+    }
   }
 
   async unplug () {
@@ -78,14 +104,15 @@ class Context extends World {
   /**
    * @param {string[]} urls
    * @param {comq.Connect} [method]
+   * @param {comq.Options} [options]
    * @return {Promise<void>}
    */
-  async #connect (urls, method = connect) {
+  async #connect (urls, method = connect, options = TOPOLOGY) {
     if (this.io !== undefined) await this.disconnect()
 
     // the retry delay is a topology setting, so the suite need not wait out a
     // production one to see the mechanism work
-    this.io = await method(...urls, TOPOLOGY)
+    this.io = await method(...urls, options)
     this.connected = true
 
     for (const event of EVENTS) this.io.diagnose(event, () => (this.events[event] = true))
