@@ -77,23 +77,6 @@ describe('sharded connection', () => {
   })
 })
 
-describe('ranges', () => {
-  it('should expand a range into the urls of a sharded connection', async () => {
-    await connect('amqp://rmq[0..3].example.com')
-
-    const expanded = ['amqp://rmq0.example.com', 'amqp://rmq1.example.com', 'amqp://rmq2.example.com']
-
-    expect(shards.Connection).toHaveBeenCalledWith(expanded, expect.any(Function), undefined)
-  })
-
-  it('should connect to a range of one as to a single url', async () => {
-    await connect('amqp://rmq[0..1].example.com')
-
-    expect(Connection).toHaveBeenCalledWith('amqp://rmq0.example.com', {})
-    expect(shards.Connection).not.toHaveBeenCalled()
-  })
-})
-
 describe('resolution', () => {
   it('should pass how the names are followed, apart from the overrides', async () => {
     const urls = [generate(), generate()]

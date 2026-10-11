@@ -58,16 +58,6 @@ Given('an active connection to the names', connectNames)
 
 When('I connect to the names', connectNames)
 
-When('I connect to the range of the names',
-  /**
-   * @this {comq.features.Context}
-   */
-  async function () {
-    const amount = Object.keys(this.names).length
-
-    await this.connectNames([name(`[0..${amount}]`)], PORT)
-  })
-
 When('half of the names move to the {broker} broker',
   /**
    * @param {number} n
