@@ -514,7 +514,7 @@ await io.close()
 
 ### Virtual shards
 
-The URLs of a sharded connection are *names*, and several of them may stand for one broker. A
+Where the URLs of a sharded connection are *names*, several of them may stand for one broker. A
 connection is made to each broker rather than to each name: thirty-two names resolving to two
 addresses are two connections.
 
