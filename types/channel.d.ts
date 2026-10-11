@@ -7,6 +7,15 @@ declare namespace comq {
 
     type Consumer = (message: Message) => void | Promise<void>
 
+    /** What a channel knows of a queue it has declared. */
+    interface Lease {
+      /** when the queue is to be declared again, which is never for one that does not expire */
+      until: number
+
+      /** the declaration that is under way */
+      pending?: Promise<void>
+    }
+
   }
 
   interface Channel {
@@ -30,6 +39,18 @@ declare namespace comq {
      * through, as soon as it is chosen and again whenever the publish fails over to another.
      */
     send (queue: string, buffer: Buffer, options?: Options.Publish, via?: (index: number) => void): Promise<void>
+
+    /**
+     * Declares `queue` unless the broker is still keeping it for this channel. Over a sharded
+     * connection, on the shard of that `index`.
+     */
+    lease (queue: string, index?: number): Promise<void> | undefined
+
+    /** forgets that `queue` has been declared, so that it is declared before the next message */
+    release (queue: string): void
+
+    /** what the queues this channel declares expire in, in milliseconds */
+    readonly expires?: number
 
     publish (exchange: string, buffer: Buffer, options?: Options.Publish): Promise<void>
 

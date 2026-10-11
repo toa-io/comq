@@ -23,6 +23,13 @@ declare namespace comq {
     persistent: boolean
 
     /**
+     * How long the broker keeps a queue that is neither consumed nor declared, in milliseconds.
+     * It is the queue's `x-expires`, so every process that uses the queue must have the same.
+     * Without it, a queue is kept until it is deleted.
+     */
+    expires?: number
+
+    /**
      * How long a failed message waits before it is delivered again, in milliseconds:
      * one entry per retry, so **the length of the ladder is the number of retries** and
      * four rungs is five attempts. A bare number is a ladder of one, hence a single retry.

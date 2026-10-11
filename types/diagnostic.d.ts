@@ -2,7 +2,7 @@ declare namespace comq.diagnostics {
 
   type Event = 'open' | 'close' | 'error' | 'reconnect' | 'exhausted' | 'flow' | 'drain' |
     'remove' | 'lost' | 'recover' | 'discard' | 'retry' | 'pause' | 'resume' | 'return' | 'taken' |
-    'join' | 'retire' | 'leave'
+    'legacy' | 'join' | 'retire' | 'leave'
 
   interface Diagnosable {
     diagnose(event: Event, listener: Function): void

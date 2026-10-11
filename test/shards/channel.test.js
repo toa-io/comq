@@ -855,6 +855,47 @@ describe('routed', () => {
   })
 })
 
+describe('queues that expire', () => {
+  const queue = generate()
+
+  /** @type {jest.MockedObject<comq.Channel>[]} */
+  let channels
+
+  beforeEach(async () => {
+    channel = await create(connections, type)
+    channels = await getCreatedChannels()
+  })
+
+  it('should keep a queue on the shard it is asked to', async () => {
+    const index = random(channels.length)
+
+    await channel.lease(queue, index)
+
+    for (const chan of channels) {
+      if (chan.index === index) expect(chan.lease).toHaveBeenCalledWith(queue)
+      else expect(chan.lease).not.toHaveBeenCalled()
+    }
+  })
+
+  it('should have nothing to keep on a shard it does not have', async () => {
+    expect(channel.lease(queue, channels.length)).toBeUndefined()
+  })
+
+  it('should release a queue on every shard', async () => {
+    channel.release(queue)
+
+    for (const chan of channels) expect(chan.release).toHaveBeenCalledWith(queue)
+  })
+
+  it('should tell what the queues of its shards expire in', async () => {
+    expect(channel.expires).toBeUndefined()
+
+    for (const chan of channels) chan.expires = 1000
+
+    expect(channel.expires).toStrictEqual(1000)
+  })
+})
+
 describe('shards of messages', () => {
   const queue = generate()
   const buffer = randomBytes(8)
