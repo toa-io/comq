@@ -30,7 +30,6 @@ declare namespace comq {
 
   type Connect = {
     /**
-     * A range in a host is as many URLs: `amqp://rmq[0..32].example.com` is `rmq0` to `rmq31`.
      * Several URLs are the names of the shards, and a connection is made to each broker they
      * stand for.
      */

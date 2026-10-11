@@ -522,15 +522,6 @@ addresses are two connections.
 const io = await connect('amqp://rmq0.example.com', 'amqp://rmq1.example.com', /* ... */)
 ```
 
-A range in a host is as many URLs. Its end is exclusive, so a range that starts at zero names as
-many hosts as its end says, and a start written with leading zeros pads every number to its
-width:
-
-```javascript
-await connect('amqp://developer:secret@rmq[0..32].example.com') // rmq0 … rmq31
-await connect('amqp://developer:secret@rmq[00..32].example.com') // rmq00 … rmq31
-```
-
 This is what lets the number of brokers change without anyone being reconfigured: the names stay,
 and what they resolve to moves.
 
