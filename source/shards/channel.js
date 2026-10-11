@@ -268,6 +268,28 @@ class Channel {
     await this.#one((channel) => channel.send(queue, buffer, options), { via })
   }
 
+  /**
+   * @param {string} queue
+   * @param {number} index the shard the queue is kept on
+   * @returns {Promise<void> | undefined}
+   */
+  lease (queue, index) {
+    // a shard that is not there has nothing to keep: what went through it is sent again
+    return this.#shards.get(index)?.lease(queue)
+  }
+
+  /**
+   * @param {string} queue
+   */
+  release (queue) {
+    for (const channel of this.#shards.values()) channel.release(queue)
+  }
+
+  get expires () {
+    // the shards are of one topology
+    return this.#shards.values().next().value?.expires
+  }
+
   async publish (exchange, buffer, options) {
     await this.#one((channel) => channel.publish(exchange, buffer, options))
   }

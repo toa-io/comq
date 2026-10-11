@@ -6,7 +6,8 @@ const stream = require('node:stream')
 const { randomBytes } = require('node:crypto')
 const { generate } = require('randomstring')
 const { Promex } = require('../source/promex')
-const { immediate } = require('./helpers')
+const { immediate, timeout } = require('./helpers')
+const { Unroutable } = require('../source/unroutable')
 const { encode } = require('../source/encode')
 
 const mock = require('./connection.mock')
@@ -697,6 +698,134 @@ describe('reply', () => {
   })
 })
 
+describe('a queue that expires', () => {
+  const EXPIRES = 60
+
+  /**
+   * @param {boolean} [sharded]
+   */
+  async function expiring (sharded = false) {
+    jest.clearAllMocks()
+
+    connection = mock.connection(sharded)
+
+    const create = connection.createChannel.getMockImplementation()
+
+    connection.createChannel.mockImplementation(async (type, index) => {
+      const channel = await create(type, index)
+
+      if (type === 'request') channel.expires = EXPIRES
+
+      return channel
+    })
+
+    io = new IO(connection)
+    promise = io.request(queue, payload)
+
+    await immediate()
+
+    requests = await findChannel('request')
+    replies = await findChannel('reply')
+  }
+
+  afterEach(async () => {
+    await reply()
+    await promise
+  })
+
+  it('should have its Requests returned rather than dropped', async () => {
+    expect(requests.send.mock.calls[0][2]).toMatchObject({ mandatory: true })
+  })
+
+  it('should be kept for as long as a Request waits in it', async () => {
+    await expiring()
+
+    expect(requests.lease).not.toHaveBeenCalled()
+
+    await timeout(EXPIRES)
+
+    expect(requests.lease).toHaveBeenCalledWith(queue, undefined)
+    expect(requests.lease.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('should be kept on the shard the Request went through', async () => {
+    await expiring(true)
+    await timeout(EXPIRES)
+
+    expect(requests.lease).toHaveBeenCalledWith(queue, 0)
+  })
+
+  it('should be let go once nothing waits in it', async () => {
+    await expiring()
+    await reply()
+    await promise
+
+    requests.lease.mockClear()
+
+    await timeout(EXPIRES)
+
+    expect(requests.lease).not.toHaveBeenCalled()
+
+    // and kept again
+    promise = io.request(queue, payload)
+
+    await timeout(EXPIRES)
+
+    requests.send.mock.calls.shift()
+
+    expect(requests.lease).toHaveBeenCalledWith(queue, undefined)
+  })
+
+  it('should survive a lease that cannot be taken', async () => {
+    await expiring()
+
+    requests.lease.mockImplementation(async () => { throw new Error('Channel closed') })
+
+    await timeout(EXPIRES)
+
+    expect(requests.lease).toHaveBeenCalled()
+  })
+
+  it('should not be kept by a channel whose queues do not expire', async () => {
+    await timeout(EXPIRES)
+
+    expect(requests.lease).not.toHaveBeenCalled()
+  })
+
+  it('should be declared and requested again once the Request is returned', async () => {
+    const properties = requests.send.mock.calls[0][2]
+    const fields = { exchange: '', routingKey: queue }
+
+    emit(requests, 'return', { content: randomBytes(8), fields, properties })
+
+    await immediate()
+
+    expect(requests.release).toHaveBeenCalledWith(queue)
+    expect(requests.send).toHaveBeenCalledTimes(2)
+    expect(requests.send.mock.calls[1][0]).toStrictEqual(queue)
+
+    // the first of them is answered to nobody
+    requests.send.mock.calls.shift()
+  })
+
+  it('should reject a Request that is returned from elsewhere', async () => {
+    const properties = requests.send.mock.calls[0][2]
+    const fields = { exchange: generate(), routingKey: queue }
+
+    emit(requests, 'return', { content: randomBytes(8), fields, properties })
+
+    await expect(promise).rejects.toBeInstanceOf(Unroutable)
+
+    expect(requests.release).not.toHaveBeenCalled()
+
+    promise = io.request(queue, payload)
+
+    await immediate()
+
+    requests.send.mock.calls.shift()
+  })
+})
+
 const reply = async (content = randomBytes(8), contentType = undefined) => {
   const correlationId = requests.send.mock.calls[0][2].correlationId
   const properties = { correlationId, contentType }
@@ -716,6 +845,17 @@ async function replyAll () {
     const message = /** @type {comq.amqp.Message} */ { content: randomBytes(8), properties }
 
     await callback(message)
+  }
+}
+
+/**
+ * @param {jest.MockedObject<comq.Channel>} channel
+ * @param {string} event
+ * @param {...any} args
+ */
+function emit (channel, event, ...args) {
+  for (const [name, listener] of channel.diagnose.mock.calls) {
+    if (name === event) listener(...args)
   }
 }
 

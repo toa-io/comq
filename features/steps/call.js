@@ -6,7 +6,7 @@ const { Given, When, Then, After } = require('@cucumber/cucumber')
 
 const { connect, Unroutable } = require('../../')
 const { parse } = require('./yaml')
-const { getAddress, USER, PASSWORD } = require('./brokers')
+const { getAddress, USER, PASSWORD, BROKERS_AMOUNT } = require('./brokers')
 const { timeout, until } = require('../../test/helpers')
 
 Given('a holder answering {token} under the {token} key:',
@@ -35,6 +35,8 @@ Given('a holder on another connection answering {token} under the {token} key',
     this.holder = await another(this)
 
     await this.holder.back(exchange, key, echo)
+
+    if (this.sharded) await everywhere(exchange, key)
   })
 
 Given('a holder on another connection answering {token} under the {token} key in {number}ms',
@@ -492,6 +494,28 @@ function call (context, reply) {
  */
 function url (broker) {
   return `amqp://${USER}:${PASSWORD}@${getAddress(broker)}`
+}
+
+/**
+ * Waits for a key to be held on every broker. It is held once any shard holds it, and on a
+ * broker where the holder of the scenario before still has it, it is claimed for a while yet:
+ * a scenario that takes the other broker down by then has nobody to call.
+ *
+ * @param {string} exchange
+ * @param {string} key
+ */
+async function everywhere (exchange, key) {
+  for (let broker = 0; broker < BROKERS_AMOUNT; broker++) {
+    const caller = await connect(url(broker))
+
+    try {
+      const held = await eventually(() => caller.call(exchange, key, { key }, { timeout: 1000 }), 30)
+
+      assert.equal(held, true, `The key is not held on broker ${broker}`)
+    } finally {
+      await caller.close()
+    }
+  }
 }
 
 /**

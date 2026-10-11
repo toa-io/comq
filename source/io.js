@@ -46,6 +46,14 @@ class IO {
   /** @type {Map<Promex, comq.Request>} */
   #pendingReplies = new Map()
 
+  /**
+   * Goes on declaring the queues that Requests wait in: the broker drops a queue that nobody
+   * consumes, with the Requests in it, unless whoever is waiting for them asks it not to.
+   *
+   * @type {NodeJS.Timeout | null}
+   */
+  #keeping = null
+
   /** @type {[comq.diagnostics.Event, Function][]} */
   #forwarders = []
 
@@ -159,8 +167,11 @@ class IO {
           )
         }
 
+        // mandatory: a Request whose queue has gone is returned, and sent again
         return await this.#ask(queue, payload, terms,
-          (buffer, properties, via) => this.#requests.send(queue, buffer, properties, via))
+          (buffer, properties, via) =>
+            this.#requests.send(queue, buffer, { ...properties, mandatory: true }, via),
+          queue)
       }))
 
   // the terms are taken once, so a re-sent call keeps the deadline of the first
@@ -272,6 +283,9 @@ class IO {
 
   close = memo(async () => {
     await this.seal()
+
+    if (this.#keeping !== null) clearInterval(this.#keeping)
+
     await this.#destroyStreams(this.#replyPipes)
     await track(this)
 
@@ -455,9 +469,10 @@ class IO {
    * @param {any} payload
    * @param {comq.Terms} terms
    * @param {(buffer: Buffer, properties: comq.amqp.options.Publish) => Promise<void>} publish
+   * @param {string} [queue] the queue the Request waits in, when that is what it is sent to
    * @returns {Promise<any | Readable>}
    */
-  async #ask (target, payload, terms, publish) {
+  async #ask (target, payload, terms, publish, queue) {
     const { signal, expires } = terms
 
     signal?.throwIfAborted()
@@ -479,6 +494,8 @@ class IO {
     }
 
     const reply = this.#createReply(request)
+
+    if (queue !== undefined) this.#keep(request, queue)
 
     if (signal !== undefined) this.#abandon(request, reply, signal)
 
@@ -531,7 +548,43 @@ class IO {
   }
 
   /**
-   * A Request the broker returned reached nobody, and nobody will answer it.
+   * @param {comq.Request} request
+   * @param {string} queue
+   */
+  #keep (request, queue) {
+    request.queue = queue
+
+    const expires = this.#requests.expires
+
+    if (this.#keeping !== null || expires === undefined) return
+
+    // a lease is a third of what a queue expires in, so one that is missed is taken by the next
+    this.#keeping = setInterval(this.#lease, expires / 3)
+    this.#keeping.unref()
+  }
+
+  #lease = () => {
+    let kept = false
+
+    for (const request of this.#pendingReplies.values()) {
+      if (request.queue === undefined) continue
+
+      kept = true
+
+      // one that cannot be taken is of a connection that is lost, which re-sends its Requests
+      this.#requests.lease(request.queue, request.shard)?.catch(noop)
+    }
+
+    if (kept) return
+
+    clearInterval(this.#keeping)
+
+    this.#keeping = null
+  }
+
+  /**
+   * A Request the broker returned reached nobody, and nobody will answer it, unless what it
+   * did not reach is its queue: that one is declared and the Request is sent again.
    *
    * @param {comq.amqp.Message} message
    */
@@ -541,6 +594,17 @@ class IO {
     if (pending === undefined) return
 
     const [reply, request] = pending
+    const { exchange, routingKey } = message.fields
+
+    if (exchange === '' && routingKey === request.queue) {
+      this.#requests.release(request.queue)
+
+      // one still being published is re-sent once it is
+      if (request.publishing === true) request.lost = true
+      else this.#resend(request, reply)
+
+      return
+    }
 
     request.emitter.off(request.properties.correlationId)
     this.#pendingReplies.delete(reply)
@@ -890,5 +954,7 @@ async function produce (producer, payload, properties) {
     { cause: exception })
   }
 }
+
+function noop () {}
 
 exports.IO = IO

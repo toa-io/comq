@@ -55,6 +55,21 @@ class Channel {
   /** @type {Set<string>} the queues being consumed */
   #queues = new Set()
 
+  /**
+   * When each queue this channel declares is to be declared again, so that the broker goes on
+   * keeping it: one that expires is kept while it is consumed or declared, and publishing to it
+   * is neither.
+   *
+   * @type {Map<string, comq.channels.Lease>}
+   */
+  #leases = new Map()
+
+  /** @type {comq.amqp.options.Queue | undefined} what a queue that expires is declared with */
+  #expiring
+
+  /** @type {number} how long a lease is taken for, a third of what the queue expires in */
+  #term
+
   /** @type {number} how many deliveries are with their consumers */
   #handling = 0
 
@@ -88,6 +103,11 @@ class Channel {
     this.#failfast = index !== undefined
     this.#release = release
 
+    if (topology.expires !== undefined) {
+      this.#expiring = { ...DURABLE, arguments: { 'x-expires': topology.expires } }
+      this.#term = topology.expires / 3
+    }
+
     // a shard's publish fails rather than waits for its connection to come back: the pool
     // fails it over to another shard, and whoever published it is told where it went
     if (this.#failfast) failsafe.disable(this.send, this.publish, this.route)
@@ -103,6 +123,7 @@ class Channel {
     // a fresh channel has bound nothing
     this.#held.clear()
     this.#queues.clear()
+    this.#leases.clear()
 
     await this.#channel.prefetch(this.#topology.prefetch)
 
@@ -180,15 +201,49 @@ class Channel {
         })))
 
   send = failsafe(this, this.#recover,
-    lazy(this, this.#assertQueue,
-      /**
-       * @param {string} queue
-       * @param {Buffer} buffer
-       * @param {comq.amqp.options.Publish} options
-       */
-      async (queue, buffer, options) => {
-        await this.#publish(DEFAULT, queue, buffer, options)
-      }))
+    /**
+     * @param {string} queue
+     * @param {Buffer} buffer
+     * @param {comq.amqp.options.Publish} options
+     */
+    async (queue, buffer, options) => {
+      await this.lease(queue)
+      await this.#publish(DEFAULT, queue, buffer, options)
+    })
+
+  /**
+   * Declares a queue unless this channel has, recently enough for the broker to be still
+   * keeping it. A queue that does not expire is declared once.
+   *
+   * Whoever publishes to a queue that expires asks before each message, and whoever waits for
+   * an answer to one asks for as long as it waits: a queue nobody consumes is dropped with
+   * what is in it.
+   *
+   * @param {string} queue
+   * @returns {Promise<void> | undefined} nothing when there is nothing to wait for
+   */
+  lease (queue) {
+    const lease = this.#leases.get(queue)
+
+    if (lease === undefined) return this.#take(queue)
+    if (lease.pending !== undefined) return lease.pending
+    if (lease.until <= Date.now()) return this.#renew(queue, lease)
+  }
+
+  /**
+   * Forgets that a queue has been declared, so that it is declared before the next message:
+   * the broker has returned one, and does not have the queue.
+   *
+   * @param {string} queue
+   */
+  release (queue) {
+    this.#leases.delete(queue)
+  }
+
+  /** @returns {number | undefined} what the queues this channel declares expire in */
+  get expires () {
+    return this.#topology.expires
+  }
 
   publish = failsafe(this, this.#recover,
     lazy(this, this.#assertExchange,
@@ -395,17 +450,34 @@ class Channel {
 
   /**
    * Declares a queue exclusive to this connection, and says whether another connection holds it.
-   *
-   * The broker refuses such a queue by closing the channel that asked for it, and a channel error
-   * nobody listens for closes the whole connection. So the declaration is made on a channel of its
-   * own, which is all that closes. The queue belongs to the connection, and outlives that channel.
+   * The queue belongs to the connection, and outlives the channel it is declared on.
    *
    * @param {comq.amqp.Connection} connection
    * @param {string} queue
    * @returns {Promise<boolean>}
    */
   async #declare (connection, queue) {
-    const probe = await connection.createChannel().catch(() => { throw INTERRUPTION })
+    return await this.#probe(connection, queue, EXCLUSIVE, RESOURCE_LOCKED)
+  }
+
+  /**
+   * Declares a queue the broker may refuse, and says whether it has not.
+   *
+   * The broker refuses a queue by closing the channel that asked for it, and a channel error
+   * nobody listens for closes the whole connection. So the declaration is made on a channel of its
+   * own, which is all that closes.
+   *
+   * @param {comq.amqp.Connection} connection
+   * @param {string} queue
+   * @param {comq.amqp.options.Queue} options
+   * @param {number} [refused] the reply code of a refusal that is expected
+   * @returns {Promise<boolean>}
+   */
+  async #probe (connection, queue, options, refused) {
+    const probe = await connection.createChannel().catch((exception) => {
+      // a connection with no channel left to give is not one a recovery is coming for
+      throw exception?.message === EXHAUSTED ? exception : INTERRUPTION
+    })
 
     /** @type {Error & { code?: number } | undefined} */
     let refusal
@@ -413,9 +485,9 @@ class Channel {
     probe.on('error', (error) => { refusal = error })
 
     try {
-      await probe.assertQueue(queue, EXCLUSIVE)
+      await probe.assertQueue(queue, options)
     } catch (exception) {
-      if (refusal?.code === RESOURCE_LOCKED) return false
+      if (refused !== undefined && refusal?.code === refused) return false
 
       // what the broker refused with says more than the channel it closed
       throw refusal ?? exception
@@ -424,6 +496,78 @@ class Channel {
     await probe.close().catch(noop)
 
     return true
+  }
+
+  /**
+   * @param {string} queue
+   * @returns {Promise<void>}
+   */
+  #take (queue) {
+    /** @type {comq.channels.Lease} */
+    const lease = { until: Infinity, pending: undefined }
+    const since = Date.now()
+
+    lease.pending = this.#found(queue).then((expiring) => {
+      if (expiring) lease.until = since + this.#term
+
+      lease.pending = undefined
+    }, (exception) => {
+      // the channel may have been made anew since, and its leases with it
+      if (this.#leases.get(queue) === lease) this.#leases.delete(queue)
+
+      throw exception
+    })
+
+    this.#leases.set(queue, lease)
+
+    return lease.pending
+  }
+
+  /**
+   * Declared as it was, a queue that has expired since is there again.
+   *
+   * @param {string} queue
+   * @param {comq.channels.Lease} lease
+   * @returns {Promise<void>}
+   */
+  #renew (queue, lease) {
+    const since = Date.now()
+    const settled = () => { lease.pending = undefined }
+
+    lease.pending = this.#channel.assertQueue(queue, this.#expiring)
+      .then(() => { lease.until = since + this.#term })
+      .finally(settled)
+
+    return lease.pending
+  }
+
+  /**
+   * Declares a queue of this channel's, and says whether it expires.
+   *
+   * A queue the version before this one has declared does not, and the broker refuses to have
+   * it declared as one that does. It is used as it is found: declared by either version, a
+   * queue is one both can use for as long as it is there, which is until somebody deletes it.
+   *
+   * @param {string} queue
+   * @returns {Promise<boolean>}
+   */
+  async #found (queue) {
+    if (this.#expiring === undefined) {
+      await this.#channel.assertQueue(queue, this.#topology.durable ? DURABLE : EXCLUSIVE)
+
+      return false
+    }
+
+    const connection = this.#connection
+
+    if (await this.#probe(connection, queue, this.#expiring, PRECONDITION_FAILED)) return true
+
+    // refused as one that does not expire either, it expires in what another setting says
+    await this.#probe(connection, queue, DURABLE)
+
+    this.#diagnostics.emit('legacy', queue)
+
+    return false
   }
 
   /**
@@ -472,9 +616,17 @@ class Channel {
    * @returns {Promise<string[]>}
    */
   async #assertQueue (name) {
-    const passed = arguments.length === 2 ? arguments[1] : undefined
-    const options = passed ?? (this.#topology.durable ? DURABLE : EXCLUSIVE)
+    /** @type {comq.amqp.options.Queue | undefined} */
+    const passed = arguments[1]
 
+    // a queue declared as the channel has its queues is one it goes on keeping
+    if (passed === undefined && name !== undefined) {
+      await this.lease(name)
+
+      return [name]
+    }
+
+    const options = passed ?? (this.#topology.durable ? DURABLE : EXCLUSIVE)
     const { queue } = await this.#channel.assertQueue(name, options)
 
     return [queue]
@@ -892,6 +1044,13 @@ class Channel {
  * @return {Promise<comq.Channel>}
  */
 async function create (connection, topology, index, release) {
+  const longest = Math.max(...[topology.delay ?? 0].flat())
+
+  // a failed message comes back to its queue by name, and is dropped where there is none
+  if (topology.expires <= longest) {
+    throw new RangeError('A queue must expire later than its messages are retried')
+  }
+
   const channel = new Channel(connection, topology, index, release)
 
   await channel.create()
@@ -920,11 +1079,17 @@ const EXCLUSIVE = { exclusive: true }
 
 const INTERRUPTION = /** @type {Error} */ Symbol('internal interruption')
 
+/** What amqplib refuses a channel with once the connection has spent its range of them. */
+const EXHAUSTED = 'No channels left to allocate'
+
 // the AMQP reply code a broker closes a channel with when another connection holds the queue
 const RESOURCE_LOCKED = 405
 
 // and the one it closes a channel with when asked about a queue it does not have
 const NOT_FOUND = 404
+
+// and the one it closes a channel with when a queue is declared as other than it is
+const PRECONDITION_FAILED = 406
 
 const RETRY_PREFIX = 'comq.retry.'
 

@@ -11,4 +11,4 @@ exports.connection = ['open', 'close', 'error', 'reconnect', 'exhausted']
 exports.shards = ['join', 'retire', 'leave']
 
 /** @type {comq.diagnostics.Event[]} */
-exports.channel = ['flow', 'drain', 'recover', 'discard', 'retry', 'pause', 'resume', 'return', 'lost', 'remove', 'taken']
+exports.channel = ['flow', 'drain', 'recover', 'discard', 'retry', 'pause', 'resume', 'return', 'lost', 'remove', 'taken', 'legacy']
