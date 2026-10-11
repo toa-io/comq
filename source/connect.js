@@ -28,7 +28,7 @@ const split = (args) => {
   const urls = /** @type {string[]} */ (typeof last === 'object' ? args.slice(0, -1) : args)
   const { resolution, ...overrides } = /** @type {comq.Options} */ (typeof last === 'object' ? last : {})
 
-  return [urls.flatMap(shards.expand), overrides, resolution]
+  return [urls, overrides, resolution]
 }
 
 /**

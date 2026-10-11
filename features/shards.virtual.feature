@@ -8,11 +8,6 @@ Feature: Virtual shards
     When I connect to the names
     Then 1 connection is open to each broker
 
-  Scenario: Names given as a range
-    Given 4 names, half of them standing for each broker
-    When I connect to the range of the names
-    Then 1 connection is open to each broker
-
   Scenario: Requests over the names of one broker
     Given 4 names standing for the first broker
     And an active connection to the names
