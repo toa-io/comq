@@ -25,18 +25,6 @@ When('emitting an event to the {token} exchange is attempted',
       .catch((exception) => { this.exception = exception })
   })
 
-When('replying the {token} queue is attempted',
-  /**
-   * @param {string} queue
-   * @this {comq.features.Context}
-   */
-  async function (queue) {
-    this.exception = undefined
-
-    await this.io.reply(queue, (request) => request)
-      .catch((exception) => { this.exception = exception })
-  })
-
 Then('the exception is thrown: {string}',
   /**
    * @param {string} message

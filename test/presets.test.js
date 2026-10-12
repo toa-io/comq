@@ -9,7 +9,6 @@ it('should define request preset', async () => {
     durable: true,
     acknowledgments: true,
     persistent: false,
-    expires: 600000,
     delay: [1000, 3000, 5000, 10000]
   })
 })

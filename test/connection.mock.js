@@ -9,8 +9,6 @@ const channel = /** @type {jest.MockedFunction<(sharded?: boolean, index?: numbe
     // a sharded channel tells which shard a message goes through, the first one unless told otherwise
     send: jest.fn(async (_queue, _buffer, _options, via) => { if (sharded) via?.(0) }),
     fire: jest.fn(async () => undefined),
-    lease: jest.fn(async () => undefined),
-    release: jest.fn(() => undefined),
     subscribe: jest.fn(async () => undefined),
     bound: jest.fn(async () => undefined),
     held: jest.fn(async () => undefined),

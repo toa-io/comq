@@ -30,9 +30,6 @@ class Context extends World {
   expected
   sharded
   shard
-
-  /** @type {number | undefined} what the Request queues of the scenario expire in */
-  expires
   sealing
   stream
   streamValues = []
@@ -110,7 +107,7 @@ class Context extends World {
    * @param {comq.Options} [options]
    * @return {Promise<void>}
    */
-  async #connect (urls, method = connect, options = this.topology()) {
+  async #connect (urls, method = connect, options = TOPOLOGY) {
     if (this.io !== undefined) await this.disconnect()
 
     // the retry delay is a topology setting, so the suite need not wait out a
@@ -122,18 +119,6 @@ class Context extends World {
 
     this.io.diagnose('close', () => (this.connected = false))
     this.io.diagnose('open', () => (this.connected = true))
-  }
-
-  /**
-   * What the connections of the scenario are made with: a queue is declared the same by
-   * everybody who uses it.
-   *
-   * @returns {comq.topology.Overrides}
-   */
-  topology () {
-    if (this.expires === undefined) return TOPOLOGY
-
-    return { ...TOPOLOGY, request: { ...TOPOLOGY.request, expires: this.expires } }
   }
 
   #urls (user, password) {
@@ -174,7 +159,7 @@ class Context extends World {
 const PROTOCOL = 'amqp://'
 
 /** @type {comq.diagnostics.Event[]} */
-const EVENTS = ['open', 'close', 'flow', 'discard', 'retry', 'pause', 'resume', 'exhausted', 'legacy']
+const EVENTS = ['open', 'close', 'flow', 'discard', 'retry', 'pause', 'resume', 'exhausted']
 
 /** @type {comq.topology.Overrides} */
 // as many rungs as the presets have, so the suite exercises the shipped attempt count,
