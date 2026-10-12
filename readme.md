@@ -523,7 +523,7 @@ const io = await connect('amqp://rmq0.example.com', 'amqp://rmq1.example.com', /
 ```
 
 This is what lets the number of brokers change without anyone being reconfigured: the names stay,
-and what they resolve to moves.
+and what they resolve to moves. See [how a broker is added, removed or replaced](docs/shards.md).
 
 A broker is told by its address, port, virtual host and credentials. A name with several
 addresses is still one broker, connected through one of them: two connections to one broker
