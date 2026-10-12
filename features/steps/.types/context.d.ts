@@ -24,9 +24,6 @@ declare namespace comq.features {
     exception?: Error
     consumptionPromise?: Promise<any>
     sharded: boolean
-    expires?: number
-    replier?: _io.IO
-    topology (): object
     shard: number
     sealing: Promise<any>
     sending: any

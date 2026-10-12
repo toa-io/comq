@@ -36,9 +36,6 @@ declare namespace comq {
     properties: _amqp.Properties
     signal?: AbortSignal
 
-    /** The queue the Request waits in, which is kept on the broker for as long as it waits. */
-    queue?: string
-
     /** The shard the Request is published through, over a sharded connection. */
     shard?: number
 

@@ -119,8 +119,7 @@ that takes: a Request has no timeout and cannot be withdrawn. One no Producer ca
 [parked](#parked-messages), and can still be answered while its caller waits.
 
 On the initial call, the queue for Requests is asserted, and so is the one this `IO` receives
-every Reply on. The queue for Requests [expires](#expiring-request-queues), and is asserted again
-whenever it has to be for the broker to keep it.
+every Reply on.
 
 ### Example
 
@@ -624,10 +623,6 @@ declaration exceptions, which are more likely to happen during development, is d
 Channel segregation addresses the potential issue of a prefetch deadlock[^1], which may take place
 when using a single channel or channel pool.
 
-A queue for Requests and a queue [`back`](#addressed-requests) holds are declared on a channel of
-their own, which is given back as soon as the broker has answered: a declaration the broker
-refuses closes the channel it was made on. A connection therefore needs one channel to spare.
-
 [^1]: The maximum number of messages has been consumed while handlers of those messages have sent
 requests and are expecting replies.
 
@@ -635,7 +630,6 @@ requests and are expecting replies.
 
 - Exchanges and queues for Events, and queues for Requests
   are _durable_.
-- Queues for Requests [expire](#expiring-request-queues) once nobody uses them.
 - An exchange is asserted as _fanout_ for [Emission](#emission)
   and [Consumption](#consumption), and as _direct_ for [Routing](#routing). One name is one or
   the other: asserting it as both is what the broker refuses.
@@ -653,34 +647,6 @@ comq declares two kinds of queue of its own, for [failed messages](#retries):
   _durable_.
 
 See [queue assertion options](https://amqp-node.github.io/amqplib/channel_api.html#channel_assertQueue).
-
-#### Expiring Request queues
-
-A queue for Requests is declared with
-[`x-expires`](https://www.rabbitmq.com/docs/ttl#queue-ttl), ten minutes by default, so that
-the broker holds the queues that are in use and no others. A queue is in use, and is kept, while:
-
-- a Producer consumes it, which keeps it for as long as the Producer is connected;
-- a Consumer is waiting for a Reply to a Request it sent there: for as long as it waits, it
-  declares the queue again every third of the expiry, since publishing to a queue does not keep
-  it and a queue that expires goes with the Requests in it;
-- a Consumer has sent a Request there less than a third of the expiry ago.
-
-A queue nobody has used for the expiry is deleted by the broker. The next Request declares it
-again before it is published: a Consumer that has not declared the queue for a third of the
-expiry declares it before sending. A Request the broker
-returns, because its queue is gone ahead of time, has the queue declared and is sent again.
-
-So a Request waits for its Producer exactly as long as it did when queues were kept forever, and a
-queue that is deleted under a waiting Request means its Consumer is gone, along with the queue the
-Reply would have been sent to.
-
-A queue that was declared without an expiry — by a version of comq that had none, or with
-`expires` unset — cannot be declared again as one that expires: the broker refuses it. Such a
-queue is used as it is found and reported as [`legacy`](#diagnostics), and does not expire until
-it is deleted. The opposite does not hold: **a version of comq without expiring queues fails on a
-queue this one has declared**, as do two processes that set `expires` differently. See
-[upgrading](#upgrading-to-expiring-request-queues).
 
 ### Messages
 
@@ -822,7 +788,7 @@ See:
 
 | Message | Prefetch  | Confirms | Queue     | Acknowledgment | Persistent | Retries          |
 |---------|-----------|----------|-----------|----------------|------------|------------------|
-| Request | limited   | no       | durable, expires in 10m | manual | no  | 1s, 3s, 5s, 10s  |
+| Request | limited   | no       | durable   | manual         | no         | 1s, 3s, 5s, 10s  |
 | Reply   | unlimited | no       | exclusive | automatic      | no         | —                |
 | Event   | limited   | yes      | durable   | manual         | yes        | 1s, 10s, 30s, 90s |
 
@@ -844,29 +810,6 @@ Event *are*.
 > Changing `delay` declares new retry queues rather than redeclaring the existing ones, so a
 > rolling deploy that changes it has no window in which either version fails. The queues left
 > behind are empty and can be removed once nothing is publishing to them.
-
-`request.expires` is how long the broker keeps a [Request queue](#expiring-request-queues) nobody
-uses, in milliseconds. It is an argument of the queue, so every process that uses a queue must
-have the same, and it must be longer than the longest `delay`: a retried Request comes back to
-its queue by name.
-
-#### Upgrading to expiring Request queues
-
-The queues that exist are left as they are, so the versions can be mixed for as long as a rollout
-takes: both use a queue that was declared without an expiry. What must not happen while the
-previous version is still running is a Request queue being declared for the first time, or
-deleted and declared again, by this one. For the same reason **there is no rolling back** past
-this version once it has declared a queue.
-
-The queues declared before the upgrade do not expire, and are the ones listed without
-`x-expires`. Once every process runs this version, delete those of them that are queues for
-Requests: a queue is deleted only while it is empty and nobody consumes it, so one that is in use
-is left for the next time its Producers are stopped.
-
-```shell
-rabbitmqctl list_queues name consumers arguments
-rabbitmqctl delete_queue --if-unused --if-empty <queue>
-```
 
 ## Graceful shutdown
 
@@ -953,8 +896,6 @@ Subscribe to one of the diagnostic events:
   reported only once every shard has rejected it.
 - `taken`: a Key [`back`](#addressed-requests) claims is held by another connection on this broker, and
   is claimed again. Channel type and the queue name are passed.
-- `legacy`: a queue for Requests was declared without an expiry, and is used
-  [as it is](#expiring-request-queues). Channel type and the queue name are passed.
 - `join`: a broker the names of the [virtual shards](#virtual-shards) stand for has joined the
   pool, or a retired one is back in it. The shard number and the address are passed.
 - `retire`: no name stands for a broker any longer, and nothing new is published to it. The
