@@ -1,6 +1,52 @@
 'use strict'
 
-const { choose, hostOf, locate } = require('../../source/shards/resolve')
+const dns = require('node:dns').promises
+const { resolve, choose, hostOf, locate } = require('../../source/shards/resolve')
+
+describe('resolve', () => {
+  /** @type {Record<string, jest.MockedFunction<any>>} */
+  let spies
+
+  /**
+   * @param {Array<{ address: string, ttl: number }> | Error} v4
+   * @param {Array<{ address: string, ttl: number }> | Error} v6
+   * @param {Array<{ address: string }>} [found]
+   */
+  const answer = (v4, v6, found = []) => {
+    const respond = (value) => async () => { if (value instanceof Error) throw value; return value }
+
+    spies = {
+      resolve4: jest.spyOn(dns, 'resolve4').mockImplementation(respond(v4)),
+      resolve6: jest.spyOn(dns, 'resolve6').mockImplementation(respond(v6)),
+      lookup: jest.spyOn(dns, 'lookup').mockImplementation(respond(found))
+    }
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('should not ask for IPv6 addresses of a name that has IPv4 ones', async () => {
+    answer([{ address: '10.0.0.1', ttl: 30 }, { address: '10.0.0.2', ttl: 10 }], [{ address: '::1', ttl: 30 }])
+
+    expect(await resolve('rmq.example.com')).toStrictEqual({ addresses: ['10.0.0.1', '10.0.0.2'], ttl: 30 })
+    expect(spies.resolve6).not.toHaveBeenCalled()
+    expect(spies.lookup).not.toHaveBeenCalled()
+  })
+
+  it('should ask for IPv6 addresses of a name that has no IPv4 ones', async () => {
+    answer(Object.assign(new Error('ENODATA'), { code: 'ENODATA' }), [{ address: '::1', ttl: 30 }])
+
+    expect(await resolve('rmq.example.com')).toStrictEqual({ addresses: ['::1'], ttl: 30 })
+    expect(spies.lookup).not.toHaveBeenCalled()
+  })
+
+  it('should look up a name that DNS does not know, with no TTL', async () => {
+    answer(new Error('ENOTFOUND'), new Error('ENOTFOUND'), [{ address: '127.0.0.1' }])
+
+    expect(await resolve('localhost')).toStrictEqual({ addresses: ['127.0.0.1'] })
+  })
+})
 
 describe('choose', () => {
   it('should choose the same address whichever order they came in', async () => {

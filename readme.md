@@ -514,7 +514,7 @@ await io.close()
 
 ### Virtual shards
 
-The URLs of a sharded connection are *names*, and several of them may stand for one broker. A
+Where the URLs of a sharded connection are *names*, several of them may stand for one broker. A
 connection is made to each broker rather than to each name: thirty-two names resolving to two
 addresses are two connections.
 
@@ -523,7 +523,7 @@ const io = await connect('amqp://rmq0.example.com', 'amqp://rmq1.example.com', /
 ```
 
 This is what lets the number of brokers change without anyone being reconfigured: the names stay,
-and what they resolve to moves.
+and what they resolve to moves. See [how a broker is added, removed or replaced](docs/shards.md).
 
 A broker is told by its address, port, virtual host and credentials. A name with several
 addresses is still one broker, connected through one of them: two connections to one broker
@@ -534,9 +534,12 @@ for different brokers.
 
 The names are resolved again every `interval`. What they resolve to is seldom seen changing
 whole: records are updated one after another, and until their TTL has run out caches answer
-with the old address and the new one in turn. So a change is acted upon only once the answer has
-stayed the same for the `settle` time, and anything else observed meanwhile starts that time
-anew. A name that fails to resolve keeps its address, which is reported as `error`.
+with the old address and the new one in turn. So a change of a name is acted upon only once its
+answer has stayed the same for the `settle` time, and anything else observed meanwhile starts
+that time anew. A name that fails to resolve keeps its address, which is reported as `error`.
+
+A name is resolved once per process, however many connections stand on it: those made with the
+same timing share what it resolves to, and each is told when it has changed.
 
 Then the brokers are brought in line with the names, making before breaking:
 
@@ -570,18 +573,18 @@ The trailing argument of `connect` takes it next to the [topology settings](#set
 milliseconds:
 
 ```javascript
-await connect(...urls, { resolution: { interval: 10_000, settle: 60_000, linger: 60_000 } })
+await connect(...urls, { resolution: { interval: 300_000, settle: 900_000, linger: 900_000 } })
 ```
 
-- `interval`: how often the names are resolved, 10 seconds by default.
+- `interval`: how often the names are resolved, 5 minutes by default.
 - `settle`: how long an answer is to hold before it is acted upon.
 - `linger`: how long a retired broker is to stay idle before it is left.
 
-Unless given, `settle` and `linger` are the longest TTL the names have been answered with, and
-no less than 30 seconds: a TTL bounds how long a cache may answer with what is no longer true,
-and says nothing of records being updated one by one. A name that is not found in DNS itself (one
-from the hosts file, or one completed by the resolver's search list) has no TTL, and makes them
-60 seconds.
+Unless given, `settle` is the longest TTL a name has been answered with, `linger` the longest
+of the names, and both no less than 15 minutes: a TTL bounds how long a cache may answer with what
+is no longer true, and says nothing of records being updated one by one. A name that is not found
+in DNS itself (one from the hosts file, or one completed by the resolver's search list) has no
+TTL, and makes them 30 minutes.
 
 ## Singleton connection
 

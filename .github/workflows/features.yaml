@@ -37,3 +37,28 @@ jobs:
 
       - name: Run fast feature tests
         run: npm run features:fast
+
+  # a minor or patch bump by Dependabot is merged once its features pass
+  automerge:
+    needs: features-fast
+    if: github.actor == 'dependabot[bot]' && startsWith(github.ref_name, 'dependabot/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          types=$(grep -oP 'update-type: version-update:semver-\K\w+' <<< "$MESSAGE" || true)
+
+          if [ -z "$types" ] || grep -qvx -e minor -e patch <<< "$types"; then
+            echo "Not a minor or patch bump, left for a review"
+            exit 0
+          fi
+
+          gh pr merge "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$GITHUB_SHA"
