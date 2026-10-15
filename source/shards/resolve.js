@@ -6,9 +6,11 @@ const dns = require('node:dns').promises
 /**
  * The addresses a name stands for, and for how long the answer may be cached, in seconds.
  *
- * DNS is asked directly, since nothing else tells the TTL. A name it does not know is looked up
- * the way a socket would have, which is how a name from the hosts file or one completed by the
- * search list is found; such an answer carries no TTL.
+ * DNS is asked directly, since nothing else tells the TTL: for IPv4 addresses first, and for
+ * IPv6 ones only when there are none, as an IPv4 address is the one a broker is connected
+ * through whenever it has both. A name DNS does not know is looked up the way a socket would
+ * have, which is how a name from the hosts file or one completed by the search list is found;
+ * such an answer carries no TTL.
  *
  * @param {string} host
  * @return {Promise<comq.shards.Resolution>}
@@ -16,17 +18,14 @@ const dns = require('node:dns').promises
 async function resolve (host) {
   if (global.COMQ_TESTING_LOOKUP !== undefined) return await global.COMQ_TESTING_LOOKUP(host)
 
-  const answers = await Promise.allSettled([
-    dns.resolve4(host, { ttl: true }),
-    dns.resolve6(host, { ttl: true })
-  ])
+  for (const family of [dns.resolve4, dns.resolve6]) {
+    const records = await family.call(dns, host, { ttl: true }).catch(() => [])
 
-  const records = answers.flatMap((answer) => answer.status === 'fulfilled' ? answer.value : [])
-
-  if (records.length > 0) {
-    return {
-      addresses: records.map((record) => record.address),
-      ttl: Math.max(...records.map((record) => record.ttl))
+    if (records.length > 0) {
+      return {
+        addresses: records.map((record) => record.address),
+        ttl: Math.max(...records.map((record) => record.ttl))
+      }
     }
   }
 
