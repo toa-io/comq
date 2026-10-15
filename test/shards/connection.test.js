@@ -221,6 +221,9 @@ describe('names', () => {
   /** @type {Record<string, jest.MockedFunction<Function>>} */
   let heard
 
+  /** @type {string[]} the names resolved, in the order they were */
+  let lookups
+
   const tick = (ms = INTERVAL) => jest.advanceTimersByTimeAsync(ms)
 
   /**
@@ -237,7 +240,13 @@ describe('names', () => {
 
     addresses = { one: '10.0.0.1', two: '10.0.0.1', three: '10.0.0.2', four: '10.0.0.2' }
 
-    global.COMQ_TESTING_LOOKUP = async (host) => ({ addresses: [addresses[host]], ttl: 1 })
+    lookups = []
+
+    global.COMQ_TESTING_LOOKUP = async (host) => {
+      lookups.push(host)
+
+      return { addresses: [addresses[host]], ttl: 1 }
+    }
 
     connection = new Connection(names, make, { interval: INTERVAL, settle: SETTLE, linger: LINGER })
     heard = { join: jest.fn(), retire: jest.fn(), leave: jest.fn() }
@@ -433,6 +442,64 @@ describe('names', () => {
 
     expect(make).toHaveBeenCalledWith('amqp://10.0.0.3', 'three')
     expect(heard.join).toHaveBeenCalledWith(2, '10.0.0.3')
+  })
+
+  it('should resolve a name once for every connection that stands on it', async () => {
+    const other = new Connection(names, make, { interval: INTERVAL, settle: SETTLE, linger: LINGER })
+
+    lookups = []
+
+    await other.open()
+
+    expect(lookups).toStrictEqual([])
+
+    await tick()
+
+    expect(lookups.toSorted()).toStrictEqual(['four', 'one', 'three', 'two'])
+
+    await other.close()
+  })
+
+  it('should follow a name that another connection follows as well', async () => {
+    const other = new Connection(names, make, { interval: INTERVAL, settle: SETTLE, linger: LINGER })
+    const joined = jest.fn()
+
+    other.diagnose('join', joined)
+
+    await other.open()
+    await other.createChannel(generate())
+
+    addresses.four = '10.0.0.3'
+
+    await tick(SETTLE + INTERVAL)
+
+    expect(heard.join).toHaveBeenCalledWith(2, '10.0.0.3')
+    expect(joined).toHaveBeenCalledWith(2, '10.0.0.3')
+
+    await other.close()
+  })
+
+  it('should go on following a name that another connection has stopped following', async () => {
+    const other = new Connection(names, make, { interval: INTERVAL, settle: SETTLE, linger: LINGER })
+
+    await other.open()
+    await other.close()
+
+    addresses.four = '10.0.0.3'
+
+    await tick(SETTLE + INTERVAL)
+
+    expect(heard.join).toHaveBeenCalledWith(2, '10.0.0.3')
+  })
+
+  it('should look again only at the names of a broker that is lost', async () => {
+    lookups = []
+
+    tell(connections[1], 'close', new Error('lost'))
+
+    await tick(0)
+
+    expect(lookups.toSorted()).toStrictEqual(['four', 'three'])
   })
 
   it('should report a name that fails to resolve', async () => {

@@ -3,7 +3,7 @@
 const events = require('../events')
 const channel = require('./channel')
 const emitter = require('../emitter')
-const { Watch } = require('./watch')
+const { Name, INTERVAL_MS, FLOOR_MS } = require('./name')
 const { hostOf, locate } = require('./resolve')
 
 /**
@@ -23,8 +23,17 @@ class Connection {
   /** @type {(url: string, servername?: string) => comq.Connection} */
   #create
 
-  /** @type {Watch} */
-  #watch
+  /** @type {string[]} the names the URLs are of */
+  #hosts
+
+  /** @type {comq.shards.Timing} */
+  #timing
+
+  /** @type {Name[]} the names followed while open */
+  #names = []
+
+  /** @type {Array<() => void>} what stops following each of them */
+  #leaving = []
 
   /** @type {Map<string, string>} the address of each name */
   #addresses = new Map()
@@ -37,6 +46,9 @@ class Connection {
 
   /** @type {number} the number the next shard gets: one is never given twice */
   #next = 0
+
+  /** @type {Set<string>} the brokers that failed to join, asked again only once an interval is up */
+  #refused = new Set()
 
   /** @type {Set<comq.Channel>} */
   #channels = new Set()
@@ -58,17 +70,14 @@ class Connection {
     this.#urls = urls
     this.#create = create
 
-    const hosts = urls.map(hostOf).filter((host) => host !== undefined)
-
-    this.#watch = new Watch(hosts, timing, this.#urgent)
-    this.#watch.on('change', (addresses) => this.#follow(addresses))
-    this.#watch.on('error', (exception) => this.#diagnostics.emit('error', exception))
+    this.#hosts = Array.from(new Set(urls.map(hostOf).filter((host) => host !== undefined)))
+    this.#timing = timing ?? {}
   }
 
   async open () {
     this.#closed = false
 
-    const addresses = await this.#watch.start()
+    const addresses = await this.#start()
 
     if (this.#closed) return
 
@@ -95,7 +104,7 @@ class Connection {
   async close () {
     this.#closed = true
     this.#opened = false
-    this.#watch.stop()
+    this.#unfollow()
 
     clearTimeout(this.#inspection)
 
@@ -191,7 +200,7 @@ class Connection {
     }
 
     // a connection that is lost may be so because its broker has moved
-    const lost = (error) => { if (error !== undefined) this.#watch.poke() }
+    const lost = (error) => { if (error !== undefined) this.#poke(shard.address) }
 
     connection.diagnose('close', lost)
     shard.listeners.push(['close', lost])
@@ -241,12 +250,72 @@ class Connection {
   }
 
   /**
-   * @param {Map<string, string>} addresses
+   * Follows the names, each of which is shared with whoever else in the process follows it.
+   *
+   * @return {Promise<Map<string, string>>} the address of each name
    */
-  #follow (addresses) {
-    this.#addresses = addresses
-    this.#wanted = this.#locations(addresses)
+  async #start () {
+    this.#unfollow()
+
+    const follower = { change: this.#follow, error: this.#error, urgent: this.#urgent }
+
+    this.#names = this.#hosts.map((host) => Name.of(host, this.#timing))
+    this.#leaving = this.#names.map((name) => name.follow(follower))
+
+    await Promise.all(this.#names.map((name) => name.start()))
+
+    // a name followed by others may have moved while the rest were being resolved
+    return new Map(this.#names.map((name) => [name.host, /** @type {string} */ (name.address)]))
+  }
+
+  #unfollow () {
+    for (const leave of this.#leaving) leave()
+
+    this.#names = []
+    this.#leaving = []
+  }
+
+  /**
+   * Looks now at the names that stand for a broker.
+   *
+   * @param {string | undefined} address
+   */
+  #poke (address) {
+    for (const name of this.#names) {
+      if (this.#addresses.get(name.host) === address) name.poke()
+    }
+  }
+
+  /**
+   * @param {string} host
+   * @param {string} address
+   */
+  #follow = (host, address) => {
+    if (this.#addresses.get(host) === address) return
+
+    this.#addresses.set(host, address)
+    this.#wanted = this.#locations(this.#addresses)
     this.#reconcile()
+  }
+
+  /**
+   * @param {Error} exception
+   */
+  #error = (exception) => {
+    this.#diagnostics.emit('error', exception)
+  }
+
+  /** How often the shards are looked at again. */
+  get #interval () {
+    return this.#timing.interval ?? INTERVAL_MS
+  }
+
+  /**
+   * How long a retired broker is to stay idle before it is left: as long as any of the names
+   * may be cached for, unless told.
+   */
+  get #linger () {
+    return this.#timing.linger ?? Math.max(FLOOR_MS, ...this.#names.map((name) => name.period))
   }
 
   /**
@@ -257,12 +326,15 @@ class Connection {
   #reconcile () {
     if (!this.#opened || this.#closed) return
 
-    for (const [url, location] of this.#wanted) {
-      // one that is being left is joined anew once it has been
-      if (this.#shardOf(url) === undefined) this.#join(location).catch(noop)
-    }
-
     let made = true
+
+    for (const [url, location] of this.#wanted) {
+      if (this.#shardOf(url) !== undefined) continue
+
+      // one that is being left is joined anew once it has been
+      if (this.#refused.has(url)) made = false
+      else this.#join(location).catch(noop)
+    }
 
     for (const shard of this.#shards.values()) {
       const named = this.#wanted.has(shard.url)
@@ -295,7 +367,7 @@ class Connection {
       this.#diagnostics.emit('error', exception, shard.index)
       this.#dismiss(shard)
 
-      return this.#later(() => this.#reconcile())
+      return this.#defer(location.url)
     }
 
     if (shard.state !== JOINING) return
@@ -369,8 +441,23 @@ class Connection {
     // one that never joined is not said to have left
     if (retired) this.#diagnostics.emit(LEAVE, shard.index, shard.address)
 
-    if (failed) this.#later(() => this.#reconcile())
+    if (failed) this.#defer(shard.url)
     else this.#reconcile()
+  }
+
+  /**
+   * Asks a broker that failed to join again once an interval is up, rather than whenever
+   * another name moves meanwhile.
+   *
+   * @param {string} url
+   */
+  #defer (url) {
+    this.#refused.add(url)
+
+    this.#later(() => {
+      this.#refused.delete(url)
+      this.#reconcile()
+    })
   }
 
   /**
@@ -403,7 +490,7 @@ class Connection {
    */
   async #idle (shard) {
     const now = Date.now()
-    const linger = this.#watch.linger
+    const linger = this.#linger
 
     if (shard.connection.connected === false) {
       shard.down ??= now
@@ -424,7 +511,7 @@ class Connection {
    * @return {ReturnType<setTimeout>}
    */
   #later (fn) {
-    const timer = setTimeout(() => Promise.resolve().then(fn).catch(noop), this.#watch.interval)
+    const timer = setTimeout(() => Promise.resolve().then(fn).catch(noop), this.#interval)
 
     timer.unref()
 
@@ -437,7 +524,7 @@ class Connection {
    * @param {Error} exception
    */
   async #cancel (openings, shards, exception) {
-    this.#watch.stop()
+    this.#unfollow()
 
     const settled = await Promise.allSettled(openings)
     const opened = shards.filter((_, index) => settled[index].status === 'fulfilled')
