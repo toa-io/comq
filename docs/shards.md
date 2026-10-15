@@ -14,7 +14,7 @@ How brokers are added to and removed from under a connection that follows
 - **One address per name.** A name with several addresses is still one broker, connected through
   one of them. Records that rotate between brokers spread nothing.
 - **A short TTL.** Unless [given](../readme.md#timing), the `settle` and `linger` times are the
-  longest TTL of the names and no less than 30 seconds, so the TTL is what a change takes.
+  longest TTL of the names and no less than 15 minutes, so the TTL is what a change takes.
 - **The same names for everyone.** One who connects by addresses, or by names of their own, follows
   nothing, and is cut off once a broker is removed.
 
