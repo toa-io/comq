@@ -733,29 +733,41 @@ it('should remove channel with back pressure from the pool', async () => {
   const buffer = randomBytes(8)
   const channels = await getCreatedChannels()
   const chan = sample(channels)
-  const flowCalls = chan.diagnose.mock.calls.filter((call) => call[0] === 'flow')
-  const drainCalls = chan.diagnose.mock.calls.filter((call) => call[0] === 'drain')
-  const flowListeners = flowCalls.map((call) => call[1])
-  const drainListeners = drainCalls.map((call) => call[1])
+  const others = channels.filter((other) => other !== chan)
+
+  /**
+   * @param {jest.MockedObject<comq.Channel>[]} of
+   * @param {string} event
+   */
+  function signal (of, event) {
+    for (const one of of) {
+      const calls = one.diagnose.mock.calls.filter((call) => call[0] === event)
+
+      for (const call of calls) call[1]()
+    }
+  }
 
   async function send () {
     for (let i = 0; i < 10; i++) await channel.send(queue, buffer)
   }
 
+  // the others under back pressure, so the pool is this channel alone: a shard is picked at
+  // random, and ten sends over two may all miss the one asserted
+  signal(others, 'flow')
   await send()
+  signal(others, 'drain')
 
   expect(chan.send).toHaveBeenCalled()
 
   chan.send.mockClear()
 
-  for (const flow of flowListeners) flow()
-
+  signal([chan], 'flow')
   await send()
 
   expect(chan.send).not.toHaveBeenCalled()
 
-  for (const drain of drainListeners) drain()
-
+  signal([chan], 'drain')
+  signal(others, 'flow')
   await send()
 
   expect(chan.send).toHaveBeenCalled()

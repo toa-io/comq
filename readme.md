@@ -202,6 +202,28 @@ await io.route('records', 'store.orders', { id: 1, status: 'paid' })
 await io.route('records', 'store.customers', { id: 2 }) // not delivered to the above
 ```
 
+## Retained Queues
+
+`async IO.retain(exchange: string, queue: string, key: string, args?: object): void`
+
+Declare a queue for a [routed](#routing) exchange without consuming it. A producer calls this
+before it routes to a queue that something else consumes, perhaps later and perhaps not through
+ComQ: what is routed there in the meantime is held rather than returned.
+
+`retain` asserts the direct `exchange`, the durable `queue` with the queue
+[arguments](https://www.rabbitmq.com/docs/queues#optional-arguments) `args`, and binds it under
+the `key`. Over a [sharded connection](#sharded-connection) the queue is declared on every shard.
+A queue keeps the arguments it was first declared with: asserting it again with others is refused
+by the broker.
+
+### Example
+
+```javascript
+// held until whatever consumes `ledger` arrives, and dead-lettered to `ledger.dead` by it
+await io.retain('journal', 'ledger', 'posted', { 'x-dead-letter-exchange': 'ledger.dead' })
+await io.route('journal', 'posted', { id: 3 })
+```
+
 ## Addressed Requests
 
 `async IO.back(exchange: string, key: string, producer): void`
