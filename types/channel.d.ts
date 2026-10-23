@@ -22,6 +22,9 @@ declare namespace comq {
     /** consumes `queue`, bound to a routed `exchange` under `key` */
     bound (exchange: string, queue: string, key: string, consumer: channels.Consumer): Promise<void>
 
+    /** declares a durable `queue` bound to a routed `exchange` under `key`, and consumes nothing */
+    retain (exchange: string, queue: string, key: string, args?: Record<string, unknown>): Promise<void>
+
     /** consumes `queue`, exclusive to this connection and bound to a routed `exchange` under `key` */
     held (exchange: string, queue: string, key: string, consumer: channels.Consumer): Promise<void>
 

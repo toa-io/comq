@@ -132,6 +132,13 @@ declare namespace comq {
      */
     subscribe<T = any>(exchange: string, queue: string, key: string, consumer: Consumer<T>): Promise<void>
 
+    /**
+     * Declares a durable queue bound to a routed exchange under a key, with the queue's
+     * arguments, and consumes nothing: what is routed there before anything consumes it is held
+     * rather than returned.
+     */
+    retain(exchange: string, queue: string, key: string, args?: Record<string, unknown>): Promise<void>
+
     process<T = any>(queue: string, processor: Consumer<T>): Promise<void>
 
     seal(): Promise<void>
