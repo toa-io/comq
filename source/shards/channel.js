@@ -246,6 +246,13 @@ class Channel {
       (apply) => this.#every(apply))
   }
 
+  /** Declared on every shard, and on one that joins. */
+  async retain (exchange, queue, key, args) {
+    await this.#consumption(
+      (channel) => channel.retain(exchange, queue, key, args),
+      (apply) => this.#every(apply))
+  }
+
   /**
    * A key is held once any shard holds it. A shard where another connection holds it goes on
    * claiming it, and holds it as well once it is let go.

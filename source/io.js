@@ -253,6 +253,22 @@ class IO {
       await this.#events.bound(exchange, queue, key, consumer)
     })
 
+  /**
+   * Declares a durable queue bound to a routed exchange under a key, and consumes nothing: what is
+   * routed there before anything consumes it is held rather than returned.
+   */
+  retain = lazy(this, this.#createEventChannel,
+    /**
+     * @param {string} exchange
+     * @param {string} queue
+     * @param {string} key
+     * @param {Record<string, unknown>} [args] the queue's arguments
+     * @returns {Promise<void>}
+     */
+    async (exchange, queue, key, args) => {
+      await this.#events.retain(exchange, queue, key, args)
+    })
+
   process = lazy(this, this.#createEventChannel,
     async (queue, callback) => {
       const consumer = this.#getEventConsumer(callback)

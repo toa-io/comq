@@ -153,6 +153,28 @@ class Channel {
         })))
 
   /**
+   * Declares a durable queue bound to a direct exchange under a key, and consumes nothing: what a
+   * producer asserts so that what it routes there before anything consumes it is held rather
+   * than returned. Replayed on recovery, so a broker that lost it is given it again.
+   */
+  retain = recall(this,
+    failsafe(this, this.#recover,
+      lazy(this, this.#assertRouted,
+        /**
+         * @param {string} exchange
+         * @param {string} queue
+         * @param {string} key
+         * @param {Record<string, unknown>} [args] the queue's arguments
+         * @returns {Promise<void>}
+         */
+        async (exchange, queue, key, args) => {
+          if (this.#sealed) return
+
+          await this.#channel.assertQueue(queue, { durable: true, arguments: args })
+          await this.#channel.bindQueue(queue, exchange, key)
+        })))
+
+  /**
    * Consumes a queue exclusive to this connection, bound to a direct exchange under a key:
    * whatever is published under that key reaches this connection and no other. While another
    * connection holds the queue, it is claimed again and again until it is let go, and every
