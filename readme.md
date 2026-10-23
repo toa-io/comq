@@ -175,8 +175,6 @@ await io.emit('numbers_added', { a: 1, b: 2 })
 
 `async IO.subscribe(exchange: string, queue: string, key: string, consumer): void`
 
-`async IO.retain(exchange: string, queue: string, key: string, args?: object): void`
-
 Publish and consume Events addressed by a Key, where [Emission](#emission)
 and [Consumption](#consumption) fan out.
 
@@ -194,13 +192,6 @@ published while nothing is consuming is held rather than dropped.
 Over a [sharded connection](#sharded-connection) they behave as the rest does: `route` publishes
 to one shard, and `subscribe` consumes the queue on every one of them.
 
-`retain` asserts what `subscribe` does — the exchange, the durable `queue` with the queue
-[arguments](https://www.rabbitmq.com/docs/queues#optional-arguments) `args`, and the binding — and
-consumes nothing. It is what a producer calls before it routes to a queue that something else will
-consume, perhaps later and perhaps not through ComQ: what is routed there in the meantime is held.
-Over a sharded connection it is declared on every shard. The queue is declared with the arguments
-it was first given; asserting it again with others is refused by the broker.
-
 ### Example
 
 ```javascript
@@ -210,6 +201,22 @@ await io.subscribe('records', 'records.orders', 'store.orders',
 await io.route('records', 'store.orders', { id: 1, status: 'paid' })
 await io.route('records', 'store.customers', { id: 2 }) // not delivered to the above
 ```
+
+## Retained Queues
+
+`async IO.retain(exchange: string, queue: string, key: string, args?: object): void`
+
+Declare a queue for a [routed](#routing) exchange without consuming it. A producer calls this
+before it routes to a queue that something else consumes, perhaps later and perhaps not through
+ComQ: what is routed there in the meantime is held rather than returned.
+
+`retain` asserts the direct `exchange`, the durable `queue` with the queue
+[arguments](https://www.rabbitmq.com/docs/queues#optional-arguments) `args`, and binds it under
+the `key`. Over a [sharded connection](#sharded-connection) the queue is declared on every shard.
+A queue keeps the arguments it was first declared with: asserting it again with others is refused
+by the broker.
+
+### Example
 
 ```javascript
 // held until whatever consumes `ledger` arrives, and dead-lettered to `ledger.dead` by it
